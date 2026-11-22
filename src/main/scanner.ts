@@ -2,41 +2,11 @@ import { opendir, lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Rom, ScanResult } from '../shared';
+import { inferPlatform, isCandidateRom } from './scanner/platforms';
+import { titleFromName } from './scanner/naming';
 
-const aliases: Record<string, string> = {
-  nes: 'Nintendo Entertainment System', famicom: 'Nintendo Entertainment System',
-  snes: 'Super Nintendo', sfc: 'Super Nintendo',
-  gb: 'Game Boy', gbc: 'Game Boy Color', gba: 'Game Boy Advance',
-  n64: 'Nintendo 64', nintendo64: 'Nintendo 64', nds: 'Nintendo DS',
-  megadrive: 'Mega Drive / Genesis', genesis: 'Mega Drive / Genesis',
-  mastersystem: 'Master System', sms: 'Master System', gg: 'Game Gear',
-  psx: 'PlayStation', ps1: 'PlayStation', ps2: 'PlayStation 2',
-  psp: 'PlayStation Portable', dreamcast: 'Dreamcast', dc: 'Dreamcast',
-  saturn: 'Sega Saturn', arcade: 'Arcade', mame: 'Arcade', fba: 'Arcade',
-  neogeo: 'Neo Geo', pcengine: 'PC Engine / TurboGrafx-16',
-  atari2600: 'Atari 2600', atari7800: 'Atari 7800',
-  ports: 'Ports', dos: 'DOS', scummvm: 'ScummVM',
-};
-const extensions = new Set([
-  '.zip', '.7z', '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64',
-  '.nds', '.md', '.gen', '.smd', '.sms', '.gg', '.cue', '.chd', '.iso', '.cso', '.pbp',
-  '.gdi', '.cdi', '.bin', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom', '.wad'
-]);
-const extensionHints: Record<string, string> = {
-  '.nes': 'Nintendo Entertainment System', '.fds': 'Nintendo Entertainment System',
-  '.sfc': 'Super Nintendo', '.smc': 'Super Nintendo', '.gb': 'Game Boy',
-  '.gbc': 'Game Boy Color', '.gba': 'Game Boy Advance', '.n64': 'Nintendo 64',
-  '.z64': 'Nintendo 64', '.v64': 'Nintendo 64', '.nds': 'Nintendo DS',
-  '.md': 'Mega Drive / Genesis', '.gen': 'Mega Drive / Genesis', '.smd': 'Mega Drive / Genesis',
-  '.sms': 'Master System', '.gg': 'Game Gear', '.a26': 'Atari 2600',
-  '.a78': 'Atari 7800', '.pce': 'PC Engine / TurboGrafx-16',
-  '.pbp': 'PlayStation', '.cso': 'PlayStation Portable',
-};
-const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-function titleFromName(filename: string): string {
-  return path.parse(filename).name.replace(/\s*\([^)]*\)/g, '').replace(/\s*\[[^\]]*\]/g, '').replace(/[._]+/g, ' ').trim();
-}
-
+/** Legacy-compatible read-only inventory scanner. It does not hash ROM content,
+ * inspect archive members, or identify multi-file disc sets. */
 export async function scanRoms(folder: string): Promise<ScanResult> {
   const root = await realpath(folder);
   if (!(await lstat(root)).isDirectory()) throw new Error('Please choose a directory.');
@@ -56,12 +26,10 @@ export async function scanRoms(folder: string): Promise<ScanResult> {
       }
       if (!entry.isFile()) continue;
       const extension = path.extname(entry.name).toLowerCase();
-      if (!extensions.has(extension)) { ignored++; continue; }
+      if (!isCandidateRom(entry.name)) { ignored++; continue; }
       // Disc .bin files alongside .cue files are intentionally left visible for the first release.
       const relativePath = path.relative(root, fullPath);
-      const parts = relativePath.split(path.sep);
-      const system = parts.slice(0, -1).map(p => aliases[normalize(p)]).find(Boolean)
-        ?? extensionHints[extension] ?? 'Needs identification';
+      const system = inferPlatform(relativePath);
       const stats = await lstat(fullPath);
       games.push({
         id: createHash('sha256').update(relativePath).digest('hex').slice(0, 16),

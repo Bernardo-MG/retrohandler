@@ -9,8 +9,10 @@
     "build": "npm run build:web && electron-builder --win nsis",
     "build:web": "npm run build:electron && vite build",
     "start": "npm run build:web && electron .",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "build:electron": "tsc -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "test": "npm run build:tests && node --test dist-tests/tests",
+    "build:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

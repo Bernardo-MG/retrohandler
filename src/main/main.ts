@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
-import { scanRoms } from './scanner';
+import { registerLibraryIpc } from './ipc/library-ipc';
+import { FileSystemLibraryService } from './services/library/library-service';
 
 app.setName('RetroHandler');
 
@@ -12,22 +13,19 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: true
     }
   });
-  if (process.env.VITE_DEV_SERVER_URL) void win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  // Development URLs must never override the packaged renderer.
+  const devUrl = !app.isPackaged ? process.env.VITE_DEV_SERVER_URL : undefined;
+  if (devUrl && /^http:\/\/127\.0\.0\.1:5173\/?$/.test(devUrl)) void win.loadURL(devUrl);
   else void win.loadFile(path.join(__dirname, '../../dist/index.html'));
+  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle('roms:choose-folder', async () => {
-    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    return result.canceled ? null : result.filePaths[0];
-  });
-  ipcMain.handle('roms:scan', async (_event, folder: unknown) => {
-    if (typeof folder !== 'string' || !path.isAbsolute(folder)) throw new Error('Invalid folder.');
-    return scanRoms(folder);
-  });
+  registerLibraryIpc(new FileSystemLibraryService());
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
