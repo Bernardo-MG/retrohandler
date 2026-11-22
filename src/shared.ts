@@ -11,10 +11,16 @@ export type ScanResult = {
   games: Rom[];
   ignored: number;
   scannedAt: string;
+  warnings?: ScanWarning[];
 };
+export interface ScanWarning { relativePath: string; message: string; }
+export interface ScanProgress { filesVisited: number; gamesFound: number; directoriesVisited: number; ignored: number; warnings: number; currentPath: string; }
+export interface ScanUpdate { jobId: string; progress: ScanProgress; }
 export interface DesktopApi {
   chooseRomFolder(): Promise<string | null>;
-  scanFolder(folder: string): Promise<ScanResult>;
+  scanFolder(folder: string, jobId?: string): Promise<ScanResult>;
+  cancelScan(jobId: string): Promise<boolean>;
+  onScanProgress(listener: (update: ScanUpdate) => void): () => void;
 }
 
 /** Domain types for future persistence and metadata matching. The existing Rom

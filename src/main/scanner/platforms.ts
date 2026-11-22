@@ -16,8 +16,8 @@ const aliases: Record<string, string> = {
 };
 const extensions = new Set([
   '.zip', '.7z', '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64',
-  '.nds', '.md', '.gen', '.smd', '.sms', '.gg', '.cue', '.chd', '.iso', '.cso', '.pbp',
-  '.gdi', '.cdi', '.bin', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom', '.wad'
+  '.nds', '.md', '.gen', '.smd', '.sms', '.gg', '.cue', '.gdi', '.chd', '.iso', '.cso', '.pbp',
+  '.cdi', '.bin', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom', '.wad'
 ]);
 const extensionHints: Record<string, string> = {
   '.nes': 'Nintendo Entertainment System', '.fds': 'Nintendo Entertainment System',

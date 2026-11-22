@@ -66,3 +66,67 @@ test('scanner reports an invalid path', async () => {
   const root = await collection();
   await assert.rejects(scanRoms(path.join(root, 'missing')));
 });
+
+
+test('progress reports traversal and scan remains backward-compatible', async () => {
+  const root = await collection();
+  await mkdir(path.join(root, 'snes'));
+  await writeFile(path.join(root, 'snes', 'Example.sfc'), 'rom');
+  const progress: number[] = [];
+  const result = await scanRoms(root, { onProgress: p => progress.push(p.filesVisited) });
+  assert.equal(result.games.length, 1);
+  assert.ok(progress.length > 0);
+  assert.equal(progress.at(-1), 1);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('aborted scans stop before enumerating files', async () => {
+  const root = await collection();
+  await writeFile(path.join(root, 'Game.nes'), 'rom');
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(scanRoms(root, { signal: controller.signal }), { name: 'AbortError' });
+});
+
+test('progress callback can cancel a running scan', async () => {
+  const root = await collection();
+  await writeFile(path.join(root, 'Game.nes'), 'rom');
+  const controller = new AbortController();
+  await assert.rejects(scanRoms(root, {
+    signal: controller.signal,
+    onProgress: () => controller.abort()
+  }), { name: 'AbortError' });
+});
+
+test('cue sheets consolidate referenced BIN tracks but retain unrelated BIN files', async () => {
+  const root = await collection();
+  await mkdir(path.join(root, 'psx'));
+  await writeFile(path.join(root, 'psx', 'Game.cue'), 'FILE "Game Track 01.bin" BINARY\n  TRACK 01 MODE2/2352\nFILE "Game Track 02.bin" BINARY\n  TRACK 02 AUDIO\n');
+  await writeFile(path.join(root, 'psx', 'Game Track 01.bin'), 'track');
+  await writeFile(path.join(root, 'psx', 'Game Track 02.bin'), 'track');
+  await writeFile(path.join(root, 'psx', 'Standalone.bin'), 'rom');
+  const result = await scanRoms(root);
+  assert.deepEqual(result.games.map(g => g.extension).sort(), ['.bin', '.cue']);
+  assert.equal(result.ignored, 2);
+});
+
+test('GDI descriptors consolidate referenced Dreamcast tracks', async () => {
+  const root = await collection();
+  await mkdir(path.join(root, 'dreamcast'));
+  await writeFile(path.join(root, 'dreamcast', 'Game.gdi'), '2\n1 0 4 2352 track01.bin 0\n2 450 4 2352 "track 02.bin" 0\n');
+  await writeFile(path.join(root, 'dreamcast', 'track01.bin'), 'track');
+  await writeFile(path.join(root, 'dreamcast', 'track 02.bin'), 'track');
+  const result = await scanRoms(root);
+  assert.equal(result.games.length, 1);
+  assert.equal(result.games[0].extension, '.gdi');
+});
+
+test('unreadable descriptor is reported without stopping inventory', async () => {
+  const root = await collection();
+  await writeFile(path.join(root, 'Bad.cue'), Buffer.alloc(1024 * 1024 + 1));
+  await writeFile(path.join(root, 'Good.nes'), 'rom');
+  const result = await scanRoms(root);
+  assert.equal(result.games.length, 2);
+  assert.equal(result.warnings?.length, 1);
+  assert.match(result.warnings![0].message, /exceeds 1 MiB/);
+});
