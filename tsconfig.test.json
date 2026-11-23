@@ -16,6 +16,8 @@
     "tests/**/*.ts",
     "src/main/scanner.ts",
     "src/main/scanner/**/*.ts",
-    "src/shared.ts"
+    "src/shared.ts",
+    "src/main/services/library/**/*.ts",
+    "src/main/database/**/*.ts"
   ]
 }

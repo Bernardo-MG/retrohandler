@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { registerLibraryIpc } from './ipc/library-ipc';
 import { FileSystemLibraryService } from './services/library/library-service';
+import { SqliteLibraryStore } from './database/library-store';
 
 app.setName('RetroHandler');
 
@@ -25,7 +26,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  registerLibraryIpc(new FileSystemLibraryService());
+  const store = new SqliteLibraryStore(path.join(app.getPath('userData'), 'library.sqlite'));
+  registerLibraryIpc(new FileSystemLibraryService(store));
+  app.once('before-quit', () => store.close());
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

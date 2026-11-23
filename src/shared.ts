@@ -18,6 +18,7 @@ export interface ScanProgress { filesVisited: number; gamesFound: number; direct
 export interface ScanUpdate { jobId: string; progress: ScanProgress; }
 export interface DesktopApi {
   chooseRomFolder(): Promise<string | null>;
+  loadSavedLibrary(): Promise<ScanResult | null>;
   scanFolder(folder: string, jobId?: string): Promise<ScanResult>;
   cancelScan(jobId: string): Promise<boolean>;
   onScanProgress(listener: (update: ScanUpdate) => void): () => void;

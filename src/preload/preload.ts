@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, ScanUpdate } from '../shared';
 const api: DesktopApi = {
   chooseRomFolder: () => ipcRenderer.invoke('roms:choose-folder'),
+  loadSavedLibrary: () => ipcRenderer.invoke('roms:load-saved'),
   scanFolder: (folder, jobId) => ipcRenderer.invoke('roms:scan', folder, jobId),
   cancelScan: jobId => ipcRenderer.invoke('roms:cancel', jobId),
   onScanProgress: listener => {

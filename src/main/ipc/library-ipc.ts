@@ -31,6 +31,7 @@ export function registerLibraryIpc(library: LibraryService): void {
       jobs.delete(sender.id);
     }
   });
+  ipcMain.handle('roms:load-saved', () => library.loadLastScan());
   ipcMain.handle('roms:cancel', async (event, jobId: unknown) => {
     const active = jobs.get(event.sender.id);
     if (!active || active.id !== jobId) return false;

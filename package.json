@@ -11,13 +11,16 @@
     "start": "npm run build:web && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
     "build:electron": "tsc -p tsconfig.node.json",
-    "test": "npm run build:tests && node --test dist-tests/tests",
-    "build:tests": "tsc -p tsconfig.test.json"
+    "test": "npm run build:tests && node --test dist-tests/tests/*.test.js",
+    "build:tests": "tsc -p tsconfig.test.json",
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild:native": "electron-builder install-app-deps"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -42,3 +42,11 @@ testem.log
 # System Files
 .DS_Store
 Thumbs.db
+
+# Generated Electron and test output
+/dist-electron/
+/dist-tests/
+/release/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

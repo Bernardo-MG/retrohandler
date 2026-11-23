@@ -7,8 +7,17 @@ import './styles.css';
 function App() {
   const [data, setData] = useState<ScanResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingLibrary, setLoadingLibrary] = useState(true);
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const activeJob = useRef<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    void window.retrohandler.loadSavedLibrary()
+      .then(saved => { if (mounted && saved && !activeJob.current) setData(saved); })
+      .catch(reason => { if (mounted) setError(`Unable to load saved library: ${String(reason)}`); })
+      .finally(() => { if (mounted) setLoadingLibrary(false); });
+    return () => { mounted = false; };
+  }, []);
   useEffect(() => window.retrohandler.onScanProgress(update => {
     if (update.jobId === activeJob.current) setProgress(update.progress);
   }), []);
@@ -55,6 +64,7 @@ function App() {
     <main>
       <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div><button className="primary" onClick={scan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button></header>
       {busy && <section className="scan-status" role="status"><div><strong>Scanning collection…</strong><p>{progress ? `${progress.filesVisited.toLocaleString()} files checked · ${progress.gamesFound.toLocaleString()} entries · ${progress.warnings} warnings` : 'Starting scan…'}</p><small title={progress?.currentPath}>{progress?.currentPath}</small></div><button className="secondary" onClick={cancel}>Cancel scan</button></section>}
+      {loadingLibrary && <div className="scan-status" role="status">Loading saved library…</div>}
       {error && <div className="error"><AlertCircle size={18}/>{error}</div>}
       {data && !!data.warnings?.length && <div className="scan-warnings" role="status"><AlertCircle size={18}/> Scan completed with {data.warnings.length} warning(s). Some files or directories could not be scanned. <details><summary>See warnings</summary><ul>{data.warnings.slice(0, 100).map((warning, index) => <li key={index}>{warning.relativePath}: {warning.message}</li>)}</ul>{data.warnings.length > 100 && <p>Showing first 100 warnings.</p>}</details></div>}
       <section className="stats"><div className="stat"><div className="stat-icon"><Gamepad2/></div><div><span>Total games</span><strong>{data?.games.length.toLocaleString() ?? '—'}</strong></div></div><div className="stat"><div className="stat-icon"><HardDrive/></div><div><span>Systems detected</span><strong>{systems.length || '—'}</strong></div></div><div className="stat"><div className="stat-icon"><CheckCircle2/></div><div><span>Identified by folder / format</span><strong>{data ? `${Math.round(data.games.filter(x => x.system !== 'Needs identification').length / Math.max(data.games.length,1)*100)}%` : '—'}</strong></div></div></section>
