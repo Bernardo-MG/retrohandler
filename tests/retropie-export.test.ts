@@ -33,7 +33,7 @@ test('gamelist contains escaped metadata and relative image paths', () => {
   assert.match(xml, /<image>\.\/images\/a.png<\/image>/);
 });
 
-test('preview makes no files; confirmed export copies intact ROM and writes XML', async () => fixture(async (_, src, dst) => {
+test('preview makes no files; confirmed export writes XML but never copies ROMs', async () => fixture(async (_, src, dst) => {
   await writeFile(path.join(src, 'Game.zip'), 'data');
   const lib = library([entry(src, 'Game.zip')]);
   const plan = await previewExport(lib, options(dst), path.join(src, 'artwork'));
@@ -41,21 +41,23 @@ test('preview makes no files; confirmed export copies intact ROM and writes XML'
   assert.equal(plan.warnings.length, 0);
   assert.equal(plan.files.length, 2);
   await assert.rejects(readdir(dst));
-  assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 2});
-  assert.equal((await readFile(path.join(dst, 'roms', 'nes', 'Game.zip'))).toString(), 'data');
+  assert.equal(plan.bytes, Buffer.byteLength(gameListXml([{ entry: entry(src, 'Game.zip'), filename: 'Game.zip', image: null }])));
+  assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 1});
+  await assert.rejects(readFile(path.join(dst, 'roms', 'nes', 'Game.zip')));
   assert.match(await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8'), /\.\/Game.zip/);
   assert.equal((await readFile(path.join(src, 'Game.zip'))).toString(), 'data');
 }));
 
-test('destination existing file blocks export without overwrite', async () => fixture(async (_, src, dst) => {
+test('existing destination ROM is preserved and referenced without overwrite', async () => fixture(async (_, src, dst) => {
   await writeFile(path.join(src, 'A.zip'), 'new!');
   await mkdir(path.join(dst, 'roms', 'nes'), {recursive: true});
   await writeFile(path.join(dst, 'roms', 'nes', 'A.zip'), 'keep');
   const lib = library([entry(src, 'A.zip')]);
   const plan = await previewExport(lib, options(dst), path.join(src,'artwork'));
-  assert.deepEqual(plan.conflicts, ['roms/nes/A.zip']);
-  await assert.rejects(executeExport(lib, options(dst), path.join(src,'artwork'), plan.fingerprint), /conflicts/);
+  assert.deepEqual(plan.conflicts, []);
+  assert.deepEqual(await executeExport(lib, options(dst), path.join(src,'artwork'), plan.fingerprint), {copied: 1});
   assert.equal(await readFile(path.join(dst, 'roms', 'nes', 'A.zip'), 'utf8'), 'keep');
+  assert.match(await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8'), /A.zip/);
 }));
 
 test('duplicate names from different collections are reported as warnings', async () => fixture(async (root, src, dst) => {
@@ -123,7 +125,7 @@ test('export skips unmapped games and writes gamelist only for approved ROMs', a
   const plan = await previewExport(lib, options(dst), path.join(src, 'artwork'));
   assert.equal(plan.files.filter(f => f.kind === 'rom').length, 1);
   assert.ok(plan.warnings.some(w => w.includes('Unmapped system')));
-  assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 2});
+  assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 1});
   const xml = await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8');
   assert.match(xml, /Ready.zip/);
   assert.doesNotMatch(xml, /Unmapped.zip/);

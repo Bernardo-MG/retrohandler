@@ -90,7 +90,8 @@ export async function previewExport(library: ExportLibrary, options: ExportOptio
     const realRoot = await realpath(entry.source).catch(() => '');
     if (!childOf(realRoot, realSource)) { warnings.push(`Source escapes collection: ${entry.relativePath}`); continue; }
     const file: ExportFile = { source: src, relativeDestination: dstRelative, size: st.size, kind: 'rom' };
-    files.push(file); bytes += st.size;
+    // A ROM entry is a gamelist reference only: it is never copied to the destination.
+    files.push(file);
     let image: string | null = null;
     const id = entry.metadata?.artworkId;
     if (options.includeArtwork && isArtworkId(id)) {
@@ -116,6 +117,8 @@ export async function previewExport(library: ExportLibrary, options: ExportOptio
   // No existing destination file may be overwritten, including XML and cached art.
   const conflicts: string[] = [];
   for (const item of files) {
+    // Existing ROMs are expected: config-only exports never write or replace them.
+    if (item.kind === 'rom') continue;
     const target = path.join(dest, ...item.relativeDestination.split('/'));
     if (!childOf(dest, target)) throw new Error('Invalid export destination path.');
     const exists = await lstat(target).then(() => true, () => false);
@@ -162,6 +165,8 @@ export async function executeExport(library: ExportLibrary, options: ExportOptio
   if (approvedRoms.size) throw new Error('Library changed during export; preview again.');
   let copied = 0;
   for (const item of plan.files) {
+    // The preview includes ROM references to build gamelist.xml, not ROM copy jobs.
+    if (item.kind === 'rom') continue;
     const target = path.join(plan.destination, ...item.relativeDestination.split('/'));
     const folder = path.dirname(target);
     await mkdir(folder, { recursive: true });
