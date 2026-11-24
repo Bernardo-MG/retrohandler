@@ -72,6 +72,8 @@ export interface ExportPlan {
   destination: string; files: ExportFile[]; systems: string[];
   warnings: string[]; conflicts: string[]; bytes: number; fingerprint: string;
 }
+export interface LibretroCoverChoice { title: string; artworkId: string; }
+
 export interface DesktopApi {
   bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   chooseExportFolder(): Promise<string | null>;
@@ -85,6 +87,7 @@ export interface DesktopApi {
   launchBoxSearch(query: string, system: string): Promise<MetadataCandidate[]>;
   launchBoxApply(target: MetadataTarget, id: number): Promise<GameMetadata>;
   findLibretroArtwork(system: string, names: string[]): Promise<string | null>;
+  searchLibretroCovers(system: string, query: string, regionHint: string, refresh?: boolean): Promise<LibretroCoverChoice[]>;
   metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;
   importDat(): Promise<DatImportReceipt | null>;
   identifyCollection(source: string, jobId: string): Promise<IdentificationReceipt>;

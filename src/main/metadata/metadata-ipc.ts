@@ -3,7 +3,7 @@ import type { GameMetadataInput, MetadataTarget } from '../../shared';
 import type { LibraryStore } from '../database/library-store';
 import { importLaunchBoxXml } from './launchbox';
 import { downloadLaunchBox } from './launchbox-download';
-import { findLibretroCover } from './libretro';
+import { findLibretroCover, searchLibretroCovers } from './libretro';
 
 function target(value: unknown): MetadataTarget {
   if (!value || typeof value !== 'object') throw new Error('Invalid metadata target.');
@@ -90,6 +90,12 @@ export function registerMetadataIpc(store: LibraryStore, artworkFolder: string):
     if (typeof system !== 'string' || system.length > 120 || !Array.isArray(names) || names.length > 3 ||
         names.some(name => typeof name !== 'string' || name.length > 200)) throw new Error('Invalid artwork search.');
     return findLibretroCover(system, names as string[], artworkFolder);
+  });
+  ipcMain.handle('libretro:search-covers', async (_event, system: unknown, query: unknown, regionHint: unknown, refresh: unknown) => {
+    if (typeof system !== 'string' || system.length > 120 || typeof query !== 'string' || query.length > 120 ||
+        typeof regionHint !== 'string' || regionHint.length > 200 || typeof refresh !== 'boolean')
+      throw new Error('Invalid Libretro cover search.');
+    return searchLibretroCovers(system, query, regionHint, artworkFolder, refresh);
   });
   ipcMain.handle('metadata:save', (_event, input: unknown, data: unknown) => {
     const game = target(input);

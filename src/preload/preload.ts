@@ -16,6 +16,7 @@ const api: DesktopApi = {
   launchBoxSearch: (query, system) => ipcRenderer.invoke('launchbox:search', query, system),
   launchBoxApply: (target, id) => ipcRenderer.invoke('launchbox:apply', target, id),
   findLibretroArtwork: (system, names) => ipcRenderer.invoke('libretro:artwork', system, names),
+  searchLibretroCovers: (system, query, regionHint, refresh) => ipcRenderer.invoke('libretro:search-covers', system, query, regionHint, refresh),
   metadataSave: (target, data) => ipcRenderer.invoke('metadata:save', target, data),
   importDat: () => ipcRenderer.invoke('dat:import'),
   identifyCollection: (source, jobId) => ipcRenderer.invoke('identity:run', source, jobId),

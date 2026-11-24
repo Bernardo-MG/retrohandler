@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { GameMetadataInput, LibraryEntry, MetadataCandidate, MetadataTarget } from '../../shared';
+import type { GameMetadataInput, LibraryEntry, MetadataCandidate, MetadataTarget, LibretroCoverChoice } from '../../shared';
 
 const empty = (title: string): GameMetadataInput => ({ title, description: '', released: '', developer: '', publisher: '', genre: '', provider: 'manual', providerId: null, providerSlug: null, artworkId: null });
 const cleanTitle = (entry: LibraryEntry) => (entry.identifiedTitle || entry.name).replace(/\s*[([][^)\]]*[)\]]/g, '').trim();
@@ -12,6 +12,8 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   const [query, setQuery] = useState(cleanTitle(entry));
   const [results, setResults] = useState<MetadataCandidate[]>([]);
   const [imported, setImported] = useState('');
+  const [coverQuery, setCoverQuery] = useState(cleanTitle(entry));
+  const [covers, setCovers] = useState<LibretroCoverChoice[]>([]);
   const [updating, setUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState<import('../../shared').LaunchBoxDownloadProgress | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,7 +24,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   useEffect(() => {
     setForm(entry.metadata ?? empty(entry.identifiedTitle || entry.name));
     setSystemOverride(entry.metadata?.systemOverride ?? '');
-    setQuery(cleanTitle(entry)); setResults([]); setError(''); setNotice('');
+    setQuery(cleanTitle(entry)); setCoverQuery(cleanTitle(entry)); setCovers([]); setResults([]); setError(''); setNotice('');
   }, [entry.source, entry.relativePath]);
   function set(name: keyof Pick<GameMetadataInput,'title'|'description'|'released'|'developer'|'publisher'|'genre'>, value: string) {
     setForm(old => ({ ...old, [name]: value }));
@@ -56,14 +58,19 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
-  async function artwork() {
-    setBusy(true); setError('');
+  async function artwork(refresh = false) {
+    setBusy(true); setError(''); setNotice(''); setCovers([]);
     try {
-      const id = await window.retrohandler.findLibretroArtwork(systemOverride.trim() || entry.system, [entry.relativePath, form.title]);
-      if (!id) setNotice('No matching Libretro box art found. Try a No-Intro filename or another game title.');
-      else { setForm(current => ({...current, artworkId:id})); setNotice('Cover found. Save manual metadata to keep it.'); }
+      const candidates = await window.retrohandler.searchLibretroCovers(
+        systemOverride.trim() || entry.system, coverQuery.trim(), entry.relativePath, refresh);
+      setCovers(candidates);
+      if (!candidates.length) setNotice('No downloadable box art matched this title. Try a shorter game title or refresh the catalogue.');
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
+  }
+  function selectCover(artworkId: string) {
+    setForm(current => ({...current, artworkId}));
+    setNotice('Cover selected. Click Save manual metadata to keep it.');
   }
   async function save() {
     setBusy(true); setError('');
@@ -107,8 +114,18 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
       <button className="secondary" disabled={busy || !query.trim()} onClick={() => void search()}>Search LaunchBox</button>
       {results.map(result => <div className="metadata-result" key={result.id}><span>{result.title} {result.released && `(${result.released})`} {result.platform && `— ${result.platform}`}</span><button disabled={busy} onClick={() => void apply(result.id)}>Use this match</button></div>)}
       {results.length > 0 && <p>Check the platform and edition before applying a match. Your manually assigned ROM system is retained.</p>}
-      <h3>Libretro box art (no API key)</h3><p>Looks for an exact or simplified filename in Libretro's box-art catalogue. Search is platform-specific and does not overwrite your existing image unless you save.</p>
-      <button className="secondary" disabled={busy} onClick={() => void artwork()}>Find Libretro box art</button>
+      <h3>Libretro box art (no API key)</h3>
+      <p>Search the assigned console's artwork catalogue by game title. Preview real downloadable images, then choose the correct region or edition.</p>
+      <label>Artwork title <input value={coverQuery} maxLength={120} onChange={event => setCoverQuery(event.target.value)}/></label>
+      <button className="secondary" disabled={busy || !coverQuery.trim()} onClick={() => void artwork()}>Find Libretro box art</button>
+      <button className="secondary" disabled={busy || !coverQuery.trim()} onClick={() => void artwork(true)}>Refresh artwork catalogue</button>
+      {covers.length > 0 && <div className="libretro-cover-grid" aria-label="Libretro box art search results">
+        {covers.map(cover => <div className="libretro-cover-choice" key={cover.artworkId}>
+          <img src={`retro-art://cover/${cover.artworkId}`} alt={cover.title}/>
+          <small title={cover.title}>{cover.title}</small>
+          <button className="secondary" disabled={busy} onClick={() => selectCover(cover.artworkId)}>{form.artworkId === cover.artworkId ? 'Selected' : 'Use this cover'}</button>
+        </div>)}
+      </div>}
     </div>
     {notice && <p role="status" className="identity-message">{notice}</p>}
     {error && <p role="alert" className="error">{error}</p>}

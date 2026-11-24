@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
 import { importLaunchBoxXml, parseLaunchBoxGame, xmlText } from '../src/main/metadata/launchbox';
-import { findLibretroCover, libretroCandidates } from '../src/main/metadata/libretro';
+import { findLibretroCover, libretroCandidates, libretroPlatform } from '../src/main/metadata/libretro';
 import { getArtwork } from '../src/main/metadata/artwork';
 
 function adapter(file: string): DatabaseHandle {
@@ -74,10 +74,88 @@ test('Libretro cover is platform-restricted, cached, and returns null on 404', a
     assert.ok(urls[0].startsWith('https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/'));
     assert.ok(urls[0].includes('A%20_%20B'));
     assert.equal((await getArtwork(dir,id!)).mime,'image/png');
-    assert.deepEqual(libretroCandidates(['Game (USA).zip']),['Game (USA)','Game']);
+    assert.equal(libretroCandidates(['Game (USA).zip'])[0], 'Game (USA)');
+    assert.ok(libretroCandidates(['Game (USA).zip']).includes('Game'));
     await assert.rejects(findLibretroCover('Unmapped System',['Game'],dir,mocked),/No Libretro/);
     const missing=await findLibretroCover('Super Nintendo',['Missing'],dir,async () => new Response(null,{status:404}));
     assert.equal(missing,null);
     await assert.rejects(findLibretroCover('Super Nintendo',['Bad'],dir,async()=>new Response('not an image')),/supported image/);
+  } finally {await rm(dir,{recursive:true,force:true});}
+});
+
+
+test('Libretro accepts common system names and preserves exact regional game matches', async () => {
+  assert.equal(libretroPlatform('SNES'), 'Nintendo - Super Nintendo Entertainment System');
+  assert.equal(libretroPlatform('nes'), 'Nintendo - Nintendo Entertainment System');
+  assert.equal(libretroPlatform('Super Nintendo Entertainment System'), 'Nintendo - Super Nintendo Entertainment System');
+  assert.equal(libretroPlatform('Sega Genesis'), 'Sega - Mega Drive - Genesis');
+  assert.equal(libretroPlatform('Needs identification'), null);
+  const candidates = libretroCandidates(['Alien 3 (Europe).zip', 'Alien 3']);
+  assert.equal(candidates[0], 'Alien 3 (Europe)');
+  assert.ok(candidates.includes('Alien 3 (USA, Europe)'));
+  assert.ok(candidates.includes('Alien 3 (USA)'));
+  assert.ok(candidates.length <= 24);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-libretro-alias-'));
+  try {
+    const requested: string[] = [];
+    const request: typeof fetch = async url => {
+      requested.push(String(url));
+      return new Response(png, { status: 200, headers: { 'content-type': 'image/png' } });
+    };
+    const cover = await findLibretroCover('SNES', ['Alien 3 (Europe).zip'], root, request);
+    assert.ok(cover);
+    assert.match(requested[0], /Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/);
+    assert.match(requested[0], /Alien%203%20\(Europe\)\.png/);
+    assert.equal(requested.length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test('Libretro retries region-qualified filename variants after exact 404', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-libretro-regions-'));
+  try {
+    const urls: string[] = [];
+    const request: typeof fetch = async url => {
+      const value = String(url); urls.push(value);
+      return value.includes('Alien%203%20(USA%2C%20Europe).png')
+        ? new Response(png, { status: 200, headers: { 'content-type': 'image/png' } })
+        : new Response(null, { status: 404 });
+    };
+    const found = await findLibretroCover('Game Boy', ['Alien 3 (Europe).zip'], root, request);
+    assert.ok(found);
+    assert.ok(urls[0].includes('Alien%203%20(Europe).png'));
+    assert.ok(urls.some(url => url.includes('Alien%203%20(USA%2C%20Europe).png')));
+    assert.ok(urls.length <= 24);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// Patch 008.5: catalogue-based manual cover choice, without inventing filenames.
+test('Libretro catalogue finds alternate Alien 3 NES naming and ignores unrelated sequels', async () => {
+  const { matchLibretroBoxarts, parseLibretroIndex } = await import('../src/main/metadata/libretro');
+  const files = parseLibretroIndex('Alien 3 (1993)(LJN)(EU).png\nAlien 3 (USA).png\nAlien 2 (USA).png\nAlien 3D (USA).png\n');
+  assert.deepEqual(matchLibretroBoxarts(files,'Alien 3','Alien 3 (Europe).zip'), [
+    'Alien 3 (1993)(LJN)(EU).png', 'Alien 3 (USA).png'
+  ]);
+  assert.deepEqual(parseLibretroIndex('<a href="Alien%203%20%28Europe%29.png">art</a><a href="../bad.png">bad</a>'), [
+    'Alien 3 (Europe).png'
+  ]);
+});
+
+test('Libretro search returns cached image previews and skips unavailable catalogue entries', async () => {
+  const { searchLibretroCovers } = await import('../src/main/metadata/libretro');
+  const dir=await mkdtemp(path.join(os.tmpdir(),'rh-libretro-search-'));
+  try {
+    const urls:string[]=[];
+    const request: typeof fetch=async url => {
+      const raw=String(url); urls.push(raw);
+      if (raw.endsWith('/.index')) return new Response('Alien 3 (Europe).png\nAlien 3 (1993)(LJN)(EU).png\nOther game.png\n');
+      if (raw.includes('Alien%203%20(Europe)')) return new Response(null,{status:404});
+      if (raw.includes('Alien%203%20%28Europe%29')) return new Response(null,{status:404});
+      return new Response(png,{status:200,headers:{'content-type':'image/png'}});
+    };
+    const covers=await searchLibretroCovers('NES','Alien 3','Alien 3 (Europe).zip',dir,true,request);
+    assert.equal(covers.length,1);
+    assert.equal(covers[0].title,'Alien 3 (1993)(LJN)(EU)');
+    assert.equal((await getArtwork(dir,covers[0].artworkId)).mime,'image/png');
+    assert.ok(urls.every(url=>url.startsWith('https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/')));
   } finally {await rm(dir,{recursive:true,force:true});}
 });
