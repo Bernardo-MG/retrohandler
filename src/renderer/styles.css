@@ -74,11 +74,15 @@
 .metadata-system-hint{grid-column:1/-1;font-size:12px;color:#96a5c0;margin:0 0 8px}
 
 /* Patch 007.4: bulk system assignment */
-.bulk-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid #293244;background:#131b2b;font-size:12px}
-.bulk-toolbar label{display:flex;align-items:center;gap:6px;color:#b6c3d8}
-.bulk-toolbar input{background:#101726;color:#eef1f8;border:1px solid #3b4560;border-radius:6px;padding:8px;min-width:180px}
-.bulk-toolbar button{background:#2a344e;color:#e8edfb;border:1px solid #48516b;border-radius:6px;padding:8px 10px;cursor:pointer}
-.bulk-toolbar button:disabled{opacity:.5;cursor:not-allowed}
 .game-select-card{position:relative;min-width:0}
 .game-select-card .game-card{width:100%}
 .game-select-check{display:flex;align-items:center;gap:5px;font-size:11px;color:#cbd5e1;padding:4px 8px}
+
+/* Collection-wide system assignment (Patch 007.5). */
+.collection-system-editor{display:flex;flex-direction:column;gap:8px;margin:4px 2px 12px;padding:12px 8px;background:#1a2335;border:1px solid #414b64;border-radius:8px;font-size:12px}
+.collection-system-editor strong{overflow-wrap:anywhere}
+.collection-system-editor small{color:#b6c3d8;line-height:1.4}
+.collection-system-editor input{width:100%;min-width:0;border:1px solid #515d79;border-radius:6px;background:#101726;color:#eef1f8;padding:8px}
+.collection-system-actions{display:flex;flex-wrap:wrap;gap:6px}
+.collection-system-actions button{background:#2a344e;color:#e8edfb;border:1px solid #48516b;border-radius:6px;padding:7px;cursor:pointer;font-size:11px}
+.collection-system-actions button:disabled{opacity:.5;cursor:not-allowed}

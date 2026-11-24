@@ -196,3 +196,23 @@ test('bulk select-all matches filtered result across pages and respects identifi
     store.close();
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
+
+// A collection-wide assignment must ignore the currently visible page and filters.
+test('collection assignment affects only that collection, across pages, and can be cleared', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-collection-system-'));
+  try {
+    const store = new SqliteLibraryStore(path.join(dir, 'library.sqlite'), adapter);
+    store.saveScan(scan(Array.from({length: 215},(_,i) => `C-${String(i).padStart(3,'0')}`)));
+    const otherSource = source + '-another';
+    store.saveScan({ ...scan(['Other']), source: otherSource });
+    store.saveMetadata(source, 'C-000.nes', { ...input, title: 'Keep this title' });
+    const selection = { scope: 'filtered' as const, filter: { source, search: '', system: null, identification: null } };
+    assert.equal(store.bulkAssignSystem(selection, 'Super Nintendo'), 215);
+    assert.equal(store.queryLibrary({...query,source,system:'Super Nintendo',limit:10}).total,215);
+    assert.equal(store.queryLibrary({...query,source:otherSource}).items[0].system,'NES');
+    assert.equal(store.queryLibrary({...query,source}).items.find(row => row.name === 'C-000')?.metadata?.title,'Keep this title');
+    assert.equal(store.bulkAssignSystem(selection, null),215);
+    assert.equal(store.queryLibrary({...query,source,system:'NES',limit:10}).total,215);
+    store.close();
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
