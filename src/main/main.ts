@@ -1,10 +1,13 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, protocol } from 'electron';
 import path from 'node:path';
 import { registerLibraryIpc } from './ipc/library-ipc';
 import { FileSystemLibraryService } from './services/library/library-service';
 import { SqliteLibraryStore } from './database/library-store';
+import { registerMetadataIpc } from './metadata/metadata-ipc';
+import { getArtwork, isArtworkId } from './metadata/artwork';
 
 app.setName('RetroHandler');
+protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -28,6 +31,17 @@ function createWindow() {
 app.whenReady().then(() => {
   const store = new SqliteLibraryStore(path.join(app.getPath('userData'), 'library.sqlite'));
   registerLibraryIpc(new FileSystemLibraryService(store));
+  const artworkFolder = path.join(app.getPath('userData'), 'artwork');
+  registerMetadataIpc(store, artworkFolder);
+  protocol.handle('retro-art', async request => {
+    try {
+      const url = new URL(request.url);
+      const id = decodeURIComponent(url.pathname.slice(1));
+      if (url.hostname !== 'cover' || !isArtworkId(id) || url.search || url.hash) return new Response('Not found', { status: 404 });
+      const art = await getArtwork(artworkFolder, id);
+      return new Response(new Uint8Array(art.body), { headers: { 'Content-Type': art.mime, 'Cache-Control': 'private, max-age=86400' } });
+    } catch { return new Response('Not found', { status: 404 }); }
+  });
   app.once('before-quit', () => store.close());
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

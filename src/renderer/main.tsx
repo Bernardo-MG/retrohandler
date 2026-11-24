@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FolderOpen, Gamepad2, HardDrive, Library, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
+import type { CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
 import { CollectionPanel } from './components/CollectionPanel';
 import { LibraryFilters } from './components/LibraryFilters';
 import { LibraryTable } from './components/LibraryTable';
+import { LibraryGallery } from './components/LibraryGallery';
+import { MetadataPanel } from './components/MetadataPanel';
 import { ScanStatus } from './components/ScanStatus';
 import './styles.css';
 
@@ -13,6 +15,8 @@ const EMPTY_PAGE: LibraryPage = { items: [], total: 0 };
 
 function App() {
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
+  const [view, setView] = useState<'list' | 'grid'>('list');
+  const [details, setDetails] = useState<LibraryEntry | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState<LibraryPage>(EMPTY_PAGE);
   const [systems, setSystems] = useState<SystemCount[]>([]);
@@ -82,8 +86,10 @@ function App() {
       .finally(() => { if (id === requestId.current) setLoading(false); });
   }, [selected, debouncedSearch, system, sort, descending, offset, identityFilter, revision]);
 
+  useEffect(() => { setDetails(null); }, [selected, offset, system, sort, descending, debouncedSearch, identityFilter]);
+
   const selectCollection = (source: string | null) => {
-    setSelected(source); setOffset(0); setSystem(null); setSearch(''); setIdentityFilter(null);
+    setSelected(source); setOffset(0); setSystem(null); setSearch(''); setIdentityFilter(null); setDetails(null);
   };
   const filterSystem = (value: string | null) => { setSystem(value); setOffset(0); };
   const filterSearch = (value: string) => { setSearch(value); setOffset(0); };
@@ -156,7 +162,7 @@ function App() {
       <div className="brand"><div className="brand-icon"><Gamepad2 size={22}/></div><div><strong>Retro</strong><span>HANDLER</span></div></div>
       <div className="nav-title">WORKSPACE</div>
       <div className="nav-item active"><Library size={18}/> Game Library</div>
-      <div className="nav-item muted"><HardDrive size={18}/> Metadata <span className="soon">Soon</span></div>
+      <div className="nav-item"><HardDrive size={18}/> Metadata <span className="soon">In library</span></div>
       <div className="nav-item muted"><Settings2 size={18}/> Configuration <span className="soon">Soon</span></div>
       <div className="nav-item muted"><Server size={18}/> Deployment <span className="soon">Soon</span></div>
       <CollectionPanel collections={collections} selected={selected} busy={busy} select={selectCollection} rename={rename} remove={remove}/>
@@ -187,7 +193,11 @@ function App() {
           </select></label>
           <LibraryFilters search={search} setSearch={filterSearch} system={system} setSystem={filterSystem} systems={systems} sort={sort} setSort={filterSort} descending={descending} setDescending={filterDescending}/>
         </div>
-        <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset}/>
+        <div className="view-switch" role="group" aria-label="Library view"><button aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button><button aria-pressed={view === 'grid'} onClick={() => setView('grid')}>Grid</button></div>
+        {view === 'list'
+          ? <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>
+          : <LibraryGallery page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>}
+        {details && <MetadataPanel key={`${details.source}\0${details.relativePath}`} entry={page.items.find(item => item.source === details.source && item.relativePath === details.relativePath) ?? details} onClose={() => setDetails(null)} onSaved={() => setRevision(value => value + 1)}/>}
       </section> : <section className="empty">
         <div className="empty-graphic"><Gamepad2 size={56}/></div><div className="ready">READY TO START</div>
         <h2>Your retro collection, organized.</h2><p>Select a local or network-mounted ROM folder. RetroHandler will index your collection and remember it between launches.</p>

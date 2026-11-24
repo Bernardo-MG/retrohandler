@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { CollectionInfo, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
+import type { CollectionInfo, GameMetadata, GameMetadataInput, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
 import type { DatEntry, ParsedDat } from '../identification/dat';
 import type { RomHashes, } from '../identification/hashes';
 
@@ -35,6 +35,7 @@ export interface LibraryStore {
   cachedFingerprint?(source: string, relativePath: string, size: number, modifiedMs: number): RomHashes | null;
   matchFingerprint?(hashes: RomHashes): { status: IdentificationStatus; title: string | null; datName: string | null };
   saveIdentification?(source: string, results: IdentificationResult[]): void;
+  saveMetadata?(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata;
 }
 
 /** The database is deliberately stored outside the ROM collection. */
@@ -80,7 +81,7 @@ export class SqliteLibraryStore implements LibraryStore {
         this.db.exec('UPDATE schema_version SET version = 2');
       });
       migrate();
-    } else if (version.version !== 2 && version.version !== 3) {
+    } else if (version.version !== 2 && version.version !== 3 && version.version !== 4) {
       throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
     }
     const current = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number };
@@ -105,6 +106,24 @@ export class SqliteLibraryStore implements LibraryStore {
               REFERENCES rom_files(source_root, relative_path) ON DELETE CASCADE
           );
           UPDATE schema_version SET version = 3;
+        `);
+      });
+      migrate();
+    }
+    const schema = (this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number }).version;
+    if (schema === 3) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE rom_metadata (
+            source_root TEXT NOT NULL, relative_path TEXT NOT NULL,
+            title TEXT NOT NULL, description TEXT NOT NULL, released TEXT NOT NULL,
+            developer TEXT NOT NULL, publisher TEXT NOT NULL, genre TEXT NOT NULL,
+            provider TEXT NOT NULL, provider_id TEXT, provider_slug TEXT, artwork_id TEXT,
+            PRIMARY KEY (source_root, relative_path),
+            FOREIGN KEY (source_root, relative_path)
+              REFERENCES rom_files(source_root, relative_path) ON DELETE CASCADE
+          );
+          UPDATE schema_version SET version = 4;
         `);
       });
       migrate();
@@ -208,17 +227,37 @@ export class SqliteLibraryStore implements LibraryStore {
     const rows = this.db.prepare(`
       SELECT r.source_root AS source, r.id, r.name, r.system,
         r.relative_path AS relativePath, r.extension, r.bytes,
-        i.status AS identificationStatus, i.title AS identifiedTitle, i.dat_name AS datName
+        i.status AS identificationStatus, i.title AS identifiedTitle, i.dat_name AS datName,
+        m.title AS metadataTitle, m.description AS metadataDescription, m.released AS metadataReleased,
+        m.developer AS metadataDeveloper, m.publisher AS metadataPublisher, m.genre AS metadataGenre,
+        m.provider AS metadataProvider, m.provider_id AS metadataProviderId,
+        m.provider_slug AS metadataProviderSlug, m.artwork_id AS metadataArtworkId
       FROM rom_files r LEFT JOIN rom_identifications i
-        ON i.source_root=r.source_root AND i.relative_path=r.relative_path ${where}
+        ON i.source_root=r.source_root AND i.relative_path=r.relative_path
+      LEFT JOIN rom_metadata m ON m.source_root=r.source_root AND m.relative_path=r.relative_path ${where}
       ORDER BY ${order} ${query.descending ? 'DESC' : 'ASC'}, r.source_root ASC, r.relative_path ASC
       LIMIT ? OFFSET ?
     `).all(...params, query.limit, query.offset) as Array<{
       source: string; id: string; name: string; system: string;
       relativePath: string; extension: string; bytes: number;
       identificationStatus: IdentificationStatus | null; identifiedTitle: string | null; datName: string | null;
+      metadataTitle: string | null; metadataDescription: string | null; metadataReleased: string | null;
+      metadataDeveloper: string | null; metadataPublisher: string | null; metadataGenre: string | null;
+      metadataProvider: 'manual' | 'rawg' | null; metadataProviderId: string | null;
+      metadataProviderSlug: string | null; metadataArtworkId: string | null;
     }>;
-    return { items: rows.map(row => ({ ...row, identificationStatus: row.identificationStatus ?? 'pending' })), total: count.total };
+    return { items: rows.map(row => ({
+      source: row.source, id: row.id, name: row.name, system: row.system,
+      relativePath: row.relativePath, extension: row.extension, bytes: row.bytes,
+      identificationStatus: row.identificationStatus ?? 'pending', identifiedTitle: row.identifiedTitle, datName: row.datName,
+      metadata: row.metadataProvider ? {
+        source: row.source, relativePath: row.relativePath, title: row.metadataTitle ?? '',
+        description: row.metadataDescription ?? '', released: row.metadataReleased ?? '',
+        developer: row.metadataDeveloper ?? '', publisher: row.metadataPublisher ?? '', genre: row.metadataGenre ?? '',
+        provider: row.metadataProvider, providerId: row.metadataProviderId,
+        providerSlug: row.metadataProviderSlug, artworkId: row.metadataArtworkId
+      } : null
+    })), total: count.total };
   }
 
   listSystems(source: string | null): SystemCount[] {
@@ -300,6 +339,32 @@ export class SqliteLibraryStore implements LibraryStore {
       }
     });
     commit();
+  }
+
+  saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
+    if (!metadata.title.trim() || metadata.title.length > 200 || metadata.description.length > 4000 ||
+        [metadata.released, metadata.developer, metadata.publisher, metadata.genre].some(value => value.length > 200) ||
+        !['manual', 'rawg'].includes(metadata.provider) ||
+        (metadata.providerId !== null && metadata.providerId.length > 80) ||
+        (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
+        (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId))) {
+      throw new Error('Invalid game metadata.');
+    }
+    // FK guarantees that the target is an indexed ROM. Never writes to ROM folders.
+    const exists = this.db.prepare('SELECT 1 AS found FROM rom_files WHERE source_root=? AND relative_path=?').get(source, relativePath);
+    if (!exists) throw new Error('Game not found in the library.');
+    const input = { ...metadata, title: metadata.title.trim() };
+    this.db.prepare(`INSERT INTO rom_metadata(source_root, relative_path, title, description, released,
+      developer, publisher, genre, provider, provider_id, provider_slug, artwork_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(source_root, relative_path) DO UPDATE SET title=excluded.title,
+      description=excluded.description, released=excluded.released, developer=excluded.developer,
+      publisher=excluded.publisher, genre=excluded.genre, provider=excluded.provider,
+      provider_id=excluded.provider_id, provider_slug=excluded.provider_slug, artwork_id=excluded.artwork_id`).run(
+        source, relativePath, input.title, input.description, input.released,
+        input.developer, input.publisher, input.genre, input.provider,
+        input.providerId, input.providerSlug, input.artworkId);
+    return { source, relativePath, ...input };
   }
 
   close(): void { this.db.close(); }

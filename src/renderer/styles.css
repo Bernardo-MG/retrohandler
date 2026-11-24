@@ -31,3 +31,30 @@
 .identity-ambiguous, .identity-error { color:#fca5a5; }
 .identity-filter { display:flex; gap:6px; align-items:center; font-size:12px; color:#a9b9cf; }
 .identity-filter select { background:#151f31; color:#d8e3f1; border:1px solid #39485e; border-radius:6px; padding:7px; }
+
+/* Patch 006 — metadata editor and gallery */
+.view-switch{display:flex;gap:7px;padding:0 22px 14px}
+.view-switch button,.metadata-edit,.metadata-result button,.metadata-attribution button{border:1px solid #39485e;background:#202a40;color:#d8e4f4;border-radius:6px;padding:7px 10px;cursor:pointer}
+.view-switch button[aria-pressed=true]{border-color:#9283fb;color:white;background:#393365}
+.metadata-edit{display:flex;align-items:center;gap:7px;text-align:left;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.metadata-edit img{height:32px;width:24px;object-fit:cover;border-radius:3px}
+.game-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:16px;padding:20px}
+.game-card{border:1px solid #33405a;border-radius:10px;background:#1b2638;color:#e5e9f3;display:flex;flex-direction:column;gap:7px;padding:10px;text-align:left;min-width:0}
+.game-card>img,.game-card-placeholder{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:7px;background:#2d3750}
+.game-card-placeholder{display:grid;place-items:center;color:#929ce9}
+.game-card strong{font-size:12px;overflow-wrap:anywhere}.game-card small{font-size:11px;color:#9ca9bf}
+.metadata-panel{padding:22px;border-top:1px solid #34415a;display:flow-root}
+.metadata-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
+.metadata-heading h2{margin:0 0 5px}.metadata-heading small{color:#9aa8c0;overflow-wrap:anywhere}
+.metadata-cover{width:130px;max-height:195px;object-fit:contain;border-radius:6px;float:right;margin:0 0 14px 15px}
+.metadata-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:14px}
+.metadata-fields label,.metadata-search label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#c0cce2}
+.metadata-fields input,.metadata-fields textarea,.metadata-search input{background:#101827;border:1px solid #40506b;border-radius:6px;color:#f2f4fc;padding:9px;width:100%;font:inherit}
+.metadata-description{grid-column:1/-1}.metadata-search{clear:both;margin-top:24px;border-top:1px solid #33405a;padding-top:15px;display:grid;gap:12px}
+.metadata-search h3{font-size:16px;margin:0}.metadata-search p,.metadata-attribution{font-size:12px;color:#9aa8c0;margin:0}
+.metadata-result{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid #303d54;padding:9px;font-size:12px}
+
+/* Patch 006.1: keep the editor visible regardless of library length. */
+.metadata-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(5,9,18,.78)}
+.metadata-overlay .metadata-panel{width:min(850px,100%);max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain;border:1px solid #52607f;border-radius:12px;background:#151c2b;box-shadow:0 24px 90px #000a;padding:24px}
+@media(max-width:600px){.metadata-overlay{padding:8px}.metadata-overlay .metadata-panel{max-height:calc(100vh - 16px);padding:16px}}

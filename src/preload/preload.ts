@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, IdentificationUpdate, ScanUpdate } from '../shared';
 const api: DesktopApi = {
+  metadataSearch: (query, key) => ipcRenderer.invoke('metadata:search', query, key),
+  metadataApply: (target, id, key) => ipcRenderer.invoke('metadata:apply', target, id, key),
+  metadataSave: (target, data) => ipcRenderer.invoke('metadata:save', target, data),
+  metadataOpenSource: slug => ipcRenderer.invoke('metadata:open-source', slug),
   importDat: () => ipcRenderer.invoke('dat:import'),
   identifyCollection: (source, jobId) => ipcRenderer.invoke('identity:run', source, jobId),
   cancelIdentification: jobId => ipcRenderer.invoke('identity:cancel', jobId),

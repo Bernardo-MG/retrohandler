@@ -32,7 +32,21 @@ export interface IdentificationReceipt {
   processed: number; verified: number; probable: number; ambiguous: number;
   unknown: number; unsupported: number; errors: number;
 }
+/** Metadata is optional, explicitly selected, and independent from DAT identification. */
+export interface GameMetadataInput {
+  title: string; description: string; released: string;
+  developer: string; publisher: string; genre: string;
+  provider: 'manual' | 'rawg'; providerId: string | null;
+  providerSlug: string | null; artworkId: string | null;
+}
+export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
+export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; }
+export interface MetadataTarget { source: string; relativePath: string; }
 export interface DesktopApi {
+  metadataSearch(query: string, apiKey: string): Promise<MetadataCandidate[]>;
+  metadataApply(target: MetadataTarget, id: number, apiKey: string): Promise<GameMetadata>;
+  metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;
+  metadataOpenSource(slug: string): Promise<void>;
   importDat(): Promise<DatImportReceipt | null>;
   identifyCollection(source: string, jobId: string): Promise<IdentificationReceipt>;
   cancelIdentification(jobId: string): Promise<boolean>;
@@ -95,7 +109,7 @@ export interface LibraryQuery {
   offset: number;
   limit: number;
 }
-export interface LibraryEntry extends Rom { source: string; identificationStatus?: IdentificationStatus; identifiedTitle?: string | null; datName?: string | null; }
+export interface LibraryEntry extends Rom { source: string; identificationStatus?: IdentificationStatus; identifiedTitle?: string | null; datName?: string | null; metadata?: GameMetadata | null; }
 export interface LibraryPage { items: LibraryEntry[]; total: number; }
 export interface SystemCount { system: string; count: number; }
 export interface ScanReceipt { source: string; gameCount: number; warningCount: number; }
