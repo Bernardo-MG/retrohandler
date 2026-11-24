@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { Rom, ScanResult, ScanWarning } from '../../shared';
+import type { CollectionInfo, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
 
 /** The native module is loaded in Electron's main process, never in the renderer.
  * Kept behind a small structural interface to avoid leaking SQLite into services. */
@@ -23,6 +23,11 @@ type RomRow = { id: string; name: string; system: string; relative_path: string;
 export interface LibraryStore {
   saveScan(result: ScanResult): void;
   loadLastScan(): ScanResult | null;
+  listCollections?(): CollectionInfo[];
+  queryLibrary?(query: LibraryQuery): LibraryPage;
+  listSystems?(source: string | null): SystemCount[];
+  renameCollection?(source: string, label: string): void;
+  removeCollection?(source: string): void;
 }
 
 /** The database is deliberately stored outside the ROM collection. */
@@ -62,7 +67,15 @@ export class SqliteLibraryStore implements LibraryStore {
       CREATE INDEX IF NOT EXISTS rom_files_source_system ON rom_files(source_root, system);
     `);
     const version = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number };
-    if (version.version !== 1) throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
+    if (version.version === 1) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec('ALTER TABLE collections ADD COLUMN label TEXT');
+        this.db.exec('UPDATE schema_version SET version = 2');
+      });
+      migrate();
+    } else if (version.version !== 2) {
+      throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
+    }
   }
 
   saveScan(result: ScanResult): void {
@@ -118,6 +131,73 @@ export class SqliteLibraryStore implements LibraryStore {
     }));
     const warnings = JSON.parse(row.warnings_json) as ScanWarning[];
     return { source: row.root_path, games, ignored: row.ignored, scannedAt: row.scanned_at, warnings };
+  }
+
+  listCollections(): CollectionInfo[] {
+    const rows = this.db.prepare(`
+      SELECT c.root_path AS rootPath, COALESCE(c.label, '') AS label,
+        c.scanned_at AS scannedAt, c.ignored,
+        (SELECT COUNT(*) FROM rom_files r WHERE r.source_root=c.root_path) AS gameCount,
+        c.warnings_json AS warningsJson
+      FROM collections c ORDER BY c.scanned_at DESC, c.root_path ASC
+    `).all() as Array<Omit<CollectionInfo, 'warningCount'> & { warningsJson: string }>;
+    return rows.map(row => ({ rootPath: row.rootPath, label: row.label || path.basename(row.rootPath) || row.rootPath,
+      scannedAt: row.scannedAt, gameCount: row.gameCount, ignored: row.ignored,
+      warningCount: (JSON.parse(row.warningsJson) as ScanWarning[]).length }));
+  }
+
+  queryLibrary(query: LibraryQuery): LibraryPage {
+    if (!Number.isSafeInteger(query.offset) || query.offset < 0 ||
+        !Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 200) {
+      throw new Error('Invalid library page.');
+    }
+    const sortColumns: Record<LibraryQuery['sort'], string> = {
+      name: 'r.name COLLATE NOCASE', system: 'r.system COLLATE NOCASE', bytes: 'r.bytes'
+    };
+    const order = sortColumns[query.sort];
+    if (!order) throw new Error('Invalid sort order.');
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (query.source !== null) { clauses.push('r.source_root = ?'); params.push(query.source); }
+    if (query.system !== null) { clauses.push('r.system = ?'); params.push(query.system); }
+    if (query.search.trim()) {
+      clauses.push("(r.name LIKE ? ESCAPE '!' OR r.relative_path LIKE ? ESCAPE '!')");
+      const pattern = `%${query.search.trim().replace(/[!%_]/g, char => `!${char}`)}%`;
+      params.push(pattern, pattern);
+    }
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const count = this.db.prepare(`SELECT COUNT(*) AS total FROM rom_files r ${where}`).get(...params) as { total: number };
+    const rows = this.db.prepare(`
+      SELECT r.source_root AS source, r.id, r.name, r.system,
+        r.relative_path AS relativePath, r.extension, r.bytes
+      FROM rom_files r ${where}
+      ORDER BY ${order} ${query.descending ? 'DESC' : 'ASC'}, r.source_root ASC, r.relative_path ASC
+      LIMIT ? OFFSET ?
+    `).all(...params, query.limit, query.offset) as Array<{
+      source: string; id: string; name: string; system: string;
+      relativePath: string; extension: string; bytes: number;
+    }>;
+    return { items: rows, total: count.total };
+  }
+
+  listSystems(source: string | null): SystemCount[] {
+    return (this.db.prepare(`
+      SELECT system, COUNT(*) AS count FROM rom_files
+      ${source === null ? '' : 'WHERE source_root = ?'}
+      GROUP BY system ORDER BY system COLLATE NOCASE
+    `).all(...(source === null ? [] : [source])) as SystemCount[]);
+  }
+
+  renameCollection(source: string, label: string): void {
+    const newLabel = label.trim();
+    if (!newLabel || newLabel.length > 120) throw new Error('Collection name must be 1–120 characters.');
+    const result = this.db.prepare('UPDATE collections SET label=? WHERE root_path=?').run(newLabel, source);
+    if (!result.changes) throw new Error('Collection not found.');
+  }
+
+  removeCollection(source: string): void {
+    const result = this.db.prepare('DELETE FROM collections WHERE root_path=?').run(source);
+    if (!result.changes) throw new Error('Collection not found.');
   }
 
   close(): void { this.db.close(); }

@@ -1,56 +1,123 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { FolderOpen, Gamepad2, HardDrive, Library, Search, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
-import type { ScanProgress, ScanResult } from '../shared';
+import { FolderOpen, Gamepad2, HardDrive, Library, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import type { CollectionInfo, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
+import { CollectionPanel } from './components/CollectionPanel';
+import { LibraryFilters } from './components/LibraryFilters';
+import { LibraryTable } from './components/LibraryTable';
+import { ScanStatus } from './components/ScanStatus';
 import './styles.css';
 
+const PAGE_SIZE = 100;
+const EMPTY_PAGE: LibraryPage = { items: [], total: 0 };
+
 function App() {
-  const [data, setData] = useState<ScanResult | null>(null);
+  const [collections, setCollections] = useState<CollectionInfo[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [page, setPage] = useState<LibraryPage>(EMPTY_PAGE);
+  const [systems, setSystems] = useState<SystemCount[]>([]);
+  const [search, setSearch] = useState('');
+  const [system, setSystem] = useState<string | null>(null);
+  const [sort, setSort] = useState<LibrarySort>('name');
+  const [descending, setDescending] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [loadingLibrary, setLoadingLibrary] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const activeJob = useRef<string | null>(null);
+  const requestId = useRef(0);
+
+  const reloadCollections = useCallback(async () => {
+    const results = await window.retrohandler.listCollections();
+    setCollections(results);
+    setRevision(v => v + 1);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    void window.retrohandler.loadSavedLibrary()
-      .then(saved => { if (mounted && saved && !activeJob.current) setData(saved); })
-      .catch(reason => { if (mounted) setError(`Unable to load saved library: ${String(reason)}`); })
-      .finally(() => { if (mounted) setLoadingLibrary(false); });
+    void window.retrohandler.listCollections()
+      .then(results => { if (mounted) setCollections(results); })
+      .catch(reason => { if (mounted) setError(`Could not load collections: ${String(reason)}`); })
+      .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, []);
+
   useEffect(() => window.retrohandler.onScanProgress(update => {
     if (update.jobId === activeJob.current) setProgress(update.progress);
   }), []);
-  const [error, setError] = useState('');
-  const [query, setQuery] = useState('');
-  const [system, setSystem] = useState('All systems');
-  const systems = useMemo(() => {
-    const counts = new Map<string, number>();
-    data?.games.forEach(game => counts.set(game.system, (counts.get(game.system) ?? 0) + 1));
-    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [data]);
-  const filtered = useMemo(() => data?.games.filter(g =>
-    (system === 'All systems' || g.system === system) &&
-    (g.name.toLowerCase().includes(query.toLowerCase()) || g.relativePath.toLowerCase().includes(query.toLowerCase()))
-  ) ?? [], [data, system, query]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.retrohandler.listSystems(selected).then(found => {
+      if (!cancelled) setSystems(found);
+    }).catch(reason => { if (!cancelled) setError(String(reason)); });
+    return () => { cancelled = true; };
+  }, [selected, revision]);
+
+  // Do not query SQLite on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
+  useEffect(() => {
+    const id = ++requestId.current;
+    setLoading(true);
+    const query: LibraryQuery = { source: selected, search: debouncedSearch, system, sort, descending, offset, limit: PAGE_SIZE };
+    void window.retrohandler.queryLibrary(query).then(result => {
+      if (id === requestId.current) setPage(result);
+    }).catch(reason => { if (id === requestId.current) setError(String(reason)); })
+      .finally(() => { if (id === requestId.current) setLoading(false); });
+  }, [selected, debouncedSearch, system, sort, descending, offset, revision]);
+
+  const selectCollection = (source: string | null) => {
+    setSelected(source); setOffset(0); setSystem(null); setSearch('');
+  };
+  const filterSystem = (value: string | null) => { setSystem(value); setOffset(0); };
+  const filterSearch = (value: string) => { setSearch(value); setOffset(0); };
+  const filterSort = (value: LibrarySort) => { setSort(value); setOffset(0); };
+  const filterDescending = (value: boolean) => { setDescending(value); setOffset(0); };
+
+  const rename = async (source: string, label: string) => {
+    try { await window.retrohandler.renameCollection(source, label); await reloadCollections(); }
+    catch (reason) { setError(String(reason)); }
+  };
+  const remove = async (source: string) => {
+    try {
+      await window.retrohandler.removeCollection(source);
+      if (selected === source) selectCollection(null);
+      await reloadCollections();
+    } catch (reason) { setError(String(reason)); }
+  };
+
   async function scan() {
     setError('');
     try {
       const folder = await window.retrohandler.chooseRomFolder();
       if (!folder) return;
-      setBusy(true);
-      setProgress(null);
+      setBusy(true); setProgress(null);
       const jobId = `scan_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       activeJob.current = jobId;
-      const result = await window.retrohandler.scanFolder(folder, jobId);
-      setData(result);
-      setSystem('All systems'); setQuery('');
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { activeJob.current = null; setBusy(false); setProgress(null); }
+      const receipt = await window.retrohandler.scanIndexedFolder(folder, jobId);
+      await reloadCollections();
+      selectCollection(receipt.source);
+      if (receipt.warningCount) setError(`Scan completed with ${receipt.warningCount} warnings. Some files could not be read.`);
+    } catch (reason) {
+      if (!(reason instanceof Error && reason.message.includes('cancelled'))) setError(String(reason));
+    } finally { activeJob.current = null; setBusy(false); setProgress(null); }
   }
-  async function cancel() {
-    if (activeJob.current) await window.retrohandler.cancelScan(activeJob.current);
+  function cancel() {
+    if (activeJob.current) void window.retrohandler.cancelScan(activeJob.current);
   }
+  const totalGames = collections.reduce((n, c) => n + c.gameCount, 0);
+  const selectedInfo = collections.find(c => c.rootPath === selected);
+  const platformTotal = useMemo(() => systems.length, [systems]);
+  const identified = systems.filter(s => s.system !== 'Needs identification').reduce((n, s) => n + s.count, 0);
+  const selectedCount = selectedInfo?.gameCount ?? totalGames;
+
   return <div className="app">
     <aside className="sidebar">
       <div className="brand"><div className="brand-icon"><Gamepad2 size={22}/></div><div><strong>Retro</strong><span>HANDLER</span></div></div>
@@ -59,19 +126,35 @@ function App() {
       <div className="nav-item muted"><HardDrive size={18}/> Metadata <span className="soon">Soon</span></div>
       <div className="nav-item muted"><Settings2 size={18}/> Configuration <span className="soon">Soon</span></div>
       <div className="nav-item muted"><Server size={18}/> Deployment <span className="soon">Soon</span></div>
-      <div className="sidebar-bottom"><span className="status-dot"/> Local mode · v0.1.0</div>
+      <CollectionPanel collections={collections} selected={selected} busy={busy} select={selectCollection} rename={rename} remove={remove}/>
+      <div className="sidebar-bottom"><span className="status-dot"/> Local mode · v0.4</div>
     </aside>
     <main>
-      <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div><button className="primary" onClick={scan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button></header>
-      {busy && <section className="scan-status" role="status"><div><strong>Scanning collection…</strong><p>{progress ? `${progress.filesVisited.toLocaleString()} files checked · ${progress.gamesFound.toLocaleString()} entries · ${progress.warnings} warnings` : 'Starting scan…'}</p><small title={progress?.currentPath}>{progress?.currentPath}</small></div><button className="secondary" onClick={cancel}>Cancel scan</button></section>}
-      {loadingLibrary && <div className="scan-status" role="status">Loading saved library…</div>}
-      {error && <div className="error"><AlertCircle size={18}/>{error}</div>}
-      {data && !!data.warnings?.length && <div className="scan-warnings" role="status"><AlertCircle size={18}/> Scan completed with {data.warnings.length} warning(s). Some files or directories could not be scanned. <details><summary>See warnings</summary><ul>{data.warnings.slice(0, 100).map((warning, index) => <li key={index}>{warning.relativePath}: {warning.message}</li>)}</ul>{data.warnings.length > 100 && <p>Showing first 100 warnings.</p>}</details></div>}
-      <section className="stats"><div className="stat"><div className="stat-icon"><Gamepad2/></div><div><span>Total games</span><strong>{data?.games.length.toLocaleString() ?? '—'}</strong></div></div><div className="stat"><div className="stat-icon"><HardDrive/></div><div><span>Systems detected</span><strong>{systems.length || '—'}</strong></div></div><div className="stat"><div className="stat-icon"><CheckCircle2/></div><div><span>Identified by folder / format</span><strong>{data ? `${Math.round(data.games.filter(x => x.system !== 'Needs identification').length / Math.max(data.games.length,1)*100)}%` : '—'}</strong></div></div></section>
-      {data ? <><div className="source"><FolderOpen size={16}/><span title={data.source}>{data.source}</span><em>Scanned {new Date(data.scannedAt).toLocaleString()}</em></div><section className="library"><div className="library-header"><h2>All games <span>{filtered.length.toLocaleString()}</span></h2><div className="filters"><label className="search"><Search size={17}/><input placeholder="Search games or filenames" value={query} onChange={e=>setQuery(e.target.value)}/></label><select value={system} onChange={e=>setSystem(e.target.value)}><option>All systems</option>{systems.map(([name,count])=><option key={name} value={name}>{name} ({count})</option>)}</select></div></div><div className="table-wrap"><table><thead><tr><th>GAME</th><th>SYSTEM</th><th>TYPE</th><th>SIZE</th></tr></thead><tbody>{filtered.slice(0, 500).map(game=><tr key={game.id}><td><div className="game-name"><span className="game-icon"><Gamepad2 size={16}/></span><div><strong>{game.name || 'Untitled'}</strong><small title={game.relativePath}>{game.relativePath}</small></div></div></td><td>{game.system}</td><td><span className="pill">{game.extension}</span></td><td>{formatBytes(game.bytes)}</td></tr>)}</tbody></table>{filtered.length > 500 && <p className="limit">Showing the first 500 matching games. Refine your search to narrow the list.</p>}{filtered.length===0 && <div className="empty-small">No matching games.</div>}</div></section><p className="footnote">This preview never modifies, moves or deletes your ROMs. Folder and extension detection are preliminary; hash-based game identification comes next.</p></>
-      : <section className="empty"><div className="empty-graphic"><Gamepad2 size={56}/></div><div className="ready">READY TO START</div><h2>Your retro collection, organized.</h2><p>Select a local or network-mounted ROM folder. RetroHandler will scan it, recognize common console folders and formats, and build a searchable inventory.</p><button onClick={scan} disabled={busy} className="secondary"><FolderOpen size={18}/> Choose collection folder <ChevronRight size={17}/></button><div className="safe"><CheckCircle2 size={15}/> Read-only scan. Your original files stay untouched.</div></section>}
+      <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div>
+        <button className="primary" onClick={scan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button>
+      </header>
+      {busy && <ScanStatus progress={progress} cancel={cancel}/>}
+      {error && <div className="error" role="alert"><AlertCircle size={18}/>{error}<button className="dismiss-error" onClick={() => setError('')}>Dismiss</button></div>}
+      <section className="stats">
+        <div className="stat"><div className="stat-icon"><Gamepad2/></div><div><span>Games in selection</span><strong>{selectedCount.toLocaleString()}</strong></div></div>
+        <div className="stat"><div className="stat-icon"><HardDrive/></div><div><span>Systems detected</span><strong>{platformTotal}</strong></div></div>
+        <div className="stat"><div className="stat-icon"><CheckCircle2/></div><div><span>Identified by folder / format</span><strong>{selectedCount ? `${Math.round(identified / selectedCount * 100)}%` : '—'}</strong></div></div>
+      </section>
+      {selectedInfo && <div className="source"><FolderOpen size={16}/><span title={selectedInfo.rootPath}>{selectedInfo.rootPath}</span><em>Scanned {new Date(selectedInfo.scannedAt).toLocaleString()}</em></div>}
+      {collections.length ? <section className="library">
+        <div className="library-header"><h2>{selectedInfo?.label ?? 'All collections'} <span>{page.total.toLocaleString()}</span></h2>
+          <LibraryFilters search={search} setSearch={filterSearch} system={system} setSystem={filterSystem} systems={systems} sort={sort} setSort={filterSort} descending={descending} setDescending={filterDescending}/>
+        </div>
+        <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset}/>
+      </section> : <section className="empty">
+        <div className="empty-graphic"><Gamepad2 size={56}/></div><div className="ready">READY TO START</div>
+        <h2>Your retro collection, organized.</h2><p>Select a local or network-mounted ROM folder. RetroHandler will index your collection and remember it between launches.</p>
+        <button onClick={scan} disabled={busy} className="secondary"><FolderOpen size={18}/> Choose collection folder</button>
+        <div className="safe"><CheckCircle2 size={15}/> Read-only scan. Your original files stay untouched.</div>
+      </section>}
+      <p className="footnote">Removing a collection only forgets its database entries; your original ROM files are never deleted.</p>
     </main>
   </div>;
 }
-function formatBytes(n:number) { if(n<1024) return `${n} B`; if(n<1048576)return `${(n/1024).toFixed(1)} KB`; if(n<1073741824)return `${(n/1048576).toFixed(1)} MB`;return `${(n/1073741824).toFixed(2)} GB`; }
+
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

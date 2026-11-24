@@ -22,6 +22,12 @@ export interface DesktopApi {
   scanFolder(folder: string, jobId?: string): Promise<ScanResult>;
   cancelScan(jobId: string): Promise<boolean>;
   onScanProgress(listener: (update: ScanUpdate) => void): () => void;
+  scanIndexedFolder(folder: string, jobId: string): Promise<ScanReceipt>;
+  listCollections(): Promise<CollectionInfo[]>;
+  queryLibrary(query: LibraryQuery): Promise<LibraryPage>;
+  listSystems(source: string | null): Promise<SystemCount[]>;
+  renameCollection(source: string, label: string): Promise<void>;
+  removeCollection(source: string): Promise<void>;
 }
 
 /** Domain types for future persistence and metadata matching. The existing Rom
@@ -48,3 +54,27 @@ export interface Game {
   platformId: PlatformId | null;
   title: string;
 }
+
+/** SQLite-backed collection browser; values are serialized across Electron IPC. */
+export interface CollectionInfo {
+  rootPath: string;
+  label: string;
+  scannedAt: string;
+  gameCount: number;
+  ignored: number;
+  warningCount: number;
+}
+export type LibrarySort = 'name' | 'system' | 'bytes';
+export interface LibraryQuery {
+  source: string | null;
+  search: string;
+  system: string | null;
+  sort: LibrarySort;
+  descending: boolean;
+  offset: number;
+  limit: number;
+}
+export interface LibraryEntry extends Rom { source: string; }
+export interface LibraryPage { items: LibraryEntry[]; total: number; }
+export interface SystemCount { system: string; count: number; }
+export interface ScanReceipt { source: string; gameCount: number; warningCount: number; }
