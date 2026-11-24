@@ -15,7 +15,7 @@ const aliases: Record<string, string> = {
   ports: 'Ports', dos: 'DOS', scummvm: 'ScummVM',
 };
 const extensions = new Set([
-  '.zip', '.7z', '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64',
+  '.zip', '.7z', '.rar', '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64',
   '.nds', '.md', '.gen', '.smd', '.sms', '.gg', '.cue', '.gdi', '.chd', '.iso', '.cso', '.pbp',
   '.cdi', '.bin', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom', '.wad'
 ]);

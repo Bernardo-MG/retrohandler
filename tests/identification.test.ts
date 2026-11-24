@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
@@ -68,10 +69,11 @@ test('hashing computes streaming CRC32, MD5 and SHA1, and supports abort', async
   } finally { await rm(source, { recursive: true, force: true }); }
 });
 
-test('identification persists verified matching, unsupported ZIP, and a cache usable on rescan', async () => fixture(async (source, store) => {
+test('identification persists verified matching, empty ZIP, and a cache usable on rescan', async () => fixture(async (source, store) => {
   store.importDat(parseDat(xml(['Example Game'])));
   const progress: number[] = [];
-  const results = await identifyCollection(source, store, { onProgress: p => progress.push(p.processed) });
+  const emptyArchive = { list: async () => [], open: () => Readable.from([]) };
+  const results = await identifyCollection(source, store, { onProgress: p => progress.push(p.processed), archiveReader: emptyArchive });
   assert.equal(results.verified, 1);
   assert.equal(results.unsupported, 1);
   assert.deepEqual(progress, [2]);
@@ -83,7 +85,7 @@ test('identification persists verified matching, unsupported ZIP, and a cache us
   assert.equal(store.queryLibrary({ source, search: '', system: null, identification: 'pending', sort: 'name', descending: false, offset: 0, limit: 10 }).total, 0);
   const hashed = await hashRom(path.join(source, 'test.nes'));
   assert.deepEqual(store.cachedFingerprint(source, 'test.nes', hashed.size, hashed.modifiedMs), hashed);
-  assert.equal((await identifyCollection(source, store)).verified, 1);
+  assert.equal((await identifyCollection(source, store, { archiveReader: emptyArchive })).verified, 1);
 }));
 
 test('conflicting DAT games are ambiguous and cancellation never replaces saved matches', async () => fixture(async (source, store) => {

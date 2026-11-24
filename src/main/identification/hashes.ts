@@ -1,4 +1,5 @@
 import { createReadStream } from 'node:fs';
+import type { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 
@@ -14,27 +15,32 @@ export async function hashRom(filename: string, signal?: AbortSignal): Promise<R
   if (signal?.aborted) throw Object.assign(new Error('Identification cancelled.'), { name: 'AbortError' });
   const before = await stat(filename);
   if (!before.isFile()) throw new Error('Not a regular file.');
-  let crc = 0xffffffff;
-  let bytes = 0;
-  const md5 = createHash('md5');
-  const sha1 = createHash('sha1');
-  const stream = createReadStream(filename, { highWaterMark: 256 * 1024, signal });
+  const computed = await hashReadable(createReadStream(filename, { highWaterMark: 256 * 1024, signal }), before.size, signal);
+  const after = await stat(filename);
+  if (computed.size !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
+    throw new Error('File changed during hashing.');
+  }
+  return { ...computed, modifiedMs: after.mtimeMs };
+}
+
+/** Hash a streamed decompressed ROM; reject over-sized or truncated archive members. */
+export async function hashReadable(stream: Readable, expectedSize: number, signal?: AbortSignal): Promise<Omit<RomHashes, 'modifiedMs'>> {
+  let crc = 0xffffffff, bytes = 0;
+  const md5 = createHash('md5'), sha1 = createHash('sha1');
   try {
-    for await (const chunk of stream) {
-      const buffer = chunk as Buffer;
+    for await (const value of stream) {
+      if (signal?.aborted) throw Object.assign(new Error('Identification cancelled.'), { name: 'AbortError' });
+      const buffer = value as Buffer;
       bytes += buffer.length;
-      md5.update(buffer);
-      sha1.update(buffer);
-      for (const value of buffer) crc = table[(crc ^ value) & 255] ^ (crc >>> 8);
+      if (bytes > expectedSize) throw new Error('Archive member exceeds advertised size.');
+      md5.update(buffer); sha1.update(buffer);
+      for (const octet of buffer) crc = table[(crc ^ octet) & 255] ^ (crc >>> 8);
     }
   } catch (error) {
+    stream.destroy();
     if (signal?.aborted) throw Object.assign(new Error('Identification cancelled.'), { name: 'AbortError' });
     throw error;
   }
-  const after = await stat(filename);
-  if (bytes !== before.size || after.size !== before.size || after.mtimeMs !== before.mtimeMs) {
-    throw new Error('File changed during hashing.');
-  }
-  return { crc32: ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0'),
-    md5: md5.digest('hex'), sha1: sha1.digest('hex'), size: bytes, modifiedMs: after.mtimeMs };
+  if (bytes !== expectedSize) throw new Error('Truncated ROM data.');
+  return { crc32: ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0'), md5: md5.digest('hex'), sha1: sha1.digest('hex'), size: bytes };
 }
