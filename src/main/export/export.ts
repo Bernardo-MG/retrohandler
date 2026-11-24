@@ -21,9 +21,18 @@ const validSystem = (s: string) => /^[a-z0-9][a-z0-9_-]{0,49}$/.test(s) && !['co
 const knownSystem = (name: string) => Object.prototype.hasOwnProperty.call(SYSTEM_MAP, name) ? SYSTEM_MAP[name] : undefined;
 const filenameOf = (relative: string): string => path.win32.basename(relative.replace(/\//g, '\\'));
 function formatDate(s: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const date = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0,10) === s ? s.replace(/-/g, '') + 'T000000' : null;
+  // EmulationStation requires a full timestamp, but metadata can contain a
+  // year or a year-month when the exact release day is unknown.
+  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(s.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2] ?? '01');
+  const day = Number(match[3] ?? '01');
+  if (year < 1 || month < 1 || month > 12) return null;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (day < 1 || day > daysInMonth[month - 1]) return null;
+  return `${match[1]}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}T000000`;
 }
 
 export function gameListXml(games: Array<{ entry: LibraryEntry; filename: string; image: string | null }>): string {

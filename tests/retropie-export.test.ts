@@ -33,6 +33,29 @@ test('gamelist contains escaped metadata and relative image paths', () => {
   assert.match(xml, /<image>\.\/images\/a.png<\/image>/);
 });
 
+test('release year and year-month are exported as valid EmulationStation dates', () => {
+  const game = entry('/roms', 'Game.zip');
+  const render = (released: string) => {
+    game.metadata = { ...game.metadata!, released };
+    return gameListXml([{ entry: game, filename: 'Game.zip', image: null }]);
+  };
+  assert.match(render('1992'), /<releasedate>19920101T000000<\/releasedate>/);
+  assert.match(render('1992-03'), /<releasedate>19920301T000000<\/releasedate>/);
+  assert.match(render('1992-03-04'), /<releasedate>19920304T000000<\/releasedate>/);
+  assert.match(render('2000-02-29'), /<releasedate>20000229T000000<\/releasedate>/);
+  assert.match(render(' 1992 '), /<releasedate>19920101T000000<\/releasedate>/);
+});
+
+test('invalid or impossible release dates are omitted', () => {
+  const game = entry('/roms', 'Game.zip');
+  for (const released of ['', '0000', '1992-00', '1992-13', '1992-02-30',
+    '1900-02-29', '1992-04-31', '1992-1', '1992/03', 'about 1992']) {
+    game.metadata = { ...game.metadata!, released };
+    const xml = gameListXml([{ entry: game, filename: 'Game.zip', image: null }]);
+    assert.doesNotMatch(xml, /<releasedate>/, `invalid date: ${released}`);
+  }
+});
+
 test('preview makes no files; confirmed export writes XML but never copies ROMs', async () => fixture(async (_, src, dst) => {
   await writeFile(path.join(src, 'Game.zip'), 'data');
   const lib = library([entry(src, 'Game.zip')]);
