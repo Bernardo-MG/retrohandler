@@ -20,6 +20,8 @@
     "src/main/services/library/**/*.ts",
     "src/main/database/**/*.ts",
     "src/main/metadata/rawg.ts",
+    "src/main/metadata/launchbox.ts",
+    "src/main/metadata/libretro.ts",
     "src/main/metadata/artwork.ts",
     "src/main/export/export.ts"
   ]

@@ -86,3 +86,7 @@
 .collection-system-actions{display:flex;flex-wrap:wrap;gap:6px}
 .collection-system-actions button{background:#2a344e;color:#e8edfb;border:1px solid #48516b;border-radius:6px;padding:7px;cursor:pointer;font-size:11px}
 .collection-system-actions button:disabled{opacity:.5;cursor:not-allowed}
+
+/* Local LaunchBox lookup and optional RAWG provider. */
+.metadata-provider-switch{display:flex;gap:8px;flex-wrap:wrap}
+.metadata-provider-switch button[aria-pressed="true"]{border-color:#9283fb;background:#393365;color:white}

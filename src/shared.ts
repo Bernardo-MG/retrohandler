@@ -36,13 +36,13 @@ export interface IdentificationReceipt {
 export interface GameMetadataInput {
   title: string; description: string; released: string;
   developer: string; publisher: string; genre: string;
-  provider: 'manual' | 'rawg'; providerId: string | null;
+  provider: 'manual' | 'rawg' | 'launchbox'; providerId: string | null;
   providerSlug: string | null; artworkId: string | null;
   /** Optional manual platform override; null restores scanner detection. */
   systemOverride?: string | null;
 }
 export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
-export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; }
+export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; platform?: string; }
 export interface MetadataTarget { source: string; relativePath: string; }
 /** Bulk edits operate on explicit games or the whole filtered result, not the current page. */
 export type BulkSystemSelection =
@@ -77,6 +77,10 @@ export interface DesktopApi {
   previewRetroPieExport(options: ExportOptions): Promise<ExportPlan>;
   runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<{ copied: number }>;
 
+  importLaunchBox(): Promise<{ count: number } | null>;
+  launchBoxSearch(query: string, system: string): Promise<MetadataCandidate[]>;
+  launchBoxApply(target: MetadataTarget, id: number): Promise<GameMetadata>;
+  findLibretroArtwork(system: string, names: string[]): Promise<string | null>;
   metadataSearch(query: string, apiKey: string): Promise<MetadataCandidate[]>;
   metadataApply(target: MetadataTarget, id: number, apiKey: string): Promise<GameMetadata>;
   metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;

@@ -9,9 +9,11 @@ interface Props { entry: LibraryEntry; onClose(): void; onSaved(): void; }
 export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   const [form, setForm] = useState<GameMetadataInput>(entry.metadata ?? empty(entry.identifiedTitle || entry.name));
   const [apiKey, setApiKey] = useState('');
+  const [provider, setProvider] = useState<'launchbox'|'rawg'>('launchbox');
   const [systemOverride, setSystemOverride] = useState(entry.metadata?.systemOverride ?? '');
   const [query, setQuery] = useState(cleanTitle(entry));
   const [results, setResults] = useState<MetadataCandidate[]>([]);
+  const [imported, setImported] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -27,15 +29,30 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   }
   async function search() {
     setBusy(true); setError(''); setNotice(''); setResults([]);
-    try { setResults(await window.retrohandler.metadataSearch(query, apiKey)); }
+    try { setResults(provider === 'launchbox' ? await window.retrohandler.launchBoxSearch(query, systemOverride || entry.system) : await window.retrohandler.metadataSearch(query, apiKey)); }
     catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
   async function apply(id: number) {
     setBusy(true); setError('');
     try {
-      const metadata = await window.retrohandler.metadataApply(target, id, apiKey);
-      setForm(metadata); setSystemOverride(metadata.systemOverride ?? ''); setResults([]); setNotice('Metadata matched and saved.'); onSaved();
+      const metadata = provider === 'launchbox' ? await window.retrohandler.launchBoxApply(target, id) : await window.retrohandler.metadataApply(target, id, apiKey);
+      setForm(metadata); setSystemOverride(metadata.systemOverride ?? systemOverride); setResults([]); setNotice('Metadata matched and saved.'); onSaved();
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  }
+  async function importLaunchBox() {
+    setBusy(true); setError(''); setImported('');
+    try { const result = await window.retrohandler.importLaunchBox(); if (result) setImported(`${result.count.toLocaleString()} LaunchBox games imported.`); }
+    catch (e) { setError(String(e)); }
+    finally { setBusy(false); }
+  }
+  async function artwork() {
+    setBusy(true); setError('');
+    try {
+      const id = await window.retrohandler.findLibretroArtwork(systemOverride.trim() || entry.system, [entry.relativePath, form.title]);
+      if (!id) setNotice('No matching Libretro box art found. Try a No-Intro filename or another game title.');
+      else { setForm(current => ({...current, artworkId:id})); setNotice('Cover found. Save manual metadata to keep it.'); }
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -70,12 +87,22 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     </div>
     <button className="primary" disabled={busy || !form.title.trim()} onClick={() => void save()}>Save manual metadata</button>
     {form.provider === 'rawg' && form.providerSlug && <p className="metadata-attribution">Metadata and artwork from RAWG. <button onClick={() => void window.retrohandler.metadataOpenSource(form.providerSlug!)}>View game on RAWG</button></p>}
-    <div className="metadata-search"><h3>Find a game in RAWG (optional)</h3><p>Provide your own RAWG API key. Search results are not applied automatically, and the key is not saved.</p>
-      <label>API key <input type="password" autoComplete="off" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder="RAWG API key"/></label>
+    <div className="metadata-search">
+      <h3>Find retro-game metadata</h3>
+      <p>LaunchBox uses a local database: download Metadata.zip from the LaunchBox Games Database, extract Metadata.xml, then import it. No API key required. Matches are never applied automatically.</p>
+      <div className="metadata-provider-switch" role="group" aria-label="Metadata source">
+        <button type="button" className="secondary" aria-pressed={provider === 'launchbox'} onClick={() => {setProvider('launchbox');setResults([]);}}>LaunchBox (offline)</button>
+        <button type="button" className="secondary" aria-pressed={provider === 'rawg'} onClick={() => {setProvider('rawg');setResults([]);}}>RAWG (API key)</button>
+      </div>
+      {provider === 'launchbox' && <><button className="secondary" disabled={busy} onClick={() => void importLaunchBox()}>Import LaunchBox Metadata.xml…</button>{imported && <p role="status">{imported}</p>}</>}
+      {provider === 'rawg' && <><p>RAWG remains optional. Its key is not saved.</p>
+        <label>RAWG API key <input type="password" autoComplete="off" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder="RAWG API key"/></label></>}
       <label>Game title <input value={query} maxLength={120} onChange={event => setQuery(event.target.value)}/></label>
-      <button className="secondary" disabled={busy || !query.trim() || !apiKey} onClick={() => void search()}>Search RAWG</button>
-      {results.map(result => <div className="metadata-result" key={result.id}><span>{result.title} {result.released && `(${result.released})`}</span><button disabled={busy} onClick={() => void apply(result.id)}>Use this match</button></div>)}
-      {results.length > 0 && <p className="metadata-attribution">Search data © RAWG. Confirm the correct system and edition before applying.</p>}
+      <button className="secondary" disabled={busy || !query.trim() || (provider === 'rawg' && !apiKey)} onClick={() => void search()}>Search {provider === 'launchbox' ? 'LaunchBox' : 'RAWG'}</button>
+      {results.map(result => <div className="metadata-result" key={result.id}><span>{result.title} {result.released && `(${result.released})`} {result.platform && `— ${result.platform}`}</span><button disabled={busy} onClick={() => void apply(result.id)}>Use this match</button></div>)}
+      {results.length > 0 && <p>Check the platform and edition before applying a match. Your manually assigned ROM system is retained.</p>}
+      <h3>Libretro box art (no API key)</h3><p>Looks for an exact or simplified filename in Libretro's box-art catalogue. Search is platform-specific and does not overwrite your existing image unless you save.</p>
+      <button className="secondary" disabled={busy} onClick={() => void artwork()}>Find Libretro box art</button>
     </div>
     {notice && <p role="status" className="identity-message">{notice}</p>}
     {error && <p role="alert" className="error">{error}</p>}

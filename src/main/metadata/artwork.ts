@@ -33,6 +33,12 @@ export async function downloadArtwork(urlString: string, folder: string): Promis
     chunks.push(buffer);
   }
   const bytes = Buffer.concat(chunks);
+  return cacheArtworkBytes(bytes, folder);
+}
+
+/** Cache only verified image bytes in the same content-addressed artwork store. */
+export async function cacheArtworkBytes(bytes: Buffer, folder: string): Promise<string> {
+  if (bytes.length > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit.');
   const extension = typeFromBytes(bytes);
   if (!extension) throw new Error('Artwork is not a supported image.');
   const id = `${createHash('sha256').update(bytes).digest('hex')}.${extension}`;

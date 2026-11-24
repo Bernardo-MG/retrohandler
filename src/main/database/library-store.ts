@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { BulkSystemSelection, CollectionInfo, GameMetadata, GameMetadataInput, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
+import type { MetadataCandidate, BulkSystemSelection, CollectionInfo, GameMetadata, GameMetadataInput, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
 import type { DatEntry, ParsedDat } from '../identification/dat';
 import type { RomHashes, } from '../identification/hashes';
 
@@ -18,6 +18,10 @@ export interface DatabaseHandle {
   transaction<T>(fn: () => T): () => T;
   close(): void;
 }
+
+export interface LaunchBoxGame { id: number; title: string; platform: string; released: string; description: string; developer: string; publisher: string; genre: string; }
+
+export function normalizeLaunchBoxName(name: string): string { return name.trim().toLowerCase().replace(/\s+/g,' '); }
 
 type CollectionRow = { root_path: string; scanned_at: string; ignored: number; warnings_json: string };
 type RomRow = { id: string; name: string; system: string; relative_path: string; extension: string; bytes: number };
@@ -37,6 +41,13 @@ export interface LibraryStore {
   saveIdentification?(source: string, results: IdentificationResult[]): void;
   saveMetadata?(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata;
   bulkAssignSystem?(selection: BulkSystemSelection, systemOverride: string | null): number;
+  beginLaunchBoxImport?(): void;
+  addLaunchBoxGame?(game: LaunchBoxGame): void;
+  finishLaunchBoxImport?(): number;
+  abortLaunchBoxImport?(): void;
+  searchLaunchBox?(query: string, system: string): MetadataCandidate[];
+  getLaunchBoxGame?(id: number): LaunchBoxGame | null;
+  getArtworkId?(source: string, relativePath: string): string | null;
 }
 
 /** The database is deliberately stored outside the ROM collection. */
@@ -256,7 +267,7 @@ export class SqliteLibraryStore implements LibraryStore {
       identificationStatus: IdentificationStatus | null; identifiedTitle: string | null; datName: string | null;
       metadataTitle: string | null; metadataDescription: string | null; metadataReleased: string | null;
       metadataDeveloper: string | null; metadataPublisher: string | null; metadataGenre: string | null;
-      metadataProvider: 'manual' | 'rawg' | null; metadataProviderId: string | null;
+      metadataProvider: 'manual' | 'rawg' | 'launchbox' | null; metadataProviderId: string | null;
       metadataProviderSlug: string | null; metadataArtworkId: string | null; metadataSystemOverride: string | null;
     }>;
     return { items: rows.map(row => ({
@@ -429,10 +440,77 @@ export class SqliteLibraryStore implements LibraryStore {
     return commit();
   }
 
+  /** Staged import: a failed or cancelled XML parse leaves the previous catalogue intact. */
+  private launchboxSchema(): void {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS launchbox_games (
+      id INTEGER PRIMARY KEY, title TEXT NOT NULL, platform TEXT NOT NULL,
+      released TEXT NOT NULL, description TEXT NOT NULL, developer TEXT NOT NULL,
+      publisher TEXT NOT NULL, genre TEXT NOT NULL, normalized_title TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS launchbox_lookup ON launchbox_games(normalized_title);
+      CREATE TABLE IF NOT EXISTS launchbox_staging (
+      id INTEGER PRIMARY KEY, title TEXT NOT NULL, platform TEXT NOT NULL,
+      released TEXT NOT NULL, description TEXT NOT NULL, developer TEXT NOT NULL,
+      publisher TEXT NOT NULL, genre TEXT NOT NULL, normalized_title TEXT NOT NULL);`);
+  }
+  beginLaunchBoxImport(): void {
+    this.launchboxSchema();
+    this.db.exec('DELETE FROM launchbox_staging');
+  }
+  addLaunchBoxGame(game: LaunchBoxGame): void {
+    this.db.prepare(`INSERT OR REPLACE INTO launchbox_staging
+      (id,title,platform,released,description,developer,publisher,genre,normalized_title)
+      VALUES(?,?,?,?,?,?,?,?,?)`).run(game.id, game.title, game.platform, game.released,
+      game.description, game.developer, game.publisher, game.genre, normalizeLaunchBoxName(game.title));
+  }
+  finishLaunchBoxImport(): number {
+    const commit = this.db.transaction(() => {
+      const count = (this.db.prepare('SELECT COUNT(*) AS n FROM launchbox_staging').get() as {n:number}).n;
+      if (!count) throw new Error('LaunchBox XML contains no usable game records.');
+      this.db.exec('DELETE FROM launchbox_games; INSERT INTO launchbox_games SELECT * FROM launchbox_staging; DELETE FROM launchbox_staging;');
+      return count;
+    });
+    return commit();
+  }
+  abortLaunchBoxImport(): void { this.db.exec('DELETE FROM launchbox_staging'); }
+  searchLaunchBox(term: string, platform: string): MetadataCandidate[] {
+    this.launchboxSchema();
+    const normalized = normalizeLaunchBoxName(term);
+    if (!normalized || normalized.length > 160) throw new Error('Invalid LaunchBox search.');
+    // Prefix search uses the index; limit candidate work before ranking by platform.
+    const escaped = normalized.replace(/[!%_]/g, c => `!${c}`);
+    const candidates = this.db.prepare(`SELECT id,title,platform,released FROM launchbox_games
+      WHERE normalized_title = ? OR normalized_title LIKE ? ESCAPE '!' LIMIT 300`)
+      .all(normalized, `${escaped}%`) as Array<{id:number;title:string;platform:string;released:string}>;
+    const alias: Record<string,string> = {
+      'supernintendo':'supernintendoentertainmentsystem',
+      'megadrivegenesis':'segagenesis','playstation':'sonyplaystation',
+      'gameboy':'nintendogameboy','gameboycolor':'nintendogameboycolor',
+      'gameboyadvance':'nintendogameboyadvance',
+      'nintendo64':'nintendo64', 'nintendoentertainmentsystem':'nintendoentertainmentsystem'
+    };
+    const rawPlatform = platform.toLowerCase().replace(/[^a-z0-9]/g,'');
+    const platformKey = alias[rawPlatform] ?? rawPlatform;
+    return candidates.sort((a,b) => {
+      const score = (v: typeof a) => (normalizeLaunchBoxName(v.title) === normalized ? 4 : 0) +
+        (platformKey && (v.platform.toLowerCase().replace(/[^a-z0-9]/g,'') === platformKey ||
+          v.platform.toLowerCase().replace(/[^a-z0-9]/g,'') === rawPlatform) ? 2 : 0);
+      return score(b)-score(a) || a.title.localeCompare(b.title) || a.id-b.id;
+    }).slice(0,20).map(v => ({id:v.id,title:v.title,released:v.released,slug:null,platform:v.platform}));
+  }
+  getArtworkId(source: string, relativePath: string): string | null {
+    return (this.db.prepare(`SELECT artwork_id AS artworkId FROM rom_metadata WHERE source_root=? AND relative_path=?`)
+      .get(source,relativePath) as {artworkId:string|null}|undefined)?.artworkId ?? null;
+  }
+  getLaunchBoxGame(id: number): LaunchBoxGame | null {
+    this.launchboxSchema();
+    return (this.db.prepare(`SELECT id,title,platform,released,description,developer,publisher,genre
+      FROM launchbox_games WHERE id=?`).get(id) as LaunchBoxGame | undefined) ?? null;
+  }
+
   saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
     if (!metadata.title.trim() || metadata.title.length > 200 || metadata.description.length > 4000 ||
         [metadata.released, metadata.developer, metadata.publisher, metadata.genre].some(value => value.length > 200) ||
-        !['manual', 'rawg'].includes(metadata.provider) ||
+        !['manual', 'rawg', 'launchbox'].includes(metadata.provider) ||
         (metadata.providerId !== null && metadata.providerId.length > 80) ||
         (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
         (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId)) ||

@@ -1,7 +1,9 @@
-import { ipcMain, shell } from 'electron';
+import { dialog, ipcMain, shell } from 'electron';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
 import type { LibraryStore } from '../database/library-store';
 import { downloadArtwork } from './artwork';
+import { importLaunchBoxXml } from './launchbox';
+import { findLibretroCover } from './libretro';
 import { rawgProvider, type MetadataProvider } from './rawg';
 
 function target(value: unknown): MetadataTarget {
@@ -19,7 +21,7 @@ function fields(value: unknown): GameMetadataInput {
   for (const name of ['title','description','released','developer','publisher','genre']) {
     if (typeof input[name] !== 'string') throw new Error('Invalid metadata fields.');
   }
-  if (!['manual','rawg'].includes(String(input.provider))) throw new Error('Invalid provider.');
+  if (!['manual','rawg','launchbox'].includes(String(input.provider))) throw new Error('Invalid provider.');
   for (const name of ['providerId', 'providerSlug', 'artworkId']) {
     if (input[name] !== null && typeof input[name] !== 'string') throw new Error('Invalid metadata fields.');
   }
@@ -30,6 +32,40 @@ function fields(value: unknown): GameMetadataInput {
 }
 export function registerMetadataIpc(store: LibraryStore, artworkFolder: string, provider: MetadataProvider = rawgProvider): void {
   if (!store.saveMetadata) throw new Error('Metadata storage unavailable.');
+  let importing = false;
+  ipcMain.handle('launchbox:import', async () => {
+    if (importing) throw new Error('A LaunchBox import is already running.');
+    const selection = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{name:'LaunchBox Metadata XML',extensions:['xml']}] });
+    if (selection.canceled || !selection.filePaths[0]) return null;
+    importing = true;
+    try { return { count: await importLaunchBoxXml(selection.filePaths[0], store) }; }
+    finally { importing = false; }
+  });
+  ipcMain.handle('launchbox:search', (_event, query: unknown, system: unknown) => {
+    if (typeof query !== 'string' || query.length > 120 || typeof system !== 'string' || system.length > 120)
+      throw new Error('Invalid LaunchBox search.');
+    if (!store.searchLaunchBox) throw new Error('LaunchBox catalogue unavailable.');
+    return store.searchLaunchBox(query, system);
+  });
+  ipcMain.handle('launchbox:apply', (_event, input: unknown, id: unknown) => {
+    const game = target(input);
+    if (!Number.isSafeInteger(id) || Number(id) <= 0 || !store.getLaunchBoxGame) throw new Error('Invalid LaunchBox match.');
+    const found = store.getLaunchBoxGame(Number(id));
+    if (!found) throw new Error('LaunchBox game was not found in the imported catalogue.');
+    // Never change the system assignment; preserve cached cover art when possible.
+
+    return store.saveMetadata!(game.source, game.relativePath, {
+      title: found.title, description: found.description, released: found.released,
+      developer: found.developer, publisher: found.publisher, genre: found.genre,
+      provider:'launchbox', providerId:String(found.id), providerSlug:null,
+      artworkId: store.getArtworkId?.(game.source, game.relativePath) ?? null
+    });
+  });
+  ipcMain.handle('libretro:artwork', async (_event, system: unknown, names: unknown) => {
+    if (typeof system !== 'string' || system.length > 120 || !Array.isArray(names) || names.length > 3 ||
+        names.some(name => typeof name !== 'string' || name.length > 200)) throw new Error('Invalid artwork search.');
+    return findLibretroCover(system, names as string[], artworkFolder);
+  });
   ipcMain.handle('metadata:search', (_event, query: unknown, key: unknown) => {
     if (typeof query !== 'string' || typeof key !== 'string') throw new Error('Invalid metadata search.');
     return provider.search(query, key);
