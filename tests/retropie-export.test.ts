@@ -114,3 +114,40 @@ test('export uses effective per-ROM metadata system rather than scanner system',
   await executeExport(library([game]), options(dst), path.join(src, 'artwork'), plan.fingerprint);
   assert.equal(await readFile(path.join(dst, 'roms', 'snes', 'Unidentified.zip'), 'utf8'), 'data');
 }));
+
+
+test('export skips unmapped games and writes gamelist only for approved ROMs', async () => fixture(async (_, src, dst) => {
+  await writeFile(path.join(src, 'Ready.zip'), 'ready');
+  await writeFile(path.join(src, 'Unmapped.zip'), 'unknown');
+  const lib = library([entry(src, 'Ready.zip'), entry(src, 'Unmapped.zip', 'Needs identification')]);
+  const plan = await previewExport(lib, options(dst), path.join(src, 'artwork'));
+  assert.equal(plan.files.filter(f => f.kind === 'rom').length, 1);
+  assert.ok(plan.warnings.some(w => w.includes('Unmapped system')));
+  assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 2});
+  const xml = await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8');
+  assert.match(xml, /Ready.zip/);
+  assert.doesNotMatch(xml, /Unmapped.zip/);
+  await assert.rejects(readFile(path.join(dst, 'roms', 'nes', 'Unmapped.zip')));
+  assert.equal(await readFile(path.join(src, 'Unmapped.zip'), 'utf8'), 'unknown');
+}));
+
+test('skipped duplicate names are excluded from gamelist', async () => fixture(async (root, src, dst) => {
+  const other = path.join(root, 'other');
+  await mkdir(other);
+  await writeFile(path.join(src, 'Same.zip'), 'first');
+  await writeFile(path.join(other, 'Same.zip'), 'second');
+  const lib = library([entry(src, 'Same.zip'), entry(other, 'Same.zip')]);
+  const plan = await previewExport(lib, options(dst), path.join(root, 'artwork'));
+  assert.ok(plan.warnings.some(w => w.includes('Filename collision')));
+  await executeExport(lib, options(dst), path.join(root, 'artwork'), plan.fingerprint);
+  const xml = await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8');
+  assert.equal((xml.match(/<game>/g) ?? []).length, 1);
+}));
+
+test('when all systems are unmapped there is nothing to export', async () => fixture(async (_, src, dst) => {
+  await writeFile(path.join(src, 'Unmapped.zip'), 'data');
+  const lib = library([entry(src, 'Unmapped.zip', 'Needs identification')]);
+  const plan = await previewExport(lib, options(dst), path.join(src, 'artwork'));
+  assert.equal(plan.files.length, 0);
+  await assert.rejects(executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), /No exportable ROMs/);
+}));

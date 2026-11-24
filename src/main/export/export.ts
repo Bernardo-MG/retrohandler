@@ -128,21 +128,38 @@ export async function previewExport(library: ExportLibrary, options: ExportOptio
 export async function executeExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string, approvedFingerprint: string): Promise<{ copied: number }> {
   const plan = await previewExport(library, options, artworkFolder);
   if (plan.fingerprint !== approvedFingerprint) throw new Error('Export preview changed; preview again.');
-  if (plan.warnings.length || plan.conflicts.length || !plan.files.length) throw new Error('Resolve preview warnings and conflicts before export.');
+  if (plan.conflicts.length) throw new Error('Resolve destination conflicts before export.');
+  if (!plan.files.some(file => file.kind === 'rom')) throw new Error('No exportable ROMs in preview.');
   // Never write into an existing symlinked destination directory.
   await mkdir(plan.destination, { recursive: true });
   const canonical = await realpath(plan.destination);
   if (path.normalize(canonical).toLowerCase() !== path.normalize(plan.destination).toLowerCase()) throw new Error('Export destination uses a redirected directory.');
+  // Build gamelists only from ROMs approved by the preview. Excluded entries
+  // (unmapped systems, unsafe paths, duplicate filenames, unsupported archives)
+  // must never appear as dangling paths in gamelist.xml.
+  const approvedRoms = new Map(plan.files.filter(file => file.kind === 'rom')
+    .map(file => [file.relativeDestination.toLowerCase(), file.source]));
+  const approvedArtwork = new Set(plan.files.filter(file => file.kind === 'artwork')
+    .map(file => file.relativeDestination.toLowerCase()));
   const entries = await collect(library, options.source);
   const gameGroups = new Map<string, Array<{ entry: LibraryEntry; filename: string; image: string | null }>>();
   for (const entry of entries) {
-    const system = options.overrides[entry.system] || knownSystem(entry.system);
+    const system = Object.prototype.hasOwnProperty.call(options.overrides, entry.system)
+      ? options.overrides[entry.system] : knownSystem(entry.system);
     if (!system || !validSystem(system)) continue;
     const filename = filenameOf(entry.relativePath);
+    const destination = `roms/${system}/${filename}`;
+    const key = destination.toLowerCase();
+    if (approvedRoms.get(key) !== path.resolve(entry.source, entry.relativePath)) continue;
+    approvedRoms.delete(key); // Only one game entry per approved destination.
+    const artworkId = entry.metadata?.artworkId;
+    const image = options.includeArtwork && isArtworkId(artworkId) &&
+      approvedArtwork.has(`roms/${system}/images/${artworkId}`.toLowerCase()) ? artworkId : null;
     const group = gameGroups.get(system) ?? [];
-    group.push({entry, filename, image: options.includeArtwork && isArtworkId(entry.metadata?.artworkId) ? entry.metadata!.artworkId : null });
+    group.push({ entry, filename, image });
     gameGroups.set(system, group);
   }
+  if (approvedRoms.size) throw new Error('Library changed during export; preview again.');
   let copied = 0;
   for (const item of plan.files) {
     const target = path.join(plan.destination, ...item.relativeDestination.split('/'));
