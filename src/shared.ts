@@ -16,7 +16,27 @@ export type ScanResult = {
 export interface ScanWarning { relativePath: string; message: string; }
 export interface ScanProgress { filesVisited: number; gamesFound: number; directoriesVisited: number; ignored: number; warnings: number; currentPath: string; }
 export interface ScanUpdate { jobId: string; progress: ScanProgress; }
+export type IdentificationStatus = 'pending' | 'verified' | 'probable' | 'ambiguous' | 'unknown' | 'unsupported' | 'error';
+export interface IdentificationProgress {
+  processed: number; total: number; verified: number; probable: number;
+  ambiguous: number; unknown: number; unsupported: number; errors: number; currentPath: string;
+}
+export interface IdentificationUpdate { jobId: string; progress: IdentificationProgress; }
+export interface IdentificationResult {
+  source: string; relativePath: string; status: IdentificationStatus;
+  title: string | null; datName: string | null;
+  fingerprint: { crc32: string; md5: string; sha1: string; size: number; modifiedMs: number } | null;
+}
+export interface DatImportReceipt { name: string; count: number; }
+export interface IdentificationReceipt {
+  processed: number; verified: number; probable: number; ambiguous: number;
+  unknown: number; unsupported: number; errors: number;
+}
 export interface DesktopApi {
+  importDat(): Promise<DatImportReceipt | null>;
+  identifyCollection(source: string, jobId: string): Promise<IdentificationReceipt>;
+  cancelIdentification(jobId: string): Promise<boolean>;
+  onIdentificationProgress(listener: (update: IdentificationUpdate) => void): () => void;
   chooseRomFolder(): Promise<string | null>;
   loadSavedLibrary(): Promise<ScanResult | null>;
   scanFolder(folder: string, jobId?: string): Promise<ScanResult>;
@@ -66,6 +86,7 @@ export interface CollectionInfo {
 }
 export type LibrarySort = 'name' | 'system' | 'bytes';
 export interface LibraryQuery {
+  identification?: IdentificationStatus | null;
   source: string | null;
   search: string;
   system: string | null;
@@ -74,7 +95,7 @@ export interface LibraryQuery {
   offset: number;
   limit: number;
 }
-export interface LibraryEntry extends Rom { source: string; }
+export interface LibraryEntry extends Rom { source: string; identificationStatus?: IdentificationStatus; identifiedTitle?: string | null; datName?: string | null; }
 export interface LibraryPage { items: LibraryEntry[]; total: number; }
 export interface SystemCount { system: string; count: number; }
 export interface ScanReceipt { source: string; gameCount: number; warningCount: number; }

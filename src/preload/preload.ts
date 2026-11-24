@@ -1,6 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopApi, ScanUpdate } from '../shared';
+import type { DesktopApi, IdentificationUpdate, ScanUpdate } from '../shared';
 const api: DesktopApi = {
+  importDat: () => ipcRenderer.invoke('dat:import'),
+  identifyCollection: (source, jobId) => ipcRenderer.invoke('identity:run', source, jobId),
+  cancelIdentification: jobId => ipcRenderer.invoke('identity:cancel', jobId),
+  onIdentificationProgress: listener => {
+    const handler = (_event: Electron.IpcRendererEvent, update: IdentificationUpdate) => listener(update);
+    ipcRenderer.on('identity:progress', handler);
+    return () => ipcRenderer.removeListener('identity:progress', handler);
+  },
   chooseRomFolder: () => ipcRenderer.invoke('roms:choose-folder'),
   loadSavedLibrary: () => ipcRenderer.invoke('roms:load-saved'),
   scanFolder: (folder, jobId) => ipcRenderer.invoke('roms:scan', folder, jobId),

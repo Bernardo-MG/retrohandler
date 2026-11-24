@@ -1,6 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { CollectionInfo, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
+import type { CollectionInfo, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
+import type { DatEntry, ParsedDat } from '../identification/dat';
+import type { RomHashes, } from '../identification/hashes';
 
 /** The native module is loaded in Electron's main process, never in the renderer.
  * Kept behind a small structural interface to avoid leaking SQLite into services. */
@@ -28,6 +30,11 @@ export interface LibraryStore {
   listSystems?(source: string | null): SystemCount[];
   renameCollection?(source: string, label: string): void;
   removeCollection?(source: string): void;
+  importDat?(dat: ParsedDat): { name: string; count: number };
+  entriesForIdentification?(source: string): LibraryEntry[];
+  cachedFingerprint?(source: string, relativePath: string, size: number, modifiedMs: number): RomHashes | null;
+  matchFingerprint?(hashes: RomHashes): { status: IdentificationStatus; title: string | null; datName: string | null };
+  saveIdentification?(source: string, results: IdentificationResult[]): void;
 }
 
 /** The database is deliberately stored outside the ROM collection. */
@@ -73,8 +80,34 @@ export class SqliteLibraryStore implements LibraryStore {
         this.db.exec('UPDATE schema_version SET version = 2');
       });
       migrate();
-    } else if (version.version !== 2) {
+    } else if (version.version !== 2 && version.version !== 3) {
       throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
+    }
+    const current = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number };
+    if (current.version === 2) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE dat_sets(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+          CREATE TABLE dat_entries(
+            dat_id INTEGER NOT NULL REFERENCES dat_sets(id) ON DELETE CASCADE,
+            game TEXT NOT NULL, filename TEXT NOT NULL, bytes INTEGER NOT NULL,
+            crc32 TEXT, md5 TEXT, sha1 TEXT
+          );
+          CREATE INDEX dat_entries_sha1 ON dat_entries(sha1, bytes);
+          CREATE INDEX dat_entries_md5 ON dat_entries(md5, bytes);
+          CREATE INDEX dat_entries_crc ON dat_entries(crc32, bytes);
+          CREATE TABLE rom_identifications(
+            source_root TEXT NOT NULL, relative_path TEXT NOT NULL,
+            status TEXT NOT NULL, title TEXT, dat_name TEXT,
+            bytes INTEGER, modified_ms REAL, crc32 TEXT, md5 TEXT, sha1 TEXT,
+            PRIMARY KEY(source_root, relative_path),
+            FOREIGN KEY(source_root, relative_path)
+              REFERENCES rom_files(source_root, relative_path) ON DELETE CASCADE
+          );
+          UPDATE schema_version SET version = 3;
+        `);
+      });
+      migrate();
     }
   }
 
@@ -165,19 +198,27 @@ export class SqliteLibraryStore implements LibraryStore {
       const pattern = `%${query.search.trim().replace(/[!%_]/g, char => `!${char}`)}%`;
       params.push(pattern, pattern);
     }
+    if (query.identification) {
+      if (!['pending','verified','probable','ambiguous','unknown','unsupported','error'].includes(query.identification)) throw new Error('Invalid identification filter.');
+      clauses.push(query.identification === 'pending' ? 'NOT EXISTS (SELECT 1 FROM rom_identifications x WHERE x.source_root=r.source_root AND x.relative_path=r.relative_path)' : 'EXISTS (SELECT 1 FROM rom_identifications x WHERE x.source_root=r.source_root AND x.relative_path=r.relative_path AND x.status=?)');
+      if (query.identification !== 'pending') params.push(query.identification);
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const count = this.db.prepare(`SELECT COUNT(*) AS total FROM rom_files r ${where}`).get(...params) as { total: number };
     const rows = this.db.prepare(`
       SELECT r.source_root AS source, r.id, r.name, r.system,
-        r.relative_path AS relativePath, r.extension, r.bytes
-      FROM rom_files r ${where}
+        r.relative_path AS relativePath, r.extension, r.bytes,
+        i.status AS identificationStatus, i.title AS identifiedTitle, i.dat_name AS datName
+      FROM rom_files r LEFT JOIN rom_identifications i
+        ON i.source_root=r.source_root AND i.relative_path=r.relative_path ${where}
       ORDER BY ${order} ${query.descending ? 'DESC' : 'ASC'}, r.source_root ASC, r.relative_path ASC
       LIMIT ? OFFSET ?
     `).all(...params, query.limit, query.offset) as Array<{
       source: string; id: string; name: string; system: string;
       relativePath: string; extension: string; bytes: number;
+      identificationStatus: IdentificationStatus | null; identifiedTitle: string | null; datName: string | null;
     }>;
-    return { items: rows, total: count.total };
+    return { items: rows.map(row => ({ ...row, identificationStatus: row.identificationStatus ?? 'pending' })), total: count.total };
   }
 
   listSystems(source: string | null): SystemCount[] {
@@ -198,6 +239,67 @@ export class SqliteLibraryStore implements LibraryStore {
   removeCollection(source: string): void {
     const result = this.db.prepare('DELETE FROM collections WHERE root_path=?').run(source);
     if (!result.changes) throw new Error('Collection not found.');
+  }
+
+  importDat(dat: ParsedDat): { name: string; count: number } {
+    const replace = this.db.transaction(() => {
+      // Reimport of a DAT with the same header replaces its entries atomically.
+      this.db.prepare('INSERT INTO dat_sets(name) VALUES (?) ON CONFLICT(name) DO NOTHING').run(dat.name);
+      const id = (this.db.prepare('SELECT id FROM dat_sets WHERE name=?').get(dat.name) as { id: number }).id;
+      this.db.prepare('DELETE FROM dat_entries WHERE dat_id=?').run(id);
+      const insert = this.db.prepare('INSERT INTO dat_entries(dat_id, game, filename, bytes, crc32, md5, sha1) VALUES(?, ?, ?, ?, ?, ?, ?)');
+      for (const row of dat.entries) insert.run(id, row.game, row.file, row.size, row.crc32, row.md5, row.sha1);
+    });
+    replace();
+    return { name: dat.name, count: dat.entries.length };
+  }
+
+  entriesForIdentification(source: string): LibraryEntry[] {
+    return this.db.prepare(`SELECT source_root AS source, relative_path AS relativePath,
+      id, name, system, extension, bytes FROM rom_files WHERE source_root=?
+      ORDER BY relative_path ASC`).all(source) as LibraryEntry[];
+  }
+
+  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): RomHashes | null {
+    const row = this.db.prepare(`SELECT bytes, modified_ms AS modifiedMs, crc32, md5, sha1
+      FROM rom_identifications WHERE source_root=? AND relative_path=?
+      AND bytes=? AND modified_ms=? AND sha1 IS NOT NULL`).get(source, relativePath, size, modifiedMs) as
+      { bytes: number; modifiedMs: number; crc32: string; md5: string; sha1: string } | undefined;
+    return row ? { size: row.bytes, modifiedMs: row.modifiedMs, crc32: row.crc32, md5: row.md5, sha1: row.sha1 } : null;
+  }
+
+  matchFingerprint(hashes: RomHashes): { status: IdentificationStatus; title: string | null; datName: string | null } {
+    // SHA1 and MD5 are strong match evidence. CRC32 is weaker and always "probable".
+    const candidates = this.db.prepare(`
+      SELECT d.game, s.name AS datName,
+        CASE WHEN d.sha1=? THEN 'sha1' WHEN d.md5=? THEN 'md5' ELSE 'crc' END AS evidence
+      FROM dat_entries d JOIN dat_sets s ON s.id=d.dat_id
+      WHERE d.bytes=? AND (d.sha1=? OR d.md5=? OR d.crc32=?)
+    `).all(hashes.sha1, hashes.md5, hashes.size, hashes.sha1, hashes.md5, hashes.crc32) as
+      Array<{game: string; datName: string; evidence: string}>;
+    if (!candidates.length) return { status: 'unknown', title: null, datName: null };
+    const best = candidates.filter(row => row.evidence === 'sha1');
+    const matches = best.length ? best : candidates.filter(row => row.evidence === 'md5');
+    const selected = matches.length ? matches : candidates;
+    if (new Set(selected.map(row => row.game)).size > 1) return { status: 'ambiguous', title: null, datName: null };
+    return { status: selected[0].evidence === 'crc' ? 'probable' : 'verified', title: selected[0].game, datName: selected[0].datName };
+  }
+
+  saveIdentification(source: string, results: IdentificationResult[]): void {
+    const save = this.db.prepare(`INSERT INTO rom_identifications(
+      source_root, relative_path, status, title, dat_name, bytes, modified_ms, crc32, md5, sha1)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_root, relative_path) DO UPDATE SET status=excluded.status,
+      title=excluded.title, dat_name=excluded.dat_name, bytes=excluded.bytes,
+      modified_ms=excluded.modified_ms, crc32=excluded.crc32, md5=excluded.md5, sha1=excluded.sha1`);
+    const commit = this.db.transaction(() => {
+      for (const row of results) {
+        const f = row.fingerprint;
+        save.run(source, row.relativePath, row.status, row.title, row.datName,
+          f?.size ?? null, f?.modifiedMs ?? null, f?.crc32 ?? null, f?.md5 ?? null, f?.sha1 ?? null);
+      }
+    });
+    commit();
   }
 
   close(): void { this.db.close(); }

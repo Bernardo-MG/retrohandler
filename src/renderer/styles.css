@@ -22,3 +22,12 @@
 .sort-desc{display:flex;align-items:center;gap:5px;color:#aab9d4;font-size:12px}
 .dismiss-error{margin-left:auto}
 .filters{flex-wrap:wrap}
+
+/* Patch 005 identification controls and status */
+.identity-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.identity-message { border:1px solid #315d4a; background:#172e28; color:#c5f6df; padding:12px; border-radius:9px; margin:10px 0; }
+.identified-title { display:block; margin-top:4px; color:#a7b6cf; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.identity-verified { color:#86efac; } .identity-probable { color:#fcd34d; }
+.identity-ambiguous, .identity-error { color:#fca5a5; }
+.identity-filter { display:flex; gap:6px; align-items:center; font-size:12px; color:#a9b9cf; }
+.identity-filter select { background:#151f31; color:#d8e3f1; border:1px solid #39485e; border-radius:6px; padding:7px; }

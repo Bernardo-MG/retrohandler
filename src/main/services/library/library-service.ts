@@ -1,6 +1,8 @@
-import type { CollectionInfo, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
+import type { CollectionInfo, IdentificationProgress, IdentificationReceipt, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
 import { scanRoms } from '../../scanner';
 import type { LibraryStore } from '../../database/library-store';
+import { readDat } from '../../identification/dat';
+import { identifyCollection } from '../../identification/identify';
 
 export interface LibraryService {
   scanFolder(folder: string, options?: { signal?: AbortSignal; onProgress?: (progress: ScanProgress) => void }): Promise<ScanResult>;
@@ -10,6 +12,8 @@ export interface LibraryService {
   listSystems(source: string | null): Promise<SystemCount[]>;
   renameCollection(source: string, label: string): Promise<void>;
   removeCollection(source: string): Promise<void>;
+  importDat(filePath: string): Promise<{ name: string; count: number }>;
+  identifyCollection(source: string, options?: { signal?: AbortSignal; onProgress?: (progress: IdentificationProgress) => void }): Promise<IdentificationReceipt>;
 }
 
 /** A cancelled or failed scan never changes the persisted library. */
@@ -43,6 +47,23 @@ export class FileSystemLibraryService implements LibraryService {
   async removeCollection(source: string): Promise<void> {
     if (!this.store?.removeCollection) throw new Error('Collection storage unavailable.');
     this.store.removeCollection(source);
+  }
+
+  async importDat(filePath: string): Promise<{ name: string; count: number }> {
+    if (!this.store?.importDat) throw new Error('DAT storage unavailable.');
+    return this.store.importDat(await readDat(filePath));
+  }
+  async identifyCollection(source: string, options?: { signal?: AbortSignal; onProgress?: (progress: IdentificationProgress) => void }): Promise<IdentificationReceipt> {
+    if (!this.store?.entriesForIdentification || !this.store?.cachedFingerprint || !this.store?.matchFingerprint || !this.store?.saveIdentification) {
+      throw new Error('Identification storage unavailable.');
+    }
+    // Retain store method `this` bindings by forwarding calls.
+    return identifyCollection(source, {
+      entriesForIdentification: root => this.store!.entriesForIdentification!(root),
+      cachedFingerprint: (root, name, size, modified) => this.store!.cachedFingerprint!(root, name, size, modified),
+      matchFingerprint: hashes => this.store!.matchFingerprint!(hashes),
+      saveIdentification: (root, results) => this.store!.saveIdentification!(root, results)
+    }, options);
   }
 
   async loadLastScan(): Promise<ScanResult | null> {

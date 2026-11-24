@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FolderOpen, Gamepad2, HardDrive, Library, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { CollectionInfo, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
+import type { CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
 import { CollectionPanel } from './components/CollectionPanel';
 import { LibraryFilters } from './components/LibraryFilters';
 import { LibraryTable } from './components/LibraryTable';
@@ -19,10 +19,15 @@ function App() {
   const [search, setSearch] = useState('');
   const [system, setSystem] = useState<string | null>(null);
   const [sort, setSort] = useState<LibrarySort>('name');
+  const [identityFilter, setIdentityFilter] = useState<IdentificationStatus | null>(null);
   const [descending, setDescending] = useState(false);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
+  const [identProgress, setIdentProgress] = useState<IdentificationProgress | null>(null);
+  const identityJob = useRef<string | null>(null);
+  const [identityMessage, setIdentityMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState<ScanProgress | null>(null);
@@ -43,6 +48,10 @@ function App() {
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => window.retrohandler.onIdentificationProgress(update => {
+    if (update.jobId === identityJob.current) setIdentProgress(update.progress);
+  }), []);
 
   useEffect(() => window.retrohandler.onScanProgress(update => {
     if (update.jobId === activeJob.current) setProgress(update.progress);
@@ -66,15 +75,15 @@ function App() {
   useEffect(() => {
     const id = ++requestId.current;
     setLoading(true);
-    const query: LibraryQuery = { source: selected, search: debouncedSearch, system, sort, descending, offset, limit: PAGE_SIZE };
+    const query: LibraryQuery = { identification: identityFilter, source: selected, search: debouncedSearch, system, sort, descending, offset, limit: PAGE_SIZE };
     void window.retrohandler.queryLibrary(query).then(result => {
       if (id === requestId.current) setPage(result);
     }).catch(reason => { if (id === requestId.current) setError(String(reason)); })
       .finally(() => { if (id === requestId.current) setLoading(false); });
-  }, [selected, debouncedSearch, system, sort, descending, offset, revision]);
+  }, [selected, debouncedSearch, system, sort, descending, offset, identityFilter, revision]);
 
   const selectCollection = (source: string | null) => {
-    setSelected(source); setOffset(0); setSystem(null); setSearch('');
+    setSelected(source); setOffset(0); setSystem(null); setSearch(''); setIdentityFilter(null);
   };
   const filterSystem = (value: string | null) => { setSystem(value); setOffset(0); };
   const filterSearch = (value: string) => { setSearch(value); setOffset(0); };
@@ -112,6 +121,30 @@ function App() {
   function cancel() {
     if (activeJob.current) void window.retrohandler.cancelScan(activeJob.current);
   }
+  async function importDat() {
+    setError('');
+    try {
+      const receipt = await window.retrohandler.importDat();
+      if (receipt) setIdentityMessage(`Imported ${receipt.count.toLocaleString()} DAT entries from ${receipt.name}. Run Identify to update matches.`);
+    } catch (reason) { setError(`DAT import failed: ${String(reason)}`); }
+  }
+  async function identify() {
+    if (!selected) return;
+    setError(''); setIdentifying(true); setIdentProgress(null); setIdentityMessage('');
+    const jobId = `identify_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    identityJob.current = jobId;
+    try {
+      const result = await window.retrohandler.identifyCollection(selected, jobId);
+      setIdentityMessage(`Identified ${result.verified} verified, ${result.probable} probable, ${result.ambiguous} ambiguous, ${result.unknown} unknown, ${result.unsupported} unsupported, ${result.errors} errors.`);
+      setRevision(value => value + 1);
+    } catch (reason) {
+      if (!String(reason).toLowerCase().includes('cancelled')) setError(`Identification failed: ${String(reason)}`);
+    } finally { identityJob.current = null; setIdentifying(false); setIdentProgress(null); }
+  }
+  function cancelIdentity() {
+    if (identityJob.current) void window.retrohandler.cancelIdentification(identityJob.current);
+  }
+
   const totalGames = collections.reduce((n, c) => n + c.gameCount, 0);
   const selectedInfo = collections.find(c => c.rootPath === selected);
   const platformTotal = useMemo(() => systems.length, [systems]);
@@ -131,9 +164,15 @@ function App() {
     </aside>
     <main>
       <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div>
-        <button className="primary" onClick={scan} disabled={busy}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button>
+        <div className="identity-actions">
+          <button className="secondary" disabled={busy || identifying} onClick={() => void importDat()}>Import DAT XML</button>
+          <button className="secondary" disabled={busy || identifying || !selected} onClick={() => void identify()}>Identify collection</button>
+        </div>
+        <button className="primary" onClick={scan} disabled={busy || identifying}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button>
       </header>
       {busy && <ScanStatus progress={progress} cancel={cancel}/>}
+      {identifying && <section className="scan-status" role="status"><div><strong>Identifying ROMs…</strong><p>{identProgress ? `${identProgress.processed}/${identProgress.total} checked · ${identProgress.verified} verified · ${identProgress.unknown} unknown` : 'Starting identification…'}</p><small>{identProgress?.currentPath}</small></div><button className="secondary" onClick={cancelIdentity}>Cancel identification</button></section>}
+      {identityMessage && <div className="identity-message" role="status">{identityMessage}</div>}
       {error && <div className="error" role="alert"><AlertCircle size={18}/>{error}<button className="dismiss-error" onClick={() => setError('')}>Dismiss</button></div>}
       <section className="stats">
         <div className="stat"><div className="stat-icon"><Gamepad2/></div><div><span>Games in selection</span><strong>{selectedCount.toLocaleString()}</strong></div></div>
@@ -143,6 +182,9 @@ function App() {
       {selectedInfo && <div className="source"><FolderOpen size={16}/><span title={selectedInfo.rootPath}>{selectedInfo.rootPath}</span><em>Scanned {new Date(selectedInfo.scannedAt).toLocaleString()}</em></div>}
       {collections.length ? <section className="library">
         <div className="library-header"><h2>{selectedInfo?.label ?? 'All collections'} <span>{page.total.toLocaleString()}</span></h2>
+          <label className="identity-filter">Identification <select aria-label="Identification status" value={identityFilter ?? ''} onChange={e => { setIdentityFilter((e.target.value || null) as IdentificationStatus | null); setOffset(0); }}>
+            <option value="">All statuses</option>{['pending','verified','probable','ambiguous','unknown','unsupported','error'].map(status => <option key={status} value={status}>{status}</option>)}
+          </select></label>
           <LibraryFilters search={search} setSearch={filterSearch} system={system} setSystem={filterSystem} systems={systems} sort={sort} setSort={filterSort} descending={descending} setDescending={filterDescending}/>
         </div>
         <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset}/>

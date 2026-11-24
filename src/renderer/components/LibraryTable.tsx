@@ -13,12 +13,12 @@ interface Props { page: LibraryPage; offset: number; limit: number; loading: boo
 export function LibraryTable({ page, offset, limit, loading, changeOffset }: Props) {
   const end = Math.min(offset + limit, page.total);
   return <>
-    <div className="table-wrap"><table><thead><tr><th>GAME</th><th>SYSTEM</th><th>TYPE</th><th>SIZE</th></tr></thead>
+    <div className="table-wrap"><table><thead><tr><th>GAME</th><th>SYSTEM</th><th>TYPE</th><th>SIZE</th><th>IDENTIFICATION</th></tr></thead>
       <tbody>{page.items.map(game => <tr key={`${game.source}\0${game.relativePath}`}>
         <td><div className="game-name"><span className="game-icon"><Gamepad2 size={16}/></span><div>
           <strong>{game.name || 'Untitled'}</strong>
           <small title={`${game.source}/${game.relativePath}`}>{game.relativePath}</small>
-        </div></div></td><td>{game.system}</td><td><span className="pill">{game.extension}</span></td><td>{formatBytes(game.bytes)}</td>
+        </div></div></td><td>{game.system}</td><td><span className="pill">{game.extension}</span></td><td>{formatBytes(game.bytes)}</td><td><span className={`pill identity-${game.identificationStatus ?? 'pending'}`} title={game.datName ?? undefined}>{game.identificationStatus ?? 'pending'}</span>{game.identifiedTitle && <small className="identified-title">{game.identifiedTitle}</small>}</td>
       </tr>)}</tbody></table>
       {page.total === 0 && <p className="empty-small">No matching games.</p>}
     </div>
