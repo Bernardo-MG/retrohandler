@@ -15,27 +15,6 @@ export function artworkPath(root: string, id: string): string {
   if (!isArtworkId(id)) throw new Error('Invalid artwork ID.');
   return path.join(root, id);
 }
-export async function downloadArtwork(urlString: string, folder: string): Promise<string> {
-  const url = new URL(urlString);
-  // Only RAWG's image CDN is permitted; no redirects or arbitrary network addresses.
-  if (url.protocol !== 'https:' || url.hostname !== 'media.rawg.io' || url.port || url.username || url.password) {
-    throw new Error('Untrusted artwork URL.');
-  }
-  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) });
-  if (!response.ok || !response.body) throw new Error(`Artwork fetch failed (HTTP ${response.status}).`);
-  if (Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit.');
-  const chunks: Buffer[] = [];
-  let count = 0;
-  for await (const chunk of response.body) {
-    const buffer = Buffer.from(chunk);
-    count += buffer.length;
-    if (count > MAX_IMAGE_BYTES) { await response.body.cancel().catch(() => {}); throw new Error('Artwork exceeds size limit.'); }
-    chunks.push(buffer);
-  }
-  const bytes = Buffer.concat(chunks);
-  return cacheArtworkBytes(bytes, folder);
-}
-
 /** Cache only verified image bytes in the same content-addressed artwork store. */
 export async function cacheArtworkBytes(bytes: Buffer, folder: string): Promise<string> {
   if (bytes.length > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit.');

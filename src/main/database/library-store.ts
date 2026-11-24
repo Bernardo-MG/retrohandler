@@ -93,7 +93,7 @@ export class SqliteLibraryStore implements LibraryStore {
         this.db.exec('UPDATE schema_version SET version = 2');
       });
       migrate();
-    } else if (version.version !== 2 && version.version !== 3 && version.version !== 4 && version.version !== 5) {
+    } else if (version.version !== 2 && version.version !== 3 && version.version !== 4 && version.version !== 5 && version.version !== 6) {
       throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
     }
     const current = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number };
@@ -146,6 +146,16 @@ export class SqliteLibraryStore implements LibraryStore {
       const migrate = this.db.transaction(() => {
         this.db.exec('ALTER TABLE rom_metadata ADD COLUMN system_override TEXT');
         this.db.exec('UPDATE schema_version SET version = 5');
+      });
+      migrate();
+    }
+    // Retire unsupported metadata providers without discarding user-entered details or artwork.
+    const providerSchema = (this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number }).version;
+    if (providerSchema === 5) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec(`UPDATE rom_metadata SET provider='manual', provider_id=NULL, provider_slug=NULL
+          WHERE provider NOT IN ('manual', 'launchbox');
+          UPDATE schema_version SET version = 6;`);
       });
       migrate();
     }
@@ -267,7 +277,7 @@ export class SqliteLibraryStore implements LibraryStore {
       identificationStatus: IdentificationStatus | null; identifiedTitle: string | null; datName: string | null;
       metadataTitle: string | null; metadataDescription: string | null; metadataReleased: string | null;
       metadataDeveloper: string | null; metadataPublisher: string | null; metadataGenre: string | null;
-      metadataProvider: 'manual' | 'rawg' | 'launchbox' | null; metadataProviderId: string | null;
+      metadataProvider: 'manual' | 'launchbox' | null; metadataProviderId: string | null;
       metadataProviderSlug: string | null; metadataArtworkId: string | null; metadataSystemOverride: string | null;
     }>;
     return { items: rows.map(row => ({
@@ -510,7 +520,7 @@ export class SqliteLibraryStore implements LibraryStore {
   saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
     if (!metadata.title.trim() || metadata.title.length > 200 || metadata.description.length > 4000 ||
         [metadata.released, metadata.developer, metadata.publisher, metadata.genre].some(value => value.length > 200) ||
-        !['manual', 'rawg', 'launchbox'].includes(metadata.provider) ||
+        !['manual', 'launchbox'].includes(metadata.provider) ||
         (metadata.providerId !== null && metadata.providerId.length > 80) ||
         (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
         (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId)) ||

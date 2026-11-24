@@ -5,8 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
-import { artworkPath, downloadArtwork, getArtwork, isArtworkId } from '../src/main/metadata/artwork';
-import { rawgProvider } from '../src/main/metadata/rawg';
+import { artworkPath, cacheArtworkBytes, getArtwork, isArtworkId } from '../src/main/metadata/artwork';
 import type { GameMetadataInput, LibraryQuery } from '../src/shared';
 
 function adapter(file: string): DatabaseHandle {
@@ -62,45 +61,44 @@ test('manual metadata validates bad input and artwork names', async () => {
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('RAWG optional provider maps search and detail without live network', async () => {
-  const original = globalThis.fetch;
-  const urls: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    const url = new URL(String(input)); urls.push(url.pathname);
-    const payload = url.pathname.endsWith('/42') ? {
-      name: 'Sample', slug: 'sample', released: '1991-01-01', description_raw: 'Description',
-      developers: [{ name: 'Dev' }], publishers: [{ name: 'Pub' }], genres: [{ name: 'Arcade' }], background_image: null
-    } : { results: [{ id: 42, name: 'Sample', released: '1991-01-01', slug: 'sample' }] };
-    return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
-  }) as typeof fetch;
+test('artwork cache accepts verified images and preserves them for later reuse', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-artwork-'));
   try {
-    const candidates = await rawgProvider.search('Sample', 'sample-key-123456');
-    assert.equal(candidates[0].id, 42);
-    const details = await rawgProvider.detail(42, 'sample-key-123456');
-    assert.equal(details.metadata.developer, 'Dev');
-    assert.equal(details.metadata.provider, 'rawg');
-    assert.deepEqual(urls, ['/api/games', '/api/games/42']);
-    await assert.rejects(rawgProvider.search('Sample', 'bad'), /API key/);
-  } finally { globalThis.fetch = original; }
+    const id = await cacheArtworkBytes(Buffer.from([0xff,0xd8,0xff,0x00,0x01]),root);
+    assert.match(id, /^[a-f0-9]{64}\.jpg$/);
+    assert.equal((await getArtwork(root,id)).mime,'image/jpeg');
+    await assert.rejects(cacheArtworkBytes(Buffer.from('bad'),root), /supported image/);
+  } finally { await rm(root,{recursive:true,force:true}); }
 });
 
-test('artwork cache accepts bounded image data and rejects untrusted hosts', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-artwork-'));
-  const original = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = (async () => {
-    calls++;
-    return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0x00, 0x01]), { status: 200, headers: { 'Content-Type': 'image/jpeg' } });
-  }) as typeof fetch;
+test('v5 to v6 retires unsupported provider references without losing metadata or artwork', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-provider-migration-'));
+  const file = path.join(dir,'library.sqlite');
   try {
-    await assert.rejects(downloadArtwork('https://example.com/cover.jpg', root), /Untrusted/);
-    assert.equal(calls, 0);
-    const id = await downloadArtwork('https://media.rawg.io/media/example.jpg', root);
-    assert.match(id, /^[a-f0-9]{64}\.jpg$/);
-    const image = await getArtwork(root, id);
-    assert.equal(image.mime, 'image/jpeg');
-    assert.equal(image.body.length, 5);
-  } finally { globalThis.fetch = original; await rm(root, { recursive: true, force: true }); }
+    const initial = new SqliteLibraryStore(file,adapter);
+    initial.saveScan(scan(['old','launch']));
+    initial.saveMetadata(source,'old.nes',{...input,artworkId:`${'a'.repeat(64)}.png`,systemOverride:'Super Nintendo'});
+    initial.saveMetadata(source,'launch.nes',{...input,provider:'launchbox',providerId:'42'});
+    initial.close();
+    const old = new DatabaseSync(file);
+    old.exec(`UPDATE rom_metadata SET provider='retired-provider', provider_id='123', provider_slug='old-link' WHERE relative_path='old.nes';
+      UPDATE schema_version SET version=5;`);
+    old.close();
+    const migrated = new SqliteLibraryStore(file,adapter);
+    const oldGame = migrated.queryLibrary(query).items.find(x => x.relativePath==='old.nes');
+    assert.equal(oldGame?.metadata?.provider,'manual');
+    assert.equal(oldGame?.metadata?.providerId,null);
+    assert.equal(oldGame?.metadata?.providerSlug,null);
+    assert.equal(oldGame?.metadata?.title,input.title);
+    assert.equal(oldGame?.metadata?.systemOverride,'Super Nintendo');
+    assert.equal(oldGame?.metadata?.artworkId,`${'a'.repeat(64)}.png`);
+    assert.equal(migrated.queryLibrary(query).items.find(x => x.relativePath==='launch.nes')?.metadata?.provider,'launchbox');
+    assert.throws(() => migrated.saveMetadata(source,'old.nes',{...input,provider:'retired-provider' as 'manual'}),/Invalid/);
+    migrated.close();
+    const raw = new DatabaseSync(file);
+    assert.equal((raw.prepare('SELECT version FROM schema_version').get() as {version:number}).version,6);
+    raw.close();
+  } finally { await rm(dir,{recursive:true,force:true}); }
 });
 
 test('v4 to v5 migration preserves metadata and manual system across rescans and reopen', async () => {
@@ -137,7 +135,7 @@ test('v4 to v5 migration preserves metadata and manual system across rescans and
     store.saveScan(scan(['one', 'two']));
     assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'Super Nintendo');
     // Online metadata imports that omit systemOverride must not erase the manual assignment.
-    store.saveMetadata(source, 'one.nes', { ...input, title: 'Online updated', provider: 'rawg' });
+    store.saveMetadata(source, 'one.nes', { ...input, title: 'Online updated', provider: 'launchbox' });
     assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'Super Nintendo');
     store.close();
     const reopened = new SqliteLibraryStore(file, adapter);

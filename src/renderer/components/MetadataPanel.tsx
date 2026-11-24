@@ -86,7 +86,6 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
       <label className="metadata-description">Description<textarea value={form.description} maxLength={4000} rows={4} onChange={event => set('description', event.target.value)}/></label>
     </div>
     <button className="primary" disabled={busy || !form.title.trim()} onClick={() => void save()}>Save manual metadata</button>
-    {form.provider === 'rawg' && form.providerSlug && <p className="metadata-attribution">Metadata and artwork from RAWG. <button onClick={() => void window.retrohandler.metadataOpenSource(form.providerSlug!)}>View game on RAWG</button></p>}
     <div className="metadata-search">
       <h3>Find retro-game metadata</h3>
       <p>LaunchBox uses a local database: download Metadata.zip from the LaunchBox Games Database, extract Metadata.xml, then import it. No API key required. Matches are never applied automatically.</p>

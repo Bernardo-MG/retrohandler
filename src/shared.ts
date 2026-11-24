@@ -36,7 +36,7 @@ export interface IdentificationReceipt {
 export interface GameMetadataInput {
   title: string; description: string; released: string;
   developer: string; publisher: string; genre: string;
-  provider: 'manual' | 'rawg' | 'launchbox'; providerId: string | null;
+  provider: 'manual' | 'launchbox'; providerId: string | null;
   providerSlug: string | null; artworkId: string | null;
   /** Optional manual platform override; null restores scanner detection. */
   systemOverride?: string | null;
@@ -81,10 +81,7 @@ export interface DesktopApi {
   launchBoxSearch(query: string, system: string): Promise<MetadataCandidate[]>;
   launchBoxApply(target: MetadataTarget, id: number): Promise<GameMetadata>;
   findLibretroArtwork(system: string, names: string[]): Promise<string | null>;
-  metadataSearch(query: string, apiKey: string): Promise<MetadataCandidate[]>;
-  metadataApply(target: MetadataTarget, id: number, apiKey: string): Promise<GameMetadata>;
   metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;
-  metadataOpenSource(slug: string): Promise<void>;
   importDat(): Promise<DatImportReceipt | null>;
   identifyCollection(source: string, jobId: string): Promise<IdentificationReceipt>;
   cancelIdentification(jobId: string): Promise<boolean>;
