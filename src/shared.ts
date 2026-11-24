@@ -38,6 +38,8 @@ export interface GameMetadataInput {
   developer: string; publisher: string; genre: string;
   provider: 'manual' | 'rawg'; providerId: string | null;
   providerSlug: string | null; artworkId: string | null;
+  /** Optional manual platform override; null restores scanner detection. */
+  systemOverride?: string | null;
 }
 export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
 export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; }

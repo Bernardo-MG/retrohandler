@@ -102,3 +102,50 @@ test('artwork cache accepts bounded image data and rejects untrusted hosts', asy
     assert.equal(image.body.length, 5);
   } finally { globalThis.fetch = original; await rm(root, { recursive: true, force: true }); }
 });
+
+test('v4 to v5 migration preserves metadata and manual system across rescans and reopen', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-system-'));
+  const file = path.join(dir, 'library.sqlite');
+  try {
+    const initial = new SqliteLibraryStore(file, adapter);
+    initial.saveScan(scan(['one', 'two']));
+    initial.saveMetadata(source, 'one.nes', input);
+    initial.close();
+    // Simulate the old v4 schema with an existing metadata row.
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE rom_metadata_old AS SELECT source_root, relative_path, title, description,
+      released, developer, publisher, genre, provider, provider_id, provider_slug, artwork_id FROM rom_metadata;
+      DROP TABLE rom_metadata;
+      CREATE TABLE rom_metadata (
+        source_root TEXT NOT NULL, relative_path TEXT NOT NULL,
+        title TEXT NOT NULL, description TEXT NOT NULL, released TEXT NOT NULL,
+        developer TEXT NOT NULL, publisher TEXT NOT NULL, genre TEXT NOT NULL,
+        provider TEXT NOT NULL, provider_id TEXT, provider_slug TEXT, artwork_id TEXT,
+        PRIMARY KEY(source_root, relative_path),
+        FOREIGN KEY(source_root, relative_path) REFERENCES rom_files(source_root, relative_path) ON DELETE CASCADE
+      );
+      INSERT INTO rom_metadata SELECT * FROM rom_metadata_old;
+      DROP TABLE rom_metadata_old;
+      UPDATE schema_version SET version=4;`);
+    old.close();
+    const store = new SqliteLibraryStore(file, adapter);
+    assert.equal(store.queryLibrary(query).items[0].metadata?.description, input.description);
+    store.saveMetadata(source, 'one.nes', { ...input, systemOverride: 'Super Nintendo' });
+    assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'Super Nintendo');
+    assert.equal(store.queryLibrary({ ...query, system: 'Super Nintendo' }).total, 1);
+    assert.equal(store.listSystems(source).find(x => x.system === 'Super Nintendo')?.count, 1);
+    store.saveScan(scan(['one', 'two']));
+    assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'Super Nintendo');
+    // Online metadata imports that omit systemOverride must not erase the manual assignment.
+    store.saveMetadata(source, 'one.nes', { ...input, title: 'Online updated', provider: 'rawg' });
+    assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'Super Nintendo');
+    store.close();
+    const reopened = new SqliteLibraryStore(file, adapter);
+    assert.equal(reopened.queryLibrary(query).items.find(x => x.name === 'one')?.metadata?.systemOverride, 'Super Nintendo');
+    reopened.saveMetadata(source, 'one.nes', { ...input, systemOverride: null });
+    assert.equal(reopened.queryLibrary(query).items.find(x => x.name === 'one')?.system, 'NES');
+    assert.equal(reopened.queryLibrary({ ...query, system: 'Super Nintendo' }).total, 0);
+    assert.throws(() => reopened.saveMetadata(source, 'one.nes', { ...input, systemOverride: '    ' }), /Invalid/);
+    reopened.close();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

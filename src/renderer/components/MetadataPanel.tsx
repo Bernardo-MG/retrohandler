@@ -9,6 +9,7 @@ interface Props { entry: LibraryEntry; onClose(): void; onSaved(): void; }
 export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   const [form, setForm] = useState<GameMetadataInput>(entry.metadata ?? empty(entry.identifiedTitle || entry.name));
   const [apiKey, setApiKey] = useState('');
+  const [systemOverride, setSystemOverride] = useState(entry.metadata?.systemOverride ?? '');
   const [query, setQuery] = useState(cleanTitle(entry));
   const [results, setResults] = useState<MetadataCandidate[]>([]);
   const [busy, setBusy] = useState(false);
@@ -18,6 +19,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
 
   useEffect(() => {
     setForm(entry.metadata ?? empty(entry.identifiedTitle || entry.name));
+    setSystemOverride(entry.metadata?.systemOverride ?? '');
     setQuery(cleanTitle(entry)); setResults([]); setError(''); setNotice('');
   }, [entry.source, entry.relativePath]);
   function set(name: keyof Pick<GameMetadataInput,'title'|'description'|'released'|'developer'|'publisher'|'genre'>, value: string) {
@@ -33,7 +35,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     setBusy(true); setError('');
     try {
       const metadata = await window.retrohandler.metadataApply(target, id, apiKey);
-      setForm(metadata); setResults([]); setNotice('Metadata matched and saved.'); onSaved();
+      setForm(metadata); setSystemOverride(metadata.systemOverride ?? ''); setResults([]); setNotice('Metadata matched and saved.'); onSaved();
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
   }
@@ -41,7 +43,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     setBusy(true); setError('');
     try {
       // Editing manually preserves artwork, but no longer implies a verified provider match.
-      const saved = await window.retrohandler.metadataSave(target, { ...form, provider: 'manual', providerId: null, providerSlug: null });
+      const saved = await window.retrohandler.metadataSave(target, { ...form, systemOverride: systemOverride.trim() || null, provider: 'manual', providerId: null, providerSlug: null });
       setForm(saved); setNotice('Manual metadata saved.'); onSaved();
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
@@ -58,6 +60,12 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     <div className="metadata-fields">
       {(['title','released','developer','publisher','genre'] as const).map(name =>
         <label key={name}>{name[0].toUpperCase() + name.slice(1)}<input value={form[name]} maxLength={200} autoFocus={name === 'title'} onChange={event => set(name, event.target.value)}/></label>)}
+      <label>System <input list="retrohandler-systems" value={systemOverride} maxLength={120}
+        placeholder={`Auto: ${entry.system}`} onChange={event => setSystemOverride(event.target.value)}/></label>
+      <datalist id="retrohandler-systems">
+        {['Nintendo Entertainment System','Super Nintendo','Game Boy','Game Boy Color','Game Boy Advance','Nintendo 64','Nintendo DS','Mega Drive / Genesis','Master System','Game Gear','PlayStation','PlayStation 2','PlayStation Portable','Dreamcast','Sega Saturn','Arcade','Neo Geo','PC Engine / TurboGrafx-16','Atari 2600','Atari 7800'].map(name => <option key={name} value={name}/>)}
+      </datalist>
+      <p className="metadata-system-hint">Leave blank to use the scanner-detected system. A manual selection determines the RetroPie folder mapping.</p>
       <label className="metadata-description">Description<textarea value={form.description} maxLength={4000} rows={4} onChange={event => set('description', event.target.value)}/></label>
     </div>
     <button className="primary" disabled={busy || !form.title.trim()} onClick={() => void save()}>Save manual metadata</button>

@@ -81,7 +81,7 @@ export class SqliteLibraryStore implements LibraryStore {
         this.db.exec('UPDATE schema_version SET version = 2');
       });
       migrate();
-    } else if (version.version !== 2 && version.version !== 3 && version.version !== 4) {
+    } else if (version.version !== 2 && version.version !== 3 && version.version !== 4 && version.version !== 5) {
       throw new Error(`Unsupported RetroHandler database schema version: ${version.version}`);
     }
     const current = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number };
@@ -125,6 +125,15 @@ export class SqliteLibraryStore implements LibraryStore {
           );
           UPDATE schema_version SET version = 4;
         `);
+      });
+      migrate();
+    }
+    // Patch 007.1: keep scanner classification intact; store a nullable manual override.
+    const metadataSchema = (this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number }).version;
+    if (metadataSchema === 4) {
+      const migrate = this.db.transaction(() => {
+        this.db.exec('ALTER TABLE rom_metadata ADD COLUMN system_override TEXT');
+        this.db.exec('UPDATE schema_version SET version = 5');
       });
       migrate();
     }
@@ -204,14 +213,14 @@ export class SqliteLibraryStore implements LibraryStore {
       throw new Error('Invalid library page.');
     }
     const sortColumns: Record<LibraryQuery['sort'], string> = {
-      name: 'r.name COLLATE NOCASE', system: 'r.system COLLATE NOCASE', bytes: 'r.bytes'
+      name: 'r.name COLLATE NOCASE', system: "COALESCE(NULLIF(m.system_override, ''), r.system) COLLATE NOCASE", bytes: 'r.bytes'
     };
     const order = sortColumns[query.sort];
     if (!order) throw new Error('Invalid sort order.');
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (query.source !== null) { clauses.push('r.source_root = ?'); params.push(query.source); }
-    if (query.system !== null) { clauses.push('r.system = ?'); params.push(query.system); }
+    if (query.system !== null) { clauses.push("COALESCE(NULLIF(m.system_override, ''), r.system) = ?"); params.push(query.system); }
     if (query.search.trim()) {
       clauses.push("(r.name LIKE ? ESCAPE '!' OR r.relative_path LIKE ? ESCAPE '!')");
       const pattern = `%${query.search.trim().replace(/[!%_]/g, char => `!${char}`)}%`;
@@ -223,15 +232,18 @@ export class SqliteLibraryStore implements LibraryStore {
       if (query.identification !== 'pending') params.push(query.identification);
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const count = this.db.prepare(`SELECT COUNT(*) AS total FROM rom_files r ${where}`).get(...params) as { total: number };
+    const count = this.db.prepare(`SELECT COUNT(*) AS total FROM rom_files r
+      LEFT JOIN rom_metadata m ON m.source_root=r.source_root AND m.relative_path=r.relative_path ${where}`).get(...params) as { total: number };
     const rows = this.db.prepare(`
-      SELECT r.source_root AS source, r.id, r.name, r.system,
+      SELECT r.source_root AS source, r.id, r.name,
+        COALESCE(NULLIF(m.system_override, ''), r.system) AS system,
         r.relative_path AS relativePath, r.extension, r.bytes,
         i.status AS identificationStatus, i.title AS identifiedTitle, i.dat_name AS datName,
         m.title AS metadataTitle, m.description AS metadataDescription, m.released AS metadataReleased,
         m.developer AS metadataDeveloper, m.publisher AS metadataPublisher, m.genre AS metadataGenre,
         m.provider AS metadataProvider, m.provider_id AS metadataProviderId,
-        m.provider_slug AS metadataProviderSlug, m.artwork_id AS metadataArtworkId
+        m.provider_slug AS metadataProviderSlug, m.artwork_id AS metadataArtworkId,
+        m.system_override AS metadataSystemOverride
       FROM rom_files r LEFT JOIN rom_identifications i
         ON i.source_root=r.source_root AND i.relative_path=r.relative_path
       LEFT JOIN rom_metadata m ON m.source_root=r.source_root AND m.relative_path=r.relative_path ${where}
@@ -244,7 +256,7 @@ export class SqliteLibraryStore implements LibraryStore {
       metadataTitle: string | null; metadataDescription: string | null; metadataReleased: string | null;
       metadataDeveloper: string | null; metadataPublisher: string | null; metadataGenre: string | null;
       metadataProvider: 'manual' | 'rawg' | null; metadataProviderId: string | null;
-      metadataProviderSlug: string | null; metadataArtworkId: string | null;
+      metadataProviderSlug: string | null; metadataArtworkId: string | null; metadataSystemOverride: string | null;
     }>;
     return { items: rows.map(row => ({
       source: row.source, id: row.id, name: row.name, system: row.system,
@@ -255,16 +267,18 @@ export class SqliteLibraryStore implements LibraryStore {
         description: row.metadataDescription ?? '', released: row.metadataReleased ?? '',
         developer: row.metadataDeveloper ?? '', publisher: row.metadataPublisher ?? '', genre: row.metadataGenre ?? '',
         provider: row.metadataProvider, providerId: row.metadataProviderId,
-        providerSlug: row.metadataProviderSlug, artworkId: row.metadataArtworkId
+        providerSlug: row.metadataProviderSlug, artworkId: row.metadataArtworkId, systemOverride: row.metadataSystemOverride
       } : null
     })), total: count.total };
   }
 
   listSystems(source: string | null): SystemCount[] {
     return (this.db.prepare(`
-      SELECT system, COUNT(*) AS count FROM rom_files
-      ${source === null ? '' : 'WHERE source_root = ?'}
-      GROUP BY system ORDER BY system COLLATE NOCASE
+      SELECT COALESCE(NULLIF(m.system_override, ''), r.system) AS system, COUNT(*) AS count
+      FROM rom_files r LEFT JOIN rom_metadata m
+        ON m.source_root=r.source_root AND m.relative_path=r.relative_path
+      ${source === null ? '' : 'WHERE r.source_root = ?'}
+      GROUP BY COALESCE(NULLIF(m.system_override, ''), r.system) ORDER BY system COLLATE NOCASE
     `).all(...(source === null ? [] : [source])) as SystemCount[]);
   }
 
@@ -347,23 +361,30 @@ export class SqliteLibraryStore implements LibraryStore {
         !['manual', 'rawg'].includes(metadata.provider) ||
         (metadata.providerId !== null && metadata.providerId.length > 80) ||
         (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
-        (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId))) {
+        (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId)) ||
+        (metadata.systemOverride !== undefined && metadata.systemOverride !== null &&
+          (typeof metadata.systemOverride !== 'string' || !metadata.systemOverride.trim() ||
+          metadata.systemOverride.length > 120 || /[\x00-\x1f]/.test(metadata.systemOverride)))) {
       throw new Error('Invalid game metadata.');
     }
     // FK guarantees that the target is an indexed ROM. Never writes to ROM folders.
     const exists = this.db.prepare('SELECT 1 AS found FROM rom_files WHERE source_root=? AND relative_path=?').get(source, relativePath);
     if (!exists) throw new Error('Game not found in the library.');
-    const input = { ...metadata, title: metadata.title.trim() };
+    const previous = this.db.prepare('SELECT system_override AS systemOverride FROM rom_metadata WHERE source_root=? AND relative_path=?')
+      .get(source, relativePath) as { systemOverride: string | null } | undefined;
+    const systemOverride = metadata.systemOverride === undefined ? (previous?.systemOverride ?? null) : metadata.systemOverride?.trim() ?? null;
+    const input = { ...metadata, title: metadata.title.trim(), systemOverride };
     this.db.prepare(`INSERT INTO rom_metadata(source_root, relative_path, title, description, released,
-      developer, publisher, genre, provider, provider_id, provider_slug, artwork_id)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      developer, publisher, genre, provider, provider_id, provider_slug, artwork_id, system_override)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(source_root, relative_path) DO UPDATE SET title=excluded.title,
       description=excluded.description, released=excluded.released, developer=excluded.developer,
       publisher=excluded.publisher, genre=excluded.genre, provider=excluded.provider,
-      provider_id=excluded.provider_id, provider_slug=excluded.provider_slug, artwork_id=excluded.artwork_id`).run(
+      provider_id=excluded.provider_id, provider_slug=excluded.provider_slug, artwork_id=excluded.artwork_id,
+      system_override=excluded.system_override`).run(
         source, relativePath, input.title, input.description, input.released,
         input.developer, input.publisher, input.genre, input.provider,
-        input.providerId, input.providerSlug, input.artworkId);
+        input.providerId, input.providerSlug, input.artworkId, systemOverride);
     return { source, relativePath, ...input };
   }
 

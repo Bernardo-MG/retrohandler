@@ -23,6 +23,9 @@ function fields(value: unknown): GameMetadataInput {
   for (const name of ['providerId', 'providerSlug', 'artworkId']) {
     if (input[name] !== null && typeof input[name] !== 'string') throw new Error('Invalid metadata fields.');
   }
+  if (input.systemOverride !== undefined && input.systemOverride !== null &&
+      (typeof input.systemOverride !== 'string' || !input.systemOverride.trim() || input.systemOverride.length > 120))
+    throw new Error('Invalid system override.');
   return input as unknown as GameMetadataInput;
 }
 export function registerMetadataIpc(store: LibraryStore, artworkFolder: string, provider: MetadataProvider = rawgProvider): void {

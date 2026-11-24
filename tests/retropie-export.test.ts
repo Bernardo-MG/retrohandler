@@ -102,3 +102,15 @@ test('unsafe relative paths cannot escape the ROM source directory', async () =>
   assert.ok(plan.warnings.some(message => message.includes('Unsafe source')));
   assert.equal(plan.files.length, 0);
 }));
+
+test('export uses effective per-ROM metadata system rather than scanner system', async () => fixture(async (_, src, dst) => {
+  await writeFile(path.join(src, 'Unidentified.zip'), 'data');
+  const game = entry(src, 'Unidentified.zip', 'Needs identification');
+  game.system = 'Super Nintendo'; // Effective system returned by the SQLite library browser.
+  game.metadata = { ...game.metadata!, systemOverride: 'Super Nintendo' };
+  const plan = await previewExport(library([game]), options(dst), path.join(src, 'artwork'));
+  assert.equal(plan.warnings.length, 0);
+  assert.ok(plan.files.some(f => f.relativeDestination === 'roms/snes/Unidentified.zip'));
+  await executeExport(library([game]), options(dst), path.join(src, 'artwork'), plan.fingerprint);
+  assert.equal(await readFile(path.join(dst, 'roms', 'snes', 'Unidentified.zip'), 'utf8'), 'data');
+}));
