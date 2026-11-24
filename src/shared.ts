@@ -42,7 +42,33 @@ export interface GameMetadataInput {
 export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
 export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; }
 export interface MetadataTarget { source: string; relativePath: string; }
+export const RETROPIE_SYSTEM_MAP: Readonly<Record<string, string>> = {
+  'Nintendo Entertainment System': 'nes', 'Super Nintendo': 'snes',
+  'Game Boy': 'gb', 'Game Boy Color': 'gbc', 'Game Boy Advance': 'gba',
+  'Nintendo 64': 'n64', 'Nintendo DS': 'nds',
+  'Mega Drive / Genesis': 'megadrive', 'Master System': 'mastersystem',
+  'Game Gear': 'gamegear', 'PlayStation': 'psx', 'PlayStation 2': 'ps2',
+  'PlayStation Portable': 'psp', 'Dreamcast': 'dreamcast', 'Sega Saturn': 'saturn',
+  'Arcade': 'arcade', 'Neo Geo': 'neogeo', 'PC Engine / TurboGrafx-16': 'pcengine',
+  'Atari 2600': 'atari2600', 'Atari 7800': 'atari7800',
+  'Ports': 'ports', 'DOS': 'pc', 'ScummVM': 'scummvm'
+};
+
+/** Local export is preview-first; no export writes to source collections. */
+export interface ExportOptions {
+  source: string | null; destination: string; includeArtwork: boolean;
+  overrides: Record<string, string>;
+}
+export interface ExportFile { source: string; relativeDestination: string; size: number; kind: 'rom' | 'artwork' | 'gamelist'; }
+export interface ExportPlan {
+  destination: string; files: ExportFile[]; systems: string[];
+  warnings: string[]; conflicts: string[]; bytes: number; fingerprint: string;
+}
 export interface DesktopApi {
+  chooseExportFolder(): Promise<string | null>;
+  previewRetroPieExport(options: ExportOptions): Promise<ExportPlan>;
+  runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<{ copied: number }>;
+
   metadataSearch(query: string, apiKey: string): Promise<MetadataCandidate[]>;
   metadataApply(target: MetadataTarget, id: number, apiKey: string): Promise<GameMetadata>;
   metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;

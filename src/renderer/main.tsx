@@ -8,6 +8,7 @@ import { LibraryTable } from './components/LibraryTable';
 import { LibraryGallery } from './components/LibraryGallery';
 import { MetadataPanel } from './components/MetadataPanel';
 import { ScanStatus } from './components/ScanStatus';
+import { RetroPieExport } from './components/RetroPieExport';
 import './styles.css';
 
 const PAGE_SIZE = 100;
@@ -17,6 +18,7 @@ function App() {
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [details, setDetails] = useState<LibraryEntry | null>(null);
+  const [showExport, setShowExport] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState<LibraryPage>(EMPTY_PAGE);
   const [systems, setSystems] = useState<SystemCount[]>([]);
@@ -171,6 +173,7 @@ function App() {
     <main>
       <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div>
         <div className="identity-actions">
+          <button className="secondary" disabled={busy || identifying || !collections.length} onClick={() => setShowExport(true)}>RetroPie export</button>
           <button className="secondary" disabled={busy || identifying} onClick={() => void importDat()}>Import DAT XML</button>
           <button className="secondary" disabled={busy || identifying || !selected} onClick={() => void identify()}>Identify collection</button>
         </div>
@@ -204,6 +207,7 @@ function App() {
         <button onClick={scan} disabled={busy} className="secondary"><FolderOpen size={18}/> Choose collection folder</button>
         <div className="safe"><CheckCircle2 size={15}/> Read-only scan. Your original files stay untouched.</div>
       </section>}
+      {showExport && <RetroPieExport source={selected} onClose={() => setShowExport(false)}/>}
       <p className="footnote">Removing a collection only forgets its database entries; your original ROM files are never deleted.</p>
     </main>
   </div>;

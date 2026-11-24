@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, IdentificationUpdate, ScanUpdate } from '../shared';
 const api: DesktopApi = {
+  chooseExportFolder: () => ipcRenderer.invoke('export:choose'),
+  previewRetroPieExport: options => ipcRenderer.invoke('export:preview', options),
+  runRetroPieExport: (options, fingerprint) => ipcRenderer.invoke('export:run', options, fingerprint),
   metadataSearch: (query, key) => ipcRenderer.invoke('metadata:search', query, key),
   metadataApply: (target, id, key) => ipcRenderer.invoke('metadata:apply', target, id, key),
   metadataSave: (target, data) => ipcRenderer.invoke('metadata:save', target, data),

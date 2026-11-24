@@ -5,6 +5,7 @@ import { FileSystemLibraryService } from './services/library/library-service';
 import { SqliteLibraryStore } from './database/library-store';
 import { registerMetadataIpc } from './metadata/metadata-ipc';
 import { getArtwork, isArtworkId } from './metadata/artwork';
+import { registerExportIpc } from './export/export-ipc';
 
 app.setName('RetroHandler');
 protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
@@ -33,6 +34,7 @@ app.whenReady().then(() => {
   registerLibraryIpc(new FileSystemLibraryService(store));
   const artworkFolder = path.join(app.getPath('userData'), 'artwork');
   registerMetadataIpc(store, artworkFolder);
+  registerExportIpc(new FileSystemLibraryService(store), artworkFolder);
   protocol.handle('retro-art', async request => {
     try {
       const url = new URL(request.url);

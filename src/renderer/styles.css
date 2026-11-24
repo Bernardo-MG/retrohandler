@@ -58,3 +58,14 @@
 .metadata-overlay{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(5,9,18,.78)}
 .metadata-overlay .metadata-panel{width:min(850px,100%);max-height:calc(100vh - 40px);overflow-y:auto;overscroll-behavior:contain;border:1px solid #52607f;border-radius:12px;background:#151c2b;box-shadow:0 24px 90px #000a;padding:24px}
 @media(max-width:600px){.metadata-overlay{padding:8px}.metadata-overlay .metadata-panel{max-height:calc(100vh - 16px);padding:16px}}
+
+/* RetroPie export preview modal. */
+.retropie-overlay{position:fixed;inset:0;z-index:1100;background:rgba(4,8,18,.82);display:flex;align-items:center;justify-content:center;padding:18px}
+.retropie-panel{width:min(850px,100%);max-height:calc(100vh - 36px);overflow-y:auto;background:#151c2b;border:1px solid #52607f;border-radius:12px;padding:24px;box-shadow:0 25px 80px #000a}
+.retropie-panel p,.retropie-panel h3{color:#c0cce0;font-size:13px}.retropie-panel h3{font-size:16px}
+.retropie-destination{display:flex;gap:10px;align-items:end}.retropie-destination label{flex:1;min-width:0;font-size:12px}
+.retropie-destination input{display:block;width:100%;padding:10px;margin-top:5px;border:1px solid #41506c;border-radius:7px;background:#101726;color:#e8ecf6}
+.retropie-checkbox{display:flex;gap:8px;align-items:center;margin:14px 0;font-size:13px}.retropie-mappings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:18px;max-height:210px;overflow:auto}
+.retropie-mappings label{display:flex;gap:10px;align-items:center;font-size:12px}.retropie-mappings span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.retropie-mappings input{width:125px;min-width:0;padding:8px;border:1px solid #41506c;border-radius:7px;background:#101726;color:#e8ecf6}
+.retropie-preview{border:1px solid #35435f;border-radius:9px;padding:14px;margin-top:16px}.retropie-preview ul{max-height:170px;overflow:auto;font-size:12px;overflow-wrap:anywhere}.retropie-preview code{overflow-wrap:anywhere}
+@media(max-width:650px){.retropie-mappings{grid-template-columns:1fr}.retropie-panel{padding:14px}}
