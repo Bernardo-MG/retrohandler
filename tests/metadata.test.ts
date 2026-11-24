@@ -149,3 +149,50 @@ test('v4 to v5 migration preserves metadata and manual system across rescans and
     reopened.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test('bulk system edits affect selected ROMs only and preserve saved metadata', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-bulk-'));
+  try {
+    const store = new SqliteLibraryStore(path.join(dir, 'library.sqlite'), adapter);
+    store.saveScan(scan(['one', 'two', 'three']));
+    store.saveMetadata(source, 'one.nes', { ...input, title: 'Hand curated', artworkId: `${'a'.repeat(64)}.png` });
+    assert.equal(store.bulkAssignSystem({ scope: 'selected', targets: [
+      {source, relativePath:'one.nes'}, {source, relativePath:'two.nes'}, {source, relativePath:'one.nes'}
+    ] }, 'Super Nintendo'), 2);
+    const rows = store.queryLibrary(query).items;
+    assert.equal(rows.find(r => r.name === 'one')?.system, 'Super Nintendo');
+    assert.equal(rows.find(r => r.name === 'two')?.system, 'Super Nintendo');
+    assert.equal(rows.find(r => r.name === 'three')?.system, 'NES');
+    assert.equal(rows.find(r => r.name === 'one')?.metadata?.title, 'Hand curated');
+    assert.equal(rows.find(r => r.name === 'one')?.metadata?.artworkId, `${'a'.repeat(64)}.png`);
+    assert.throws(() => store.bulkAssignSystem({scope:'selected',targets:[{source,relativePath:'missing.nes'}]},'NES'), /no longer exists/);
+    store.saveScan(scan(['one','two','three']));
+    assert.equal(store.queryLibrary(query).items.find(r => r.name === 'two')?.system, 'Super Nintendo');
+    store.close();
+    const reopened = new SqliteLibraryStore(path.join(dir, 'library.sqlite'), adapter);
+    assert.equal(reopened.queryLibrary(query).items.find(r => r.name === 'two')?.system, 'Super Nintendo');
+    assert.equal(reopened.bulkAssignSystem({scope:'selected',targets:[{source,relativePath:'one.nes'},{source,relativePath:'two.nes'}]},null),2);
+    assert.equal(reopened.queryLibrary({ ...query, system:'Super Nintendo' }).total,0);
+    assert.equal(reopened.queryLibrary(query).items.find(r => r.name === 'one')?.metadata?.title,'Hand curated');
+    reopened.close();
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
+test('bulk select-all matches filtered result across pages and respects identification and system filters', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-bulk-all-'));
+  try {
+    const store = new SqliteLibraryStore(path.join(dir, 'library.sqlite'), adapter);
+    store.saveScan(scan(Array.from({length: 235},(_,i) => `Game-${String(i).padStart(3,'0')}`)));
+    const selected = store.bulkAssignSystem({scope:'filtered',filter:{source,search:'Game-',system:'NES',identification:'pending'}},'Game Boy');
+    assert.equal(selected,235);
+    assert.equal(store.queryLibrary({ ...query,system:'Game Boy',limit:10 }).total,235);
+    assert.equal(store.bulkAssignSystem({scope:'filtered',filter:{source,search:'Game-00',system:'Game Boy',identification:'pending'}},'Super Nintendo'),10);
+    assert.equal(store.queryLibrary({ ...query,system:'Super Nintendo' }).total,10);
+    assert.equal(store.queryLibrary({ ...query,system:'Game Boy' }).total,225);
+    assert.equal(store.bulkAssignSystem({scope:'filtered',filter:{source,search:'Game-00',system:'Super Nintendo',identification:'pending'}},null),10);
+    assert.equal(store.queryLibrary({ ...query,system:'NES' }).total,10);
+    assert.equal(store.bulkAssignSystem({scope:'filtered',filter:{source,search:'definitely-not-present',system:null,identification:null}},'NES'),0);
+    assert.throws(() => store.bulkAssignSystem({scope:'filtered',filter:{source,search:'',system:null,identification:null}},'\nInvalid'),/Invalid/);
+    store.close();
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});

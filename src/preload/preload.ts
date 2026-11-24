@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, IdentificationUpdate, ScanUpdate } from '../shared';
 const api: DesktopApi = {
+  bulkAssignSystem: (selection, systemOverride) => ipcRenderer.invoke('library:bulk-system', selection, systemOverride),
   chooseExportFolder: () => ipcRenderer.invoke('export:choose'),
   previewRetroPieExport: options => ipcRenderer.invoke('export:preview', options),
   runRetroPieExport: (options, fingerprint) => ipcRenderer.invoke('export:run', options, fingerprint),

@@ -1,6 +1,6 @@
 import { dialog, ipcMain } from 'electron';
 import path from 'node:path';
-import type { LibraryQuery } from '../../shared';
+import type { BulkSystemSelection, LibraryQuery } from '../../shared';
 import type { LibraryService } from '../services/library/library-service';
 
 /** Only one active scan per renderer. Cancellation is scoped to its sender. */
@@ -70,6 +70,13 @@ export function registerLibraryIpc(library: LibraryService): void {
   ipcMain.handle('roms:scan', (event, folder: unknown, jobId?: unknown) => scan(event, folder, jobId));
   ipcMain.handle('roms:scan-indexed', (event, folder: unknown, jobId: unknown) => scan(event, folder, jobId, true));
   ipcMain.handle('roms:load-saved', () => library.loadLastScan());
+  ipcMain.handle('library:bulk-system', (_event, selection: unknown, systemOverride: unknown) => {
+    if (systemOverride !== null && (typeof systemOverride !== 'string' || !systemOverride.trim() ||
+        systemOverride.length > 120 || /[\x00-\x1f]/.test(systemOverride))) throw new Error('Invalid system.');
+    if (!selection || typeof selection !== 'object' || !['selected','filtered'].includes(String((selection as {scope?: unknown}).scope)))
+      throw new Error('Invalid bulk selection.');
+    return library.bulkAssignSystem(selection as BulkSystemSelection, systemOverride as string | null);
+  });
   ipcMain.handle('library:collections', () => library.listCollections());
   ipcMain.handle('library:systems', (_event, source: unknown) => {
     if (source !== null && (typeof source !== 'string' || source.length > 4096)) throw new Error('Invalid collection.');

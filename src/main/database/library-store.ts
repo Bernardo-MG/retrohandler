@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { CollectionInfo, GameMetadata, GameMetadataInput, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
+import type { BulkSystemSelection, CollectionInfo, GameMetadata, GameMetadataInput, IdentificationResult, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, Rom, ScanResult, ScanWarning, SystemCount } from '../../shared';
 import type { DatEntry, ParsedDat } from '../identification/dat';
 import type { RomHashes, } from '../identification/hashes';
 
@@ -36,6 +36,7 @@ export interface LibraryStore {
   matchFingerprint?(hashes: RomHashes): { status: IdentificationStatus; title: string | null; datName: string | null };
   saveIdentification?(source: string, results: IdentificationResult[]): void;
   saveMetadata?(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata;
+  bulkAssignSystem?(selection: BulkSystemSelection, systemOverride: string | null): number;
 }
 
 /** The database is deliberately stored outside the ROM collection. */
@@ -353,6 +354,79 @@ export class SqliteLibraryStore implements LibraryStore {
       }
     });
     commit();
+  }
+
+  /** Only changes system_override. Existing descriptions, artwork and provider fields survive. */
+  bulkAssignSystem(selection: BulkSystemSelection, value: string | null): number {
+    if (value !== null && (typeof value !== 'string' || !value.trim() || value.length > 120 || /[\x00-\x1f]/.test(value))) {
+      throw new Error('Invalid system assignment.');
+    }
+    const systemOverride = value?.trim() ?? null;
+    const update = this.db.prepare('UPDATE rom_metadata SET system_override=? WHERE source_root=? AND relative_path=?');
+    const insert = this.db.prepare(`INSERT INTO rom_metadata(source_root, relative_path, title, description,
+      released, developer, publisher, genre, provider, provider_id, provider_slug, artwork_id, system_override)
+      VALUES(?, ?, ?, '', '', '', '', '', 'manual', NULL, NULL, NULL, ?)
+      ON CONFLICT(source_root, relative_path) DO UPDATE SET system_override=excluded.system_override`);
+    const commit = this.db.transaction(() => {
+      let targets: Array<{ source: string; relativePath: string; name: string }>;
+      if (selection.scope === 'selected') {
+        if (!Array.isArray(selection.targets) || selection.targets.length > 5000) throw new Error('Too many selected ROMs.');
+        const find = this.db.prepare(`SELECT source_root AS source, relative_path AS relativePath, name
+          FROM rom_files WHERE source_root=? AND relative_path=?`);
+        const keys = new Set<string>();
+        targets = [];
+        for (const target of selection.targets) {
+          if (!target || typeof target.source !== 'string' || typeof target.relativePath !== 'string' ||
+              target.source.length > 4096 || target.relativePath.length > 4096 || !target.source || !target.relativePath) throw new Error('Invalid ROM target.');
+          const key = JSON.stringify([target.source, target.relativePath]);
+          if (keys.has(key)) continue;
+          keys.add(key);
+          const row = find.get(target.source, target.relativePath) as typeof targets[number] | undefined;
+          if (!row) throw new Error('Selected ROM no longer exists. Refresh the library.');
+          targets.push(row);
+        }
+      } else if (selection.scope === 'filtered') {
+        const q = selection.filter;
+        if (!q || (q.source !== null && (typeof q.source !== 'string' || q.source.length > 4096)) ||
+            typeof q.search !== 'string' || q.search.length > 256 ||
+            (q.system !== null && (typeof q.system !== 'string' || q.system.length > 256)) ||
+            (q.identification != null && !['pending','verified','probable','ambiguous','unknown','unsupported','error'].includes(q.identification))) {
+          throw new Error('Invalid bulk filter.');
+        }
+        const clauses: string[] = [];
+        const params: unknown[] = [];
+        if (q.source !== null) { clauses.push('r.source_root=?'); params.push(q.source); }
+        if (q.system !== null) {
+          clauses.push("COALESCE(NULLIF(m.system_override, ''), r.system)=?"); params.push(q.system);
+        }
+        if (q.search.trim()) {
+          clauses.push("(r.name LIKE ? ESCAPE '!' OR r.relative_path LIKE ? ESCAPE '!')");
+          const term = `%${q.search.trim().replace(/[!%_]/g, c => `!${c}`)}%`;
+          params.push(term, term);
+        }
+        if (q.identification) {
+          if (q.identification === 'pending') clauses.push(`NOT EXISTS (SELECT 1 FROM rom_identifications i
+            WHERE i.source_root=r.source_root AND i.relative_path=r.relative_path)`);
+          else {
+            clauses.push(`EXISTS (SELECT 1 FROM rom_identifications i WHERE i.source_root=r.source_root
+              AND i.relative_path=r.relative_path AND i.status=?)`);
+            params.push(q.identification);
+          }
+        }
+        targets = this.db.prepare(`SELECT r.source_root AS source, r.relative_path AS relativePath, r.name
+          FROM rom_files r LEFT JOIN rom_metadata m ON m.source_root=r.source_root
+            AND m.relative_path=r.relative_path ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+          ORDER BY r.source_root, r.relative_path LIMIT 250001`).all(...params) as typeof targets;
+        if (targets.length > 250000) throw new Error('Too many matching ROMs; narrow the filter.');
+      } else throw new Error('Invalid bulk selection.');
+      for (const target of targets) {
+        // Clearing does not create unnecessary metadata records.
+        if (systemOverride === null) update.run(null, target.source, target.relativePath);
+        else insert.run(target.source, target.relativePath, target.name || 'Untitled', systemOverride);
+      }
+      return targets.length;
+    });
+    return commit();
   }
 
   saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {

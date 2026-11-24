@@ -44,6 +44,11 @@ export interface GameMetadataInput {
 export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
 export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; }
 export interface MetadataTarget { source: string; relativePath: string; }
+/** Bulk edits operate on explicit games or the whole filtered result, not the current page. */
+export type BulkSystemSelection =
+  | { scope: 'selected'; targets: MetadataTarget[] }
+  | { scope: 'filtered'; filter: Pick<LibraryQuery, 'source' | 'search' | 'system' | 'identification'> };
+
 export const RETROPIE_SYSTEM_MAP: Readonly<Record<string, string>> = {
   'Nintendo Entertainment System': 'nes', 'Super Nintendo': 'snes',
   'Game Boy': 'gb', 'Game Boy Color': 'gbc', 'Game Boy Advance': 'gba',
@@ -67,6 +72,7 @@ export interface ExportPlan {
   warnings: string[]; conflicts: string[]; bytes: number; fingerprint: string;
 }
 export interface DesktopApi {
+  bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   chooseExportFolder(): Promise<string | null>;
   previewRetroPieExport(options: ExportOptions): Promise<ExportPlan>;
   runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<{ copied: number }>;

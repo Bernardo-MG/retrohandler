@@ -41,7 +41,7 @@ test('preview makes no files; confirmed export writes XML but never copies ROMs'
   assert.equal(plan.warnings.length, 0);
   assert.equal(plan.files.length, 2);
   await assert.rejects(readdir(dst));
-  assert.equal(plan.bytes, Buffer.byteLength(gameListXml([{ entry: entry(src, 'Game.zip'), filename: 'Game.zip', image: null }])));
+  assert.equal(plan.bytes, 0); // No ROM content is copied in configuration-only mode.
   assert.deepEqual(await executeExport(lib, options(dst), path.join(src, 'artwork'), plan.fingerprint), {copied: 1});
   await assert.rejects(readFile(path.join(dst, 'roms', 'nes', 'Game.zip')));
   assert.match(await readFile(path.join(dst, 'roms', 'nes', 'gamelist.xml'), 'utf8'), /\.\/Game.zip/);
@@ -114,7 +114,8 @@ test('export uses effective per-ROM metadata system rather than scanner system',
   assert.equal(plan.warnings.length, 0);
   assert.ok(plan.files.some(f => f.relativeDestination === 'roms/snes/Unidentified.zip'));
   await executeExport(library([game]), options(dst), path.join(src, 'artwork'), plan.fingerprint);
-  assert.equal(await readFile(path.join(dst, 'roms', 'snes', 'Unidentified.zip'), 'utf8'), 'data');
+  await assert.rejects(readFile(path.join(dst, 'roms', 'snes', 'Unidentified.zip')));
+  assert.match(await readFile(path.join(dst, 'roms', 'snes', 'gamelist.xml'), 'utf8'), /Unidentified.zip/);
 }));
 
 

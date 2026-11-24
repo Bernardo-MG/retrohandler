@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FolderOpen, Gamepad2, HardDrive, Library, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
+import type { BulkSystemSelection, CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
 import { CollectionPanel } from './components/CollectionPanel';
 import { LibraryFilters } from './components/LibraryFilters';
 import { LibraryTable } from './components/LibraryTable';
@@ -13,11 +13,17 @@ import './styles.css';
 
 const PAGE_SIZE = 100;
 const EMPTY_PAGE: LibraryPage = { items: [], total: 0 };
+const gameKey = (entry: {source: string; relativePath: string}) => JSON.stringify([entry.source, entry.relativePath]);
 
 function App() {
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [details, setDetails] = useState<LibraryEntry | null>(null);
+  const [selectedGames, setSelectedGames] = useState<Record<string, {source: string; relativePath: string}>>({});
+  const [allMatching, setAllMatching] = useState(false);
+  const [bulkSystem, setBulkSystem] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState('');
   const [showExport, setShowExport] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [page, setPage] = useState<LibraryPage>(EMPTY_PAGE);
@@ -89,6 +95,46 @@ function App() {
   }, [selected, debouncedSearch, system, sort, descending, offset, identityFilter, revision]);
 
   useEffect(() => { setDetails(null); }, [selected, offset, system, sort, descending, debouncedSearch, identityFilter]);
+
+  const clearBulkSelection = () => { setSelectedGames({}); setAllMatching(false); };
+  useEffect(() => { clearBulkSelection(); }, [selected, system, search, identityFilter]);
+  const checked = (entry: LibraryEntry) => allMatching || !!selectedGames[gameKey(entry)];
+  const toggle = (entry: LibraryEntry, enabled: boolean) => {
+    if (allMatching) { clearBulkSelection(); return; }
+    setSelectedGames(current => {
+      const next = {...current}; const key = gameKey(entry);
+      if (enabled) next[key] = {source: entry.source, relativePath: entry.relativePath}; else delete next[key];
+      return next;
+    });
+  };
+  const selectPage = (enabled: boolean) => {
+    setAllMatching(false);
+    setSelectedGames(current => {
+      const next = {...current};
+      for (const game of page.items) {
+        const key = gameKey(game);
+        if (enabled) next[key] = {source: game.source, relativePath: game.relativePath}; else delete next[key];
+      }
+      return next;
+    });
+  };
+  async function assignBulk(override: string | null = bulkSystem.trim() || null) {
+    const count = allMatching ? page.total : Object.keys(selectedGames).length;
+    if (!count) return;
+    const description = override ? `assign ${override}` : 'restore automatically detected systems';
+    if (!window.confirm(`Apply ${description} to ${count.toLocaleString()} ROMs?`)) return;
+    const selection: BulkSystemSelection = allMatching
+      ? { scope: 'filtered', filter: { source: selected, search: debouncedSearch, system, identification: identityFilter } }
+      : { scope: 'selected', targets: Object.values(selectedGames) };
+    setBulkBusy(true); setError(''); setBulkMessage('');
+    try {
+      const updated = await window.retrohandler.bulkAssignSystem(selection, override);
+      setBulkMessage(`${updated.toLocaleString()} ROM systems updated.`);
+      clearBulkSelection();
+      await reloadCollections();
+    } catch (reason) { setError(`Could not update systems: ${String(reason)}`); }
+    finally { setBulkBusy(false); }
+  }
 
   const selectCollection = (source: string | null) => {
     setSelected(source); setOffset(0); setSystem(null); setSearch(''); setIdentityFilter(null); setDetails(null);
@@ -196,10 +242,20 @@ function App() {
           </select></label>
           <LibraryFilters search={search} setSearch={filterSearch} system={system} setSystem={filterSystem} systems={systems} sort={sort} setSort={filterSort} descending={descending} setDescending={filterDescending}/>
         </div>
+        <div className="bulk-toolbar" aria-label="Bulk system assignment">
+          <strong>{allMatching ? `${page.total.toLocaleString()} matching ROMs selected` : `${Object.keys(selectedGames).length.toLocaleString()} ROMs selected`}</strong>
+          <button disabled={loading || bulkBusy || !page.total || search !== debouncedSearch} onClick={() => { setAllMatching(true); setSelectedGames({}); }}>Select all {page.total.toLocaleString()} matching</button>
+          <button disabled={bulkBusy || (!allMatching && !Object.keys(selectedGames).length)} onClick={clearBulkSelection}>Clear selection</button>
+          <label>System <input list="bulk-system-options" value={bulkSystem} maxLength={120} placeholder="Choose a system" onChange={e => setBulkSystem(e.target.value)}/></label>
+          <datalist id="bulk-system-options">{['Nintendo Entertainment System','Super Nintendo','Game Boy','Game Boy Color','Game Boy Advance','Nintendo 64','Nintendo DS','Mega Drive / Genesis','Master System','Game Gear','PlayStation','PlayStation 2','PlayStation Portable','Dreamcast','Sega Saturn','Arcade','Neo Geo','PC Engine / TurboGrafx-16','Atari 2600','Atari 7800'].map(s => <option key={s} value={s}/>)}</datalist>
+          <button disabled={bulkBusy || (!allMatching && !Object.keys(selectedGames).length) || !bulkSystem.trim()} onClick={() => void assignBulk()}>Set system</button>
+          <button disabled={bulkBusy || (!allMatching && !Object.keys(selectedGames).length)} onClick={() => void assignBulk(null)}>Clear overrides</button>
+        </div>
+        {bulkMessage && <p className="identity-message" role="status">{bulkMessage}</p>}
         <div className="view-switch" role="group" aria-label="Library view"><button aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button><button aria-pressed={view === 'grid'} onClick={() => setView('grid')}>Grid</button></div>
         {view === 'list'
-          ? <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>
-          : <LibraryGallery page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>}
+          ? <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails} checked={checked} toggle={toggle} selectPage={selectPage}/>
+          : <LibraryGallery page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails} checked={checked} toggle={toggle}/>}
         {details && <MetadataPanel key={`${details.source}\0${details.relativePath}`} entry={page.items.find(item => item.source === details.source && item.relativePath === details.relativePath) ?? details} onClose={() => setDetails(null)} onSaved={() => setRevision(value => value + 1)}/>}
       </section> : <section className="empty">
         <div className="empty-graphic"><Gamepad2 size={56}/></div><div className="ready">READY TO START</div>

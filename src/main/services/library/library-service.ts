@@ -1,4 +1,4 @@
-import type { CollectionInfo, IdentificationProgress, IdentificationReceipt, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
+import type { BulkSystemSelection, CollectionInfo, IdentificationProgress, IdentificationReceipt, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
 import { scanRoms } from '../../scanner';
 import type { LibraryStore } from '../../database/library-store';
 import { readDat } from '../../identification/dat';
@@ -10,6 +10,7 @@ export interface LibraryService {
   listCollections(): Promise<CollectionInfo[]>;
   queryLibrary(query: LibraryQuery): Promise<LibraryPage>;
   listSystems(source: string | null): Promise<SystemCount[]>;
+  bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   renameCollection(source: string, label: string): Promise<void>;
   removeCollection(source: string): Promise<void>;
   importDat(filePath: string): Promise<{ name: string; count: number }>;
@@ -39,6 +40,10 @@ export class FileSystemLibraryService implements LibraryService {
   }
   async listSystems(source: string | null): Promise<SystemCount[]> {
     return this.store?.listSystems?.(source) ?? [];
+  }
+  async bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number> {
+    if (!this.store?.bulkAssignSystem) throw new Error('Bulk system assignment unavailable.');
+    return this.store.bulkAssignSystem(selection, systemOverride);
   }
   async renameCollection(source: string, label: string): Promise<void> {
     if (!this.store?.renameCollection) throw new Error('Collection storage unavailable.');
