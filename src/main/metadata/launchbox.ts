@@ -34,17 +34,19 @@ export function parseLaunchBoxGame(xml: string): LaunchBoxGame | null {
 }
 
 /** Stream large extracted LaunchBox Metadata.xml without loading it all into memory. */
-export async function importLaunchBoxXml(file: string, store: LibraryStore): Promise<number> {
+export async function importLaunchBoxXml(file: string, store: LibraryStore, options: { signal?: AbortSignal; onProgress?: (count: number) => void } = {}): Promise<number> {
   if (!store.beginLaunchBoxImport || !store.addLaunchBoxGame || !store.finishLaunchBoxImport || !store.abortLaunchBoxImport)
     throw new Error('LaunchBox import storage unavailable.');
   const info = await stat(file);
   if (!info.isFile() || info.size > MAX_FILE_BYTES) throw new Error('LaunchBox XML is too large or unavailable.');
+  if (options.signal?.aborted) throw new Error('LaunchBox import cancelled.');
   store.beginLaunchBoxImport();
   let buffer = '';
   let count = 0;
   let seenRoot = false;
   try {
-    for await (const chunk of createReadStream(file,{encoding:'utf8',highWaterMark:64*1024})) {
+    for await (const chunk of createReadStream(file,{encoding:'utf8',highWaterMark:64*1024,signal:options.signal})) {
+      if (options.signal?.aborted) throw new Error('LaunchBox import cancelled.');
       buffer += chunk;
       if (!seenRoot) {
         if (/<!DOCTYPE|<!ENTITY/i.test(buffer)) throw new Error('XML declarations with entities are not supported.');
@@ -62,12 +64,15 @@ export async function importLaunchBoxXml(file: string, store: LibraryStore): Pro
         const node = buffer.slice(start,end+7);
         if (Buffer.byteLength(node,'utf8') > MAX_GAME_BYTES) throw new Error('Oversized LaunchBox game record.');
         const game = parseLaunchBoxGame(node);
-        if (game) { store.addLaunchBoxGame(game); count++; }
+        if (game) { store.addLaunchBoxGame(game); count++; if (count % 500 === 0) options.onProgress?.(count); }
         buffer = buffer.slice(end+7);
       }
     }
     if (buffer.includes('<Game>')) throw new Error('Truncated LaunchBox XML.');
     if (!count) throw new Error('No LaunchBox games found. Select the extracted Metadata.xml, not the ZIP archive.');
+    if (options.signal?.aborted) throw new Error('LaunchBox import cancelled.');
+    options.onProgress?.(count);
+    if (options.signal?.aborted) throw new Error('LaunchBox import cancelled.');
     return store.finishLaunchBoxImport();
   } catch (error) { store.abortLaunchBoxImport(); throw error; }
 }

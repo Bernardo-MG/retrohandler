@@ -1,11 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopApi, IdentificationUpdate, ScanUpdate } from '../shared';
+import type { DesktopApi, IdentificationUpdate, ScanUpdate, LaunchBoxDownloadProgress } from '../shared';
 const api: DesktopApi = {
   bulkAssignSystem: (selection, systemOverride) => ipcRenderer.invoke('library:bulk-system', selection, systemOverride),
   chooseExportFolder: () => ipcRenderer.invoke('export:choose'),
   previewRetroPieExport: options => ipcRenderer.invoke('export:preview', options),
   runRetroPieExport: (options, fingerprint) => ipcRenderer.invoke('export:run', options, fingerprint),
   importLaunchBox: () => ipcRenderer.invoke('launchbox:import'),
+  downloadLaunchBox: () => ipcRenderer.invoke('launchbox:download'),
+  cancelLaunchBoxDownload: () => ipcRenderer.invoke('launchbox:cancel'),
+  onLaunchBoxProgress: listener => {
+    const handler = (_event: Electron.IpcRendererEvent, update: LaunchBoxDownloadProgress) => listener(update);
+    ipcRenderer.on('launchbox:progress', handler);
+    return () => ipcRenderer.removeListener('launchbox:progress', handler);
+  },
   launchBoxSearch: (query, system) => ipcRenderer.invoke('launchbox:search', query, system),
   launchBoxApply: (target, id) => ipcRenderer.invoke('launchbox:apply', target, id),
   findLibretroArtwork: (system, names) => ipcRenderer.invoke('libretro:artwork', system, names),

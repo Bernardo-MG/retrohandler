@@ -2,6 +2,7 @@ import { dialog, ipcMain } from 'electron';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
 import type { LibraryStore } from '../database/library-store';
 import { importLaunchBoxXml } from './launchbox';
+import { downloadLaunchBox } from './launchbox-download';
 import { findLibretroCover } from './libretro';
 
 function target(value: unknown): MetadataTarget {
@@ -31,6 +32,32 @@ function fields(value: unknown): GameMetadataInput {
 export function registerMetadataIpc(store: LibraryStore, artworkFolder: string): void {
   if (!store.saveMetadata) throw new Error('Metadata storage unavailable.');
   let importing = false;
+  const updates = new Map<number, AbortController>();
+  ipcMain.handle('launchbox:download', async event => {
+    if (importing) throw new Error('A LaunchBox import is already running.');
+    importing = true;
+    const sender = event.sender;
+    const controller = new AbortController();
+    updates.set(sender.id, controller);
+    const onDestroyed = () => controller.abort();
+    sender.once('destroyed', onDestroyed);
+    try {
+      const count = await downloadLaunchBox(store, { signal: controller.signal, onProgress: update => {
+        if (!sender.isDestroyed()) sender.send('launchbox:progress', update);
+      } });
+      return { count };
+    } finally {
+      sender.removeListener('destroyed', onDestroyed);
+      updates.delete(sender.id);
+      importing = false;
+    }
+  });
+  ipcMain.handle('launchbox:cancel', event => {
+    const controller = updates.get(event.sender.id);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  });
   ipcMain.handle('launchbox:import', async () => {
     if (importing) throw new Error('A LaunchBox import is already running.');
     const selection = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{name:'LaunchBox Metadata XML',extensions:['xml']}] });

@@ -12,6 +12,8 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
   const [query, setQuery] = useState(cleanTitle(entry));
   const [results, setResults] = useState<MetadataCandidate[]>([]);
   const [imported, setImported] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState<import('../../shared').LaunchBoxDownloadProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -38,6 +40,15 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
       setForm(metadata); setSystemOverride(metadata.systemOverride ?? systemOverride); setResults([]); setNotice('Metadata matched and saved.'); onSaved();
     } catch (e) { setError(String(e)); }
     finally { setBusy(false); }
+  }
+  useEffect(() => window.retrohandler.onLaunchBoxProgress(setUpdateProgress), []);
+  async function updateLaunchBox() {
+    setBusy(true); setUpdating(true); setError(''); setImported(''); setUpdateProgress(null);
+    try {
+      const result = await window.retrohandler.downloadLaunchBox();
+      setImported(`${result.count.toLocaleString()} LaunchBox games downloaded and imported.`);
+    } catch (e) { setError(String(e)); }
+    finally { setBusy(false); setUpdating(false); }
   }
   async function importLaunchBox() {
     setBusy(true); setError(''); setImported('');
@@ -86,8 +97,11 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     <button className="primary" disabled={busy || !form.title.trim()} onClick={() => void save()}>Save manual metadata</button>
     <div className="metadata-search">
       <h3>Find retro-game metadata</h3>
-      <p>LaunchBox uses a local database: download Metadata.zip from the LaunchBox Games Database, extract Metadata.xml, then import it. No API key required. Matches are never applied automatically.</p>
-      <button className="secondary" disabled={busy} onClick={() => void importLaunchBox()}>Import LaunchBox Metadata.xml…</button>
+      <p>Download the official LaunchBox database and search locally without an API key. Manual XML import is also available.</p>
+      <button className="secondary" disabled={busy} onClick={() => void updateLaunchBox()}>Download / Update LaunchBox Database</button>
+      {updating && <button className="secondary" onClick={() => void window.retrohandler.cancelLaunchBoxDownload()}>Cancel download / import</button>}
+      {updating && updateProgress && <p role="status">{updateProgress.phase === 'import' ? `Importing ${updateProgress.processed.toLocaleString()} games…` : `${updateProgress.phase === 'download' ? 'Downloading' : 'Extracting'} ${(updateProgress.processed / 1048576).toFixed(1)} MiB${updateProgress.total ? ` / ${(updateProgress.total / 1048576).toFixed(1)} MiB` : ''}`}</p>}
+      <button className="secondary" disabled={busy} onClick={() => void importLaunchBox()}>Import LaunchBox Metadata.xml… (manual)</button>
       {imported && <p role="status">{imported}</p>}
       <label>Game title <input value={query} maxLength={120} onChange={event => setQuery(event.target.value)}/></label>
       <button className="secondary" disabled={busy || !query.trim()} onClick={() => void search()}>Search LaunchBox</button>

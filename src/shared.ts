@@ -44,6 +44,7 @@ export interface GameMetadataInput {
 export interface GameMetadata extends GameMetadataInput { source: string; relativePath: string; }
 export interface MetadataCandidate { id: number; title: string; released: string; slug: string | null; platform?: string; }
 export interface MetadataTarget { source: string; relativePath: string; }
+export interface LaunchBoxDownloadProgress { phase: 'download' | 'extract' | 'import'; processed: number; total: number | null; }
 /** Bulk edits operate on explicit games or the whole filtered result, not the current page. */
 export type BulkSystemSelection =
   | { scope: 'selected'; targets: MetadataTarget[] }
@@ -78,6 +79,9 @@ export interface DesktopApi {
   runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<{ copied: number }>;
 
   importLaunchBox(): Promise<{ count: number } | null>;
+  downloadLaunchBox(): Promise<{ count: number }>;
+  cancelLaunchBoxDownload(): Promise<boolean>;
+  onLaunchBoxProgress(listener: (update: LaunchBoxDownloadProgress) => void): () => void;
   launchBoxSearch(query: string, system: string): Promise<MetadataCandidate[]>;
   launchBoxApply(target: MetadataTarget, id: number): Promise<GameMetadata>;
   findLibretroArtwork(system: string, names: string[]): Promise<string | null>;
