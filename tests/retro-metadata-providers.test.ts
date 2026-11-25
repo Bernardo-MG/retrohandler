@@ -156,6 +156,13 @@ test('Libretro search returns cached image previews and skips unavailable catalo
     assert.equal(covers.length,1);
     assert.equal(covers[0].title,'Alien 3 (1993)(LJN)(EU)');
     assert.equal((await getArtwork(dir,covers[0].artworkId)).mime,'image/png');
-    assert.ok(urls.every(url=>url.startsWith('https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/')));
+    // The primary thumbnail host and official GitHub mirror are both allowed.
+    const primary = 'https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/';
+    const mirror = 'https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Nintendo_Entertainment_System/master/Named_Boxarts/';
+    const missing = encodeURIComponent('Alien 3 (Europe).png');
+    const available = encodeURIComponent('Alien 3 (1993)(LJN)(EU).png');
+    assert.equal(urls[0], primary + '.index');
+    assert.deepEqual(urls.slice(1).sort(), [primary + missing, mirror + missing, primary + available].sort());
+    assert.ok(urls.indexOf(primary + missing) < urls.indexOf(mirror + missing));
   } finally {await rm(dir,{recursive:true,force:true});}
 });

@@ -6,15 +6,18 @@
   "main": "dist-electron/main/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
-    "build": "npm run build:web && electron-builder --win nsis",
+    "build": "npm run clean:release && npm run typecheck && npm test && npm run build:web && electron-builder --win --x64 --publish never && npm run verify:package",
     "build:web": "npm run build:electron && vite build",
     "start": "npm run build:web && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
     "build:electron": "tsc -p tsconfig.node.json",
-    "test": "npm run build:tests && node --test dist-tests/tests/*.test.js",
+    "test": "npm run build:tests && node --test dist-tests/tests/*.test.js && node --test tests/packaging.test.cjs",
     "build:tests": "tsc -p tsconfig.test.json",
     "postinstall": "electron-builder install-app-deps",
-    "rebuild:native": "electron-builder install-app-deps"
+    "rebuild:native": "electron-builder install-app-deps",
+    "build:dir": "npm run clean:release && npm run build:web && electron-builder --win --x64 --dir --publish never && npm run verify:package -- --directory-only",
+    "clean:release": "node scripts/package-windows.cjs clean",
+    "verify:package": "node scripts/package-windows.cjs verify"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -47,7 +50,31 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "RetroHandler-Setup-${version}-${arch}.${ext}"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**/*.node"
+    ],
+    "npmRebuild": true,
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RetroHandler",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     }
   },
   "engines": {

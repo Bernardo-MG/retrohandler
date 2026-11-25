@@ -1,5 +1,7 @@
 import { app, BrowserWindow, nativeTheme, protocol, screen } from 'electron';
 import path from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import { registerLibraryIpc } from './ipc/library-ipc';
 import { FileSystemLibraryService } from './services/library/library-service';
 import { SqliteLibraryStore } from './database/library-store';
@@ -11,6 +13,7 @@ import { registerSettingsIpc } from './settings/settings-ipc';
 import { restoreWindowBounds } from './settings/window-bounds';
 
 app.setName('RetroHandler');
+if (process.platform === 'win32') app.setAppUserModelId('com.retrohandler.desktop');
 protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 function createWindow(settings: SettingsStore) {
@@ -44,7 +47,38 @@ function createWindow(settings: SettingsStore) {
 
 // A single instance owns the settings file and artwork cleanup, preventing two
 // independent main processes from racing to update the same preferences/cache.
-if (!app.requestSingleInstanceLock()) {
+if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
+  // Never open or migrate the real library during release verification.
+  const temp = mkdtempSync(path.join(os.tmpdir(), 'retrohandler-package-'));
+  app.setPath('userData', temp);
+  app.setPath('sessionData', temp);
+  app.whenReady().then(async () => {
+    const db = new SqliteLibraryStore(path.join(temp, 'library.sqlite'));
+    const settings = new SettingsStore(path.join(temp, 'settings.json'));
+    const artworkFolder = path.join(temp, 'artwork');
+    registerLibraryIpc(new FileSystemLibraryService(db));
+    registerSettingsIpc(settings, path.join(temp, 'library.sqlite'), artworkFolder);
+    db.listCollections();
+    const win = new BrowserWindow({ show: false, webPreferences: {
+      preload: path.join(__dirname, '../preload/preload.js'),
+      nodeIntegration: false, contextIsolation: true, sandbox: true
+    } });
+    try {
+      await win.loadFile(path.join(__dirname, '../../dist/index.html'));
+      const ready = await win.webContents.executeJavaScript(`new Promise(resolve => {
+        let attempts = 0;
+        const timer = setInterval(() => {
+          if (typeof window.retrohandler?.listCollections === 'function' && document.getElementById('root')?.firstElementChild) {
+            clearInterval(timer); resolve(true);
+          } else if (++attempts >= 100) { clearInterval(timer); resolve(false); }
+        }, 100);
+      })`);
+      if (!ready) throw new Error('Packaged renderer or preload did not initialize.');
+    } finally { win.destroy(); db.close(); }
+    app.exit(0);
+  }).catch(error => { console.error(error); app.exit(1); });
+  process.once('exit', () => { try { rmSync(temp, { recursive: true, force: true }); } catch { /* Windows may still hold Chromium files. */ } });
+} else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => {
