@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { ScanResult } from '../src/shared';
-import type { LibraryStore } from '../src/main/database/library-store';
+import type { ScanRepository } from '../src/main/contracts/persistence';
 import { FileSystemLibraryService } from '../src/main/services/library/library-service';
 
-class RecordingStore implements LibraryStore {
+class RecordingStore implements ScanRepository {
   scans: ScanResult[] = [];
   saveScan(result: ScanResult) { this.scans.push(result); }
   loadLastScan() { return this.scans.at(-1) ?? null; }
@@ -23,7 +23,7 @@ test('completed scan is persisted and can be loaded', async () => {
   const root = await fixture();
   try {
     const store = new RecordingStore();
-    const library = new FileSystemLibraryService(store);
+    const library = new FileSystemLibraryService({ collections: store });
     assert.equal(await library.loadLastScan(), null);
     const result = await library.scanFolder(root);
     assert.equal(result.games.length, 1);
@@ -35,7 +35,7 @@ test('cancellation does not replace a saved collection', async () => {
   const root = await fixture();
   try {
     const store = new RecordingStore();
-    const library = new FileSystemLibraryService(store);
+    const library = new FileSystemLibraryService({ collections: store });
     const previous = await library.scanFolder(root);
     const controller = new AbortController();
     controller.abort();
@@ -49,7 +49,7 @@ test('invalid scan path does not overwrite persisted library', async () => {
   const root = await fixture();
   try {
     const store = new RecordingStore();
-    const library = new FileSystemLibraryService(store);
+    const library = new FileSystemLibraryService({ collections: store });
     const previous = await library.scanFolder(root);
     await assert.rejects(library.scanFolder(path.join(root, 'missing')));
     assert.equal(store.scans.length, 1);

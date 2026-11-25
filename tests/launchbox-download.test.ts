@@ -5,7 +5,7 @@ import os from 'node:os';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import { downloadLaunchBox, extractMetadataXml, locateMetadataXml, LAUNCHBOX_ARCHIVE_URL } from '../src/main/metadata/launchbox-download';
-import type { LibraryStore, LaunchBoxGame } from '../src/main/database/library-store';
+import type { LaunchBoxGame, LaunchBoxImportRepository } from '../src/main/contracts/persistence';
 
 function crc32(bytes: Buffer): number {
   let c = 0xffffffff;
@@ -40,12 +40,12 @@ function fakeStore() {
   let current = [{ id: 5, title: 'Original' }] as Array<Partial<LaunchBoxGame>>;
   let staging: Array<Partial<LaunchBoxGame>> = [];
   let abandoned = 0;
-  const store = {
+  const store: LaunchBoxImportRepository = {
     beginLaunchBoxImport() { staging = []; },
     addLaunchBoxGame(game: LaunchBoxGame) { staging.push(game); },
     finishLaunchBoxImport() { current = staging; staging = []; return current.length; },
     abortLaunchBoxImport() { staging = []; abandoned++; }
-  } as unknown as LibraryStore;
+  };
   return { store, games: () => current, aborted: () => abandoned };
 }
 const response = (bytes: Buffer) => new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Length': String(bytes.length) } });

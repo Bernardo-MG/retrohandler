@@ -4,7 +4,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import { registerLibraryIpc } from './ipc/library-ipc';
 import { FileSystemLibraryService } from './services/library/library-service';
-import { SqliteLibraryStore } from './database/library-store';
+import {
+  openDatabase,
+  createCollectionRepository,
+  createRomRepository,
+  createIdentificationRepository,
+  createMetadataRepository,
+  createLaunchBoxRepository
+} from './database';
 import { registerMetadataIpc } from './metadata/metadata-ipc';
 import { getArtwork, isArtworkId } from './metadata/artwork';
 import { registerExportIpc } from './export/export-ipc';
@@ -74,12 +81,21 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
   app.setPath('userData', temp);
   app.setPath('sessionData', temp);
   app.whenReady().then(async () => {
-    const db = new SqliteLibraryStore(path.join(temp, 'library.sqlite'));
+    const databasePath = path.join(temp, 'library.sqlite');
+    const database = openDatabase(databasePath);
+    const collections = createCollectionRepository(database);
+    const metadata = createMetadataRepository(database);
+    const library = new FileSystemLibraryService({
+      collections,
+      roms: createRomRepository(database),
+      identification: createIdentificationRepository(database),
+      systemOverrides: metadata
+    });
     const settings = new SettingsStore(path.join(temp, 'settings.json'));
     const artworkFolder = path.join(temp, 'artwork');
-    registerLibraryIpc(new FileSystemLibraryService(db));
-    registerSettingsIpc(settings, path.join(temp, 'library.sqlite'), artworkFolder);
-    db.listCollections();
+    registerLibraryIpc(library);
+    registerSettingsIpc(settings, databasePath, artworkFolder, metadata);
+    collections.listCollections();
     const win = new BrowserWindow({
       show: false,
       webPreferences: {
@@ -104,7 +120,7 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
       }
     } finally {
       win.destroy();
-      db.close();
+      database.close();
     }
     app.exit(0);
   }).catch(error => {
@@ -137,14 +153,22 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
   );
   app.whenReady().then(() => {
     const databasePath = path.join(app.getPath('userData'), 'library.sqlite');
-    const store = new SqliteLibraryStore(databasePath);
+    const database = openDatabase(databasePath);
+    const collections = createCollectionRepository(database);
+    const metadata = createMetadataRepository(database);
+    const library = new FileSystemLibraryService({
+      collections,
+      roms: createRomRepository(database),
+      identification: createIdentificationRepository(database),
+      systemOverrides: metadata
+    });
     const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
     nativeTheme.themeSource = settings.snapshot().settings.appearance.theme;
-    registerLibraryIpc(new FileSystemLibraryService(store));
+    registerLibraryIpc(library);
     const artworkFolder = path.join(app.getPath('userData'), 'artwork');
-    registerMetadataIpc(store, artworkFolder);
-    registerSettingsIpc(settings, databasePath, artworkFolder);
-    registerExportIpc(new FileSystemLibraryService(store), artworkFolder);
+    registerMetadataIpc(metadata, createLaunchBoxRepository(database), artworkFolder);
+    registerSettingsIpc(settings, databasePath, artworkFolder, metadata);
+    registerExportIpc(library, artworkFolder);
     protocol.handle(
       'retro-art',
       async request => {
@@ -164,7 +188,7 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
         }
       }
     );
-    app.once('before-quit', () => store.close());
+    app.once('before-quit', () => database.close());
     createWindow(settings);
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

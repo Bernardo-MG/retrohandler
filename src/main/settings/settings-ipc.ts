@@ -1,35 +1,21 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electron';
 import type { CacheCleanupReceipt, StorageInfo } from '../../shared';
-import { sql } from '../database/query-loader';
-import type { DatabaseHandle } from '../database/types';
+import type { ArtworkReferences } from '../contracts/persistence';
 import { cleanupArtworkCache, inspectArtworkCache } from './artwork-cache';
 import { SettingsStore } from './settings-store';
 import { restoreWindowBounds } from './window-bounds';
 
-/** Only a read-only connection to the existing application database is needed.
- * The renderer cannot supply paths, SQL, artwork IDs or deletion candidates. */
-function referencedArtwork(databasePath: string): Set<string> {
-  const Database = require('better-sqlite3') as new (filename: string, options: {
-    readonly: boolean;
-    fileMustExist: boolean
-  }) => DatabaseHandle;
-  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
-  try {
-    const rows = db.prepare(sql('metadata.referencedArtwork')).all() as {
-      id: string
-    }[];
-    return new Set(rows.map(row => row.id));
-  } finally {
-    db.close();
-  }
-}
-
-export function registerSettingsIpc(store: SettingsStore, databasePath: string, artworkPath: string): void {
+export function registerSettingsIpc(
+  store: SettingsStore,
+  databasePath: string,
+  artworkPath: string,
+  artworkReferences: ArtworkReferences
+): void {
   const storageInfo = (): StorageInfo => ({
     databasePath,
     settingsPath: store.filePath,
     artworkPath,
-    ...inspectArtworkCache(artworkPath, referencedArtwork(databasePath))
+    ...inspectArtworkCache(artworkPath, artworkReferences.getReferencedArtworkIds())
   });
   ipcMain.handle('settings:get', () => store.snapshot());
   ipcMain.handle(
@@ -86,8 +72,8 @@ export function registerSettingsIpc(store: SettingsStore, databasePath: string, 
         if (confirmation.response !== 1) {
           return { removedFiles: 0, removedBytes: 0, failedFiles: 0 };
         }
-        // Re-read SQLite after confirmation, and do not yield between reference check and deletion.
-        return cleanupArtworkCache(artworkPath, referencedArtwork(databasePath));
+        // Refresh artwork references after confirmation, and do not yield between reference check and deletion.
+        return cleanupArtworkCache(artworkPath, artworkReferences.getReferencedArtworkIds());
       } finally {
         cleaning = false;
       }

@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import type { DatabaseHandle, Statement } from './types';
 
 /** SQL definitions belong to their registering module, not to the registry. */
 export class QueryRegistry {
@@ -35,6 +34,15 @@ export class QueryRegistry {
     }
   }
 
+  /** Discover catalogs by filename in a caller-supplied directory. */
+  loadDirectory(root: string): void {
+    for (const entry of readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.isFile() && entry.name.endsWith('.sql')) {
+        this.load(path.basename(entry.name, '.sql'), path.join(root, entry.name));
+      }
+    }
+  }
+
   sql(name: string): string {
     const statement = this.queries.get(name);
     if (statement === undefined) {
@@ -55,59 +63,6 @@ export class QueryRegistry {
     });
     if (Object.keys(fragments).some((key) => !used.has(key)) || /\{\{|\}\}/.test(statement)) {
       throw new Error(`Invalid SQL template fragments: ${name}`);
-    }
-    return statement;
-  }
-}
-
-/** Core composition: discover built-in catalogs by filename, not by a name list. */
-export function createCoreQueryRegistry(): QueryRegistry {
-  const registry = new QueryRegistry();
-  const root = path.join(__dirname, 'queries');
-  for (const entry of readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (entry.isFile() && entry.name.endsWith('.sql')) {
-      registry.load(path.basename(entry.name, '.sql'), path.join(root, entry.name));
-    }
-  }
-  return registry;
-}
-
-let coreRegistry: QueryRegistry | undefined;
-function coreQueries(): QueryRegistry {
-  return (coreRegistry ??= createCoreQueryRegistry());
-}
-
-/** Resources are copied beside this module for development, tests and packaging. */
-export function readCanonicalSchema(): string {
-  return readFileSync(path.join(__dirname, 'schema', 'schema.sql'), 'utf8');
-}
-
-export function sql(name: string): string {
-  return coreQueries().sql(name);
-}
-
-export function renderQuery(name: string, fragments: Readonly<Record<string, string>>): string {
-  return coreQueries().render(name, fragments);
-}
-
-/** Reuse static statements for the lifetime of one SQLite connection. */
-export class PreparedStatements {
-  private readonly statements = new Map<string, Statement>();
-
-  constructor(
-    private readonly db: DatabaseHandle,
-    private readonly registry: QueryRegistry = coreQueries()
-  ) {}
-
-  get(name: string): Statement {
-    let statement = this.statements.get(name);
-    if (!statement) {
-      const text = this.registry.sql(name);
-      if (/\{\{|\}\}/.test(text)) {
-        throw new Error(`SQL template requires explicit fragments: ${name}`);
-      }
-      statement = this.db.prepare(text);
-      this.statements.set(name, statement);
     }
     return statement;
   }

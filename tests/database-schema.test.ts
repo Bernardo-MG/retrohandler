@@ -4,9 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
+import type { DatabaseHandle, Statement } from '../src/main/database/types';
+import { openTestRepositories, type TestRepositories } from './helpers/database-connection';
 import { SCHEMA_VERSION } from '../src/main/database/schema';
-import { PreparedStatements, renderQuery } from '../src/main/database/query-loader';
+import { PreparedStatements } from '../src/main/database/sql/prepared-statements';
+import { QueryRegistry } from '../src/main/database/sql/query-registry';
 import type { LibraryQuery, ScanResult } from '../src/shared';
 
 function adapter(file: string): DatabaseHandle {
@@ -48,12 +50,12 @@ function raw(file: string, run: (db: DatabaseSync) => void): void {
   }
 }
 
-function useStore(file: string, run: (store: SqliteLibraryStore) => void): void {
-  const store = new SqliteLibraryStore(file, adapter);
+function useStore(file: string, run: (store: TestRepositories) => void): void {
+  const store = openTestRepositories(file, adapter);
   try {
     run(store);
   } finally {
-    store.close();
+    store.database.close();
   }
 }
 
@@ -114,9 +116,9 @@ function populate(file: string): void {
   useStore(
     file,
     (store) => {
-      store.saveScan(scan);
-      store.renameCollection(SOURCE, 'My collection');
-      store.importDat({
+      store.collections.saveScan(scan);
+      store.collections.renameCollection(SOURCE, 'My collection');
+      store.identification.importDat({
         name: 'DAT',
         entries: [
           {
@@ -129,7 +131,7 @@ function populate(file: string): void {
           }
         ]
       });
-      store.saveIdentification(
+      store.identification.saveIdentification(
         SOURCE,
         [
           {
@@ -142,7 +144,7 @@ function populate(file: string): void {
           }
         ]
       );
-      store.saveMetadata(
+      store.metadata.saveMetadata(
         SOURCE,
         'a.nes',
         {
@@ -159,9 +161,9 @@ function populate(file: string): void {
           systemOverride: 'SNES'
         }
       );
-      store.beginLaunchBoxImport();
-      store.addLaunchBoxGame(GAME);
-      assert.equal(store.finishLaunchBoxImport(), 1);
+      store.launchBox.beginLaunchBoxImport();
+      store.launchBox.addLaunchBoxGame(GAME);
+      assert.equal(store.launchBox.finishLaunchBoxImport(), 1);
     }
   );
 }
@@ -197,7 +199,7 @@ test(
   'fresh database creates the complete initial schema at version 1',
   () => fixture((file) => {
     const statements: string[] = [];
-    const store = new SqliteLibraryStore(
+    const store = openTestRepositories(
       file,
       (filename) => {
         const db = adapter(filename);
@@ -209,7 +211,7 @@ test(
         return db;
       }
     );
-    store.close();
+    store.database.close();
     assert.equal(SCHEMA_VERSION, 1);
     assert.equal(statements.length, 1);
     assert.ok(!statements[0].includes('ALTER TABLE'));
@@ -221,7 +223,7 @@ test(
   'reopening the initial schema preserves records without executing schema DDL',
   () => fixture((file) => {
     populate(file);
-    const store = new SqliteLibraryStore(
+    const store = openTestRepositories(
       file,
       (filename) => {
         const db = adapter(filename);
@@ -232,18 +234,18 @@ test(
       }
     );
     try {
-      assert.equal(store.queryLibrary(query()).total, 2);
-      assert.equal(store.listCollections()[0].label, 'My collection');
-      assert.equal(store.matchFingerprint(HASHES).title, 'Matched');
-      assert.equal(store.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
-      const game = store.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes');
+      assert.equal(store.roms.queryLibrary(query()).total, 2);
+      assert.equal(store.collections.listCollections()[0].label, 'My collection');
+      assert.equal(store.identification.matchFingerprint(HASHES).title, 'Matched');
+      assert.equal(store.metadata.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
+      const game = store.roms.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes');
       assert.equal(game?.identificationStatus, 'verified');
       assert.equal(game?.metadata?.description, 'Keep this');
       assert.equal(game?.metadata?.providerId, '1');
       assert.equal(game?.system, 'SNES');
-      assert.equal(store.getLaunchBoxGame(1)?.title, GAME.title);
+      assert.equal(store.launchBox.getLaunchBoxGame(1)?.title, GAME.title);
     } finally {
-      store.close();
+      store.database.close();
     }
     assertCanonical(file);
   })
@@ -258,7 +260,7 @@ for (const version of [1, 6]) {
         db.prepare('INSERT INTO schema_version VALUES (?)').run(version);
         db.prepare('INSERT INTO saved VALUES (?)').run('keep');
       });
-      assert.throws(() => new SqliteLibraryStore(file, adapter), /Pre-release RetroHandler database/);
+      assert.throws(() => openTestRepositories(file, adapter), /Pre-release RetroHandler database/);
       raw(file, (db) => {
         assert.equal(db.prepare('SELECT version FROM schema_version').get()?.version, version);
         assert.equal(db.prepare('SELECT value FROM saved').get()?.value, 'keep');
@@ -273,9 +275,9 @@ test(
   'future and unversioned nonempty databases are rejected without creating schema tables',
   () => fixture((file) => {
     raw(file, (db) => db.exec("CREATE TABLE unrelated (value TEXT); INSERT INTO unrelated VALUES ('keep')"));
-    assert.throws(() => new SqliteLibraryStore(file, adapter), /unversioned, nonempty/);
+    assert.throws(() => openTestRepositories(file, adapter), /unversioned, nonempty/);
     raw(file, (db) => db.exec('PRAGMA user_version = 99'));
-    assert.throws(() => new SqliteLibraryStore(file, adapter), /Unsupported.*99/);
+    assert.throws(() => openTestRepositories(file, adapter), /Unsupported.*99/);
     raw(file, (db) => {
       assert.equal(db.prepare('SELECT value FROM unrelated').get()?.value, 'keep');
       assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 99);
@@ -288,7 +290,7 @@ test(
   'failed initial version assignment rolls back schema creation and can be retried',
   () => fixture((file) => {
     assert.throws(
-      () => new SqliteLibraryStore(
+      () => openTestRepositories(
         file,
         (filename) => {
           const db = adapter(filename);
@@ -326,18 +328,18 @@ test(
           search: '_',
           identification: 'verified' as const
         };
-        assert.equal(store.queryLibrary(query(filter)).total, 1);
-        assert.equal(store.bulkAssignSystem({ scope: 'filtered', filter }, 'Game Boy'), 1);
-        assert.equal(store.queryLibrary(query({ system: 'Game Boy', search: '_' })).total, 1);
-        assert.equal(store.queryLibrary(query({ identification: 'pending' })).total, 1);
-        assert.equal(store.queryLibrary(query({ search: "%' OR 1=1 --" })).total, 0);
+        assert.equal(store.roms.queryLibrary(query(filter)).total, 1);
+        assert.equal(store.metadata.bulkAssignSystem({ scope: 'filtered', filter }, 'Game Boy'), 1);
+        assert.equal(store.roms.queryLibrary(query({ system: 'Game Boy', search: '_' })).total, 1);
+        assert.equal(store.roms.queryLibrary(query({ identification: 'pending' })).total, 1);
+        assert.equal(store.roms.queryLibrary(query({ search: "%' OR 1=1 --" })).total, 0);
         assert.throws(
-          () => store.queryLibrary(query({ sort: 'constructor' as LibraryQuery['sort'] })),
+          () => store.roms.queryLibrary(query({ sort: 'constructor' as LibraryQuery['sort'] })),
           /Invalid sort order/
         );
-        assert.equal(store.queryLibrary(query()).total, 2);
-        assert.equal(store.listSystems(SOURCE).find((row) => row.system === 'Game Boy')?.count, 1);
-        assert.equal(store.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
+        assert.equal(store.roms.queryLibrary(query()).total, 2);
+        assert.equal(store.roms.listSystems(SOURCE).find((row) => row.system === 'Game Boy')?.count, 1);
+        assert.equal(store.metadata.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
       }
     );
   })
@@ -349,12 +351,14 @@ test(
     useStore(file, () => undefined);
     const db = adapter(file);
     try {
-      const statements = new PreparedStatements(db);
+      const registry = new QueryRegistry();
+      registry.loadDirectory(path.join(__dirname, '../src/main/database/queries'));
+      const statements = new PreparedStatements(db, registry);
       assert.equal(statements.get('collections.lastScan'), statements.get('collections.lastScan'));
       assert.throws(() => statements.get('library.pageGames'), /requires explicit fragments/);
-      assert.throws(() => renderQuery('library.pageGames', { where: '' }), /Missing SQL fragment/);
+      assert.throws(() => registry.render('library.pageGames', { where: '' }), /Missing SQL fragment/);
       assert.throws(
-        () => renderQuery('library.countGames', { where: '', extra: '' }),
+        () => registry.render('library.countGames', { where: '', extra: '' }),
         /Invalid SQL template fragments/
       );
       assert.equal(statements.get('collections.listCollections').all().length, 0);
@@ -371,26 +375,26 @@ test(
     useStore(
       file,
       (store) => {
-        assert.deepEqual(store.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs), HASHES);
-        assert.equal(store.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs + 1), null);
-        assert.equal(store.entriesForIdentification(SOURCE).length, 2);
+        assert.deepEqual(store.identification.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs), HASHES);
+        assert.equal(store.identification.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs + 1), null);
+        assert.equal(store.identification.entriesForIdentification(SOURCE).length, 2);
         const target = { source: SOURCE, relativePath: 'a.nes' };
-        assert.equal(store.bulkAssignSystem({ scope: 'selected', targets: [target, target] }, 'Game Boy'), 1);
-        const metadata = store.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes')?.metadata;
+        assert.equal(store.metadata.bulkAssignSystem({ scope: 'selected', targets: [target, target] }, 'Game Boy'), 1);
+        const metadata = store.roms.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes')?.metadata;
         assert.equal(metadata?.description, 'Keep this');
         assert.equal(metadata?.systemOverride, 'Game Boy');
-        assert.equal(store.bulkAssignSystem({ scope: 'selected', targets: [target] }, null), 1);
-        assert.equal(store.queryLibrary(query({ system: 'NES' })).total, 2);
-        store.beginLaunchBoxImport();
-        store.addLaunchBoxGame({ ...GAME, id: 2, title: 'Cancelled' });
-        store.abortLaunchBoxImport();
-        assert.equal(store.getLaunchBoxGame(2), null);
-        assert.equal(store.getLaunchBoxGame(1)?.title, 'Example');
-        store.removeCollection(SOURCE);
-        assert.equal(store.queryLibrary(query()).total, 0);
-        assert.equal(store.getArtworkId(SOURCE, 'a.nes'), null);
-        assert.equal(store.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs), null);
-        assert.equal(store.matchFingerprint(HASHES).title, 'Matched');
+        assert.equal(store.metadata.bulkAssignSystem({ scope: 'selected', targets: [target] }, null), 1);
+        assert.equal(store.roms.queryLibrary(query({ system: 'NES' })).total, 2);
+        store.launchBox.beginLaunchBoxImport();
+        store.launchBox.addLaunchBoxGame({ ...GAME, id: 2, title: 'Cancelled' });
+        store.launchBox.abortLaunchBoxImport();
+        assert.equal(store.launchBox.getLaunchBoxGame(2), null);
+        assert.equal(store.launchBox.getLaunchBoxGame(1)?.title, 'Example');
+        store.collections.removeCollection(SOURCE);
+        assert.equal(store.roms.queryLibrary(query()).total, 0);
+        assert.equal(store.metadata.getArtworkId(SOURCE, 'a.nes'), null);
+        assert.equal(store.identification.cachedFingerprint(SOURCE, 'a.nes', HASHES.size, HASHES.modifiedMs), null);
+        assert.equal(store.identification.matchFingerprint(HASHES).title, 'Matched');
       }
     );
     assertCanonical(file);

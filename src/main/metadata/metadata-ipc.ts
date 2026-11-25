@@ -1,6 +1,6 @@
 import { dialog, ipcMain } from 'electron';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
-import type { LibraryStore } from '../database/library-store';
+import type { LaunchBoxRepository, MetadataRepository } from '../contracts/persistence';
 import { importLaunchBoxXml } from './launchbox';
 import { downloadLaunchBox } from './launchbox-download';
 import { findLibretroCover, searchLibretroCovers } from './libretro';
@@ -29,8 +29,11 @@ function fields(value: unknown): GameMetadataInput {
     throw new Error('Invalid system override.');
   return input as unknown as GameMetadataInput;
 }
-export function registerMetadataIpc(store: LibraryStore, artworkFolder: string): void {
-  if (!store.saveMetadata) throw new Error('Metadata storage unavailable.');
+export function registerMetadataIpc(
+  metadata: MetadataRepository,
+  launchBox: LaunchBoxRepository,
+  artworkFolder: string
+): void {
   let importing = false;
   const updates = new Map<number, AbortController>();
   ipcMain.handle('launchbox:download', async event => {
@@ -42,7 +45,7 @@ export function registerMetadataIpc(store: LibraryStore, artworkFolder: string):
     const onDestroyed = () => controller.abort();
     sender.once('destroyed', onDestroyed);
     try {
-      const count = await downloadLaunchBox(store, { signal: controller.signal, onProgress: update => {
+      const count = await downloadLaunchBox(launchBox, { signal: controller.signal, onProgress: update => {
         if (!sender.isDestroyed()) sender.send('launchbox:progress', update);
       } });
       return { count };
@@ -63,27 +66,26 @@ export function registerMetadataIpc(store: LibraryStore, artworkFolder: string):
     const selection = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{name:'LaunchBox Metadata XML',extensions:['xml']}] });
     if (selection.canceled || !selection.filePaths[0]) return null;
     importing = true;
-    try { return { count: await importLaunchBoxXml(selection.filePaths[0], store) }; }
+    try { return { count: await importLaunchBoxXml(selection.filePaths[0], launchBox) }; }
     finally { importing = false; }
   });
   ipcMain.handle('launchbox:search', (_event, query: unknown, system: unknown) => {
     if (typeof query !== 'string' || query.length > 120 || typeof system !== 'string' || system.length > 120)
       throw new Error('Invalid LaunchBox search.');
-    if (!store.searchLaunchBox) throw new Error('LaunchBox catalogue unavailable.');
-    return store.searchLaunchBox(query, system);
+    return launchBox.searchLaunchBox(query, system);
   });
   ipcMain.handle('launchbox:apply', (_event, input: unknown, id: unknown) => {
     const game = target(input);
-    if (!Number.isSafeInteger(id) || Number(id) <= 0 || !store.getLaunchBoxGame) throw new Error('Invalid LaunchBox match.');
-    const found = store.getLaunchBoxGame(Number(id));
+    if (!Number.isSafeInteger(id) || Number(id) <= 0) throw new Error('Invalid LaunchBox match.');
+    const found = launchBox.getLaunchBoxGame(Number(id));
     if (!found) throw new Error('LaunchBox game was not found in the imported catalogue.');
     // Never change the system assignment; preserve cached cover art when possible.
 
-    return store.saveMetadata!(game.source, game.relativePath, {
+    return metadata.saveMetadata(game.source, game.relativePath, {
       title: found.title, description: found.description, released: found.released,
       developer: found.developer, publisher: found.publisher, genre: found.genre,
       provider:'launchbox', providerId:String(found.id), providerSlug:null,
-      artworkId: store.getArtworkId?.(game.source, game.relativePath) ?? null
+      artworkId: metadata.getArtworkId(game.source, game.relativePath)
     });
   });
   ipcMain.handle('libretro:artwork', async (_event, system: unknown, names: unknown) => {
@@ -99,6 +101,6 @@ export function registerMetadataIpc(store: LibraryStore, artworkFolder: string):
   });
   ipcMain.handle('metadata:save', (_event, input: unknown, data: unknown) => {
     const game = target(input);
-    return store.saveMetadata!(game.source, game.relativePath, fields(data));
+    return metadata.saveMetadata(game.source, game.relativePath, fields(data));
   });
 }

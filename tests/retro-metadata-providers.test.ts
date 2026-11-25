@@ -4,7 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
+import type { DatabaseHandle, Statement } from '../src/main/database/types';
+import { openTestRepositories } from './helpers/database-connection';
 import { importLaunchBoxXml, parseLaunchBoxGame, xmlText } from '../src/main/metadata/launchbox';
 import { findLibretroCover, libretroCandidates, libretroPlatform } from '../src/main/metadata/libretro';
 import { getArtwork } from '../src/main/metadata/artwork';
@@ -33,31 +34,31 @@ test('LaunchBox import is searchable offline, persists and protects existing met
     const file=path.join(dir,'Metadata.xml');
     await writeFile(file, '<LaunchBox>'+sample(17,'A &amp; B')+sample(18,'A &amp; Better','Super Nintendo Entertainment System')+'</LaunchBox>');
     const dbfile=path.join(dir,'library.sqlite');
-    const store=new SqliteLibraryStore(dbfile,adapter);
-    store.saveScan({source:'/games',scannedAt:'2026-01-01',ignored:0,games:[{id:'1',name:'Local game',system:'Nintendo Entertainment System',relativePath:'a.nes',extension:'.nes',bytes:1}]});
-    store.saveMetadata('/games','a.nes',{title:'Manual title',description:'Custom',released:'1991',developer:'',publisher:'',genre:'',provider:'manual',providerId:null,providerSlug:null,artworkId:null,systemOverride:'Super Nintendo'});
-    assert.equal(await importLaunchBoxXml(file,store),2);
-    assert.equal(store.searchLaunchBox('A & B','Nintendo Entertainment System')[0].id,17);
-    assert.equal(store.getLaunchBoxGame(17)?.description,'Good & old');
-    assert.equal(store.queryLibrary({source:'/games',search:'',system:null,sort:'name',descending:false,offset:0,limit:10}).items[0].metadata?.title,'Manual title');
-    store.close();
-    const reopened=new SqliteLibraryStore(dbfile,adapter);
-    assert.equal(reopened.searchLaunchBox('A &','Super Nintendo Entertainment System').length,2);
-    reopened.close();
+    const store=openTestRepositories(dbfile,adapter);
+    store.collections.saveScan({source:'/games',scannedAt:'2026-01-01',ignored:0,games:[{id:'1',name:'Local game',system:'Nintendo Entertainment System',relativePath:'a.nes',extension:'.nes',bytes:1}]});
+    store.metadata.saveMetadata('/games','a.nes',{title:'Manual title',description:'Custom',released:'1991',developer:'',publisher:'',genre:'',provider:'manual',providerId:null,providerSlug:null,artworkId:null,systemOverride:'Super Nintendo'});
+    assert.equal(await importLaunchBoxXml(file,store.launchBox),2);
+    assert.equal(store.launchBox.searchLaunchBox('A & B','Nintendo Entertainment System')[0].id,17);
+    assert.equal(store.launchBox.getLaunchBoxGame(17)?.description,'Good & old');
+    assert.equal(store.roms.queryLibrary({source:'/games',search:'',system:null,sort:'name',descending:false,offset:0,limit:10}).items[0].metadata?.title,'Manual title');
+    store.database.close();
+    const reopened=openTestRepositories(dbfile,adapter);
+    assert.equal(reopened.launchBox.searchLaunchBox('A &','Super Nintendo Entertainment System').length,2);
+    reopened.database.close();
   } finally {await rm(dir,{recursive:true,force:true});}
 });
 
 test('malformed import never replaces an existing LaunchBox catalogue', async () => {
   const dir=await mkdtemp(path.join(os.tmpdir(),'rh-launchbox-'));
   try {
-    const file=path.join(dir,'catalogue.xml'), store=new SqliteLibraryStore(path.join(dir,'library.sqlite'),adapter);
+    const file=path.join(dir,'catalogue.xml'), store=openTestRepositories(path.join(dir,'library.sqlite'),adapter);
     await writeFile(file,sample(1,'Existing'));
-    assert.equal(await importLaunchBoxXml(file,store),1);
+    assert.equal(await importLaunchBoxXml(file,store.launchBox),1);
     await writeFile(file,'<!DOCTYPE foo [<!ENTITY x "bad">]>'+sample(2,'New'));
-    await assert.rejects(importLaunchBoxXml(file,store),/entities/);
-    assert.equal(store.getLaunchBoxGame(1)?.title,'Existing');
-    assert.equal(store.getLaunchBoxGame(2),null);
-    store.close();
+    await assert.rejects(importLaunchBoxXml(file,store.launchBox),/entities/);
+    assert.equal(store.launchBox.getLaunchBoxGame(1)?.title,'Existing');
+    assert.equal(store.launchBox.getLaunchBoxGame(2),null);
+    store.database.close();
   } finally {await rm(dir,{recursive:true,force:true});}
 });
 

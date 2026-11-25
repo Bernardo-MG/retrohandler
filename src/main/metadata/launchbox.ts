@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import type { LaunchBoxGame, LibraryStore } from '../database/library-store';
+import type { LaunchBoxGame, LaunchBoxImportRepository } from '../contracts/persistence';
 
 const MAX_FILE_BYTES = 750 * 1024 * 1024;
 const MAX_GAME_BYTES = 256 * 1024;
@@ -34,7 +34,7 @@ export function parseLaunchBoxGame(xml: string): LaunchBoxGame | null {
 }
 
 /** Stream large extracted LaunchBox Metadata.xml without loading it all into memory. */
-export async function importLaunchBoxXml(file: string, store: LibraryStore, options: { signal?: AbortSignal; onProgress?: (count: number) => void } = {}): Promise<number> {
+export async function importLaunchBoxXml(file: string, store: LaunchBoxImportRepository, options: { signal?: AbortSignal; onProgress?: (count: number) => void } = {}): Promise<number> {
   if (!store.beginLaunchBoxImport || !store.addLaunchBoxGame || !store.finishLaunchBoxImport || !store.abortLaunchBoxImport)
     throw new Error('LaunchBox import storage unavailable.');
   const info = await stat(file);

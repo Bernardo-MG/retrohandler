@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import { PreparedStatements, QueryRegistry, createCoreQueryRegistry } from '../src/main/database/query-loader';
+import { PreparedStatements } from '../src/main/database/sql/prepared-statements';
+import { QueryRegistry } from '../src/main/database/sql/query-registry';
 import type { DatabaseHandle, Statement } from '../src/main/database/types';
 
 function fixture(run: (file: (name: string, contents: string) => string) => void) {
@@ -77,8 +78,19 @@ test('prepared statements are cached per connection and use bound parameters', (
 }));
 
 test('built-in catalogs are discovered from packaged SQL resources', () => {
-  const registry = createCoreQueryRegistry();
+  const registry = new QueryRegistry();
+  registry.loadDirectory(path.join(__dirname, '../src/main/database/queries'));
   assert.match(registry.sql('metadata.getArtworkId'), /SELECT/i);
   assert.throws(() => registry.sql('legacy.addCollectionLabel'), /Unknown SQL statement/);
   assert.match(registry.sql('schema.readVersion'), /PRAGMA user_version/i);
 });
+
+test('directory discovery uses only the supplied directory and independent registries', () => fixture((file) => {
+  const catalog = file('custom.sql', '-- name: read\nSELECT 42;');
+  file('ignored.txt', 'not SQL');
+  const first = new QueryRegistry();
+  const second = new QueryRegistry();
+  first.loadDirectory(path.dirname(catalog));
+  assert.equal(first.sql('custom.read'), 'SELECT 42;');
+  assert.throws(() => second.sql('custom.read'), /Unknown SQL statement/);
+}));

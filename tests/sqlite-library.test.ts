@@ -3,7 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
+import type { DatabaseHandle, Statement } from '../src/main/database/types';
+import { openTestRepositories } from './helpers/database-connection';
 import type { ScanResult } from '../src/shared';
 
 // Node 22+ includes a SQLite implementation that can exercise the real SQL,
@@ -45,28 +46,28 @@ test('SQLite saves and restores a collection across DB reopen', { skip: !Databas
   const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-db-'));
   const file = path.join(root, 'app', 'library.sqlite');
   try {
-    const first = new SqliteLibraryStore(file, testDatabase);
-    first.saveScan(result('C:\\roms', ['Game A', 'Game B']));
-    first.close();
-    const second = new SqliteLibraryStore(file, testDatabase);
-    const restored = second.loadLastScan();
+    const first = openTestRepositories(file, testDatabase);
+    first.collections.saveScan(result('C:\\roms', ['Game A', 'Game B']));
+    first.database.close();
+    const second = openTestRepositories(file, testDatabase);
+    const restored = second.collections.loadLastScan();
     assert.deepEqual(restored?.games.map(game => game.name), ['Game A', 'Game B']);
     assert.equal(restored?.source, 'C:\\roms');
-    second.close();
+    second.database.close();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('SQLite rescan updates and removes entries, preserving unseen files after warnings', { skip: !DatabaseSync }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-db-'));
   try {
-    const store = new SqliteLibraryStore(path.join(root, 'library.sqlite'), testDatabase);
-    store.saveScan(result('/roms', ['A', 'B']));
-    store.saveScan(result('/roms', ['A'], [{ relativePath: 'unreadable', message: 'permission denied' }]));
-    assert.deepEqual(store.loadLastScan()?.games.map(g => g.name), ['A', 'B']);
-    store.saveScan(result('/roms', ['A', 'C']));
-    assert.deepEqual(store.loadLastScan()?.games.map(g => g.name), ['A', 'C']);
-    store.saveScan(result('/roms', ['A', 'C']));
-    assert.equal(store.loadLastScan()?.games.length, 2);
-    store.close();
+    const store = openTestRepositories(path.join(root, 'library.sqlite'), testDatabase);
+    store.collections.saveScan(result('/roms', ['A', 'B']));
+    store.collections.saveScan(result('/roms', ['A'], [{ relativePath: 'unreadable', message: 'permission denied' }]));
+    assert.deepEqual(store.collections.loadLastScan()?.games.map(g => g.name), ['A', 'B']);
+    store.collections.saveScan(result('/roms', ['A', 'C']));
+    assert.deepEqual(store.collections.loadLastScan()?.games.map(g => g.name), ['A', 'C']);
+    store.collections.saveScan(result('/roms', ['A', 'C']));
+    assert.equal(store.collections.loadLastScan()?.games.length, 2);
+    store.database.close();
   } finally { await rm(root, { recursive: true, force: true }); }
 });

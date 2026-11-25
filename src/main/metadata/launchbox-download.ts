@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createInflateRaw } from 'node:zlib';
-import type { LibraryStore } from '../database/library-store';
+import type { LaunchBoxImportRepository } from '../contracts/persistence';
 import { importLaunchBoxXml } from './launchbox';
 
 export const LAUNCHBOX_ARCHIVE_URL = 'https://gamesdb.launchbox-app.com/Metadata.zip';
@@ -121,7 +121,7 @@ export async function extractMetadataXml(zip: string, xml: string, options: Laun
 }
 
 /** Downloads only from the fixed official URL. All temporary files are removed on success/failure/cancellation. */
-export async function downloadLaunchBox(store: LibraryStore, options: LaunchBoxDownloadOptions = {}): Promise<number> {
+export async function downloadLaunchBox(store: LaunchBoxImportRepository, options: LaunchBoxDownloadOptions = {}): Promise<number> {
   cancelled(options.signal);
   const folder = await mkdtemp(path.join(tmpdir(), 'retrohandler-launchbox-'));
   try {
