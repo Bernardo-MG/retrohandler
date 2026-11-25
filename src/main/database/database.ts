@@ -3,7 +3,6 @@ import path from 'node:path';
 import { initializeSchema } from './schema';
 import type { DatabaseFactory, DatabaseHandle } from './types';
 
-/** The database lives outside the ROM collection. Native SQLite stays in main. */
 export function openDatabase(filePath: string, createDatabase?: DatabaseFactory): DatabaseHandle {
   mkdirSync(path.dirname(filePath), { recursive: true });
   const db = createDatabase ? createDatabase(filePath) : openNativeDatabase(filePath);
