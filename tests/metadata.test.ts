@@ -19,16 +19,12 @@ const source = '/games';
 function scan(names: string[]) { return { source, scannedAt: '2026-11-24T00:00:00Z', ignored: 0, games: names.map(name => ({ id: name, name, system: 'NES', relativePath: name+'.nes', extension: '.nes', bytes: 100 })) }; }
 const query: LibraryQuery = { source, search: '', system: null, sort: 'name', descending: false, limit: 10, offset: 0 };
 
-test('schema v3 migrates to v4, metadata survives reopen/rescan, and removal cascades', async () => {
+test('metadata survives reopen/rescan, and removal cascades', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-metadata-'));
   const file = path.join(dir, 'library.sqlite');
   try {
-    // Simulate existing v3 created by the previous patch.
-    const old = new SqliteLibraryStore(file, adapter);
-    old.saveScan(scan(['one', 'two'])); old.close();
-    const raw = new DatabaseSync(file);
-    raw.exec('DROP TABLE rom_metadata; UPDATE schema_version SET version=3;'); raw.close();
     const store = new SqliteLibraryStore(file, adapter);
+    store.saveScan(scan(['one', 'two']));
     const saved = store.saveMetadata(source, 'one.nes', input);
     assert.equal(saved.title, input.title);
     assert.equal(store.queryLibrary(query).items.find(x => x.name === 'one')?.metadata?.title, 'Example Game');
@@ -52,6 +48,7 @@ test('manual metadata validates bad input and artwork names', async () => {
     const store = new SqliteLibraryStore(path.join(dir, 'db.sqlite'), adapter);
     store.saveScan(scan(['one']));
     assert.throws(() => store.saveMetadata(source, 'one.nes', { ...input, title: '' }), /Invalid/);
+    assert.throws(() => store.saveMetadata(source, 'one.nes', { ...input, provider: 'retired-provider' as 'manual' }), /Invalid/);
     assert.throws(() => store.saveMetadata(source, 'one.nes', { ...input, artworkId: '../../evil.png' }), /Invalid/);
     const id = `${'a'.repeat(64)}.jpg`;
     assert.equal(isArtworkId(id), true);
@@ -71,37 +68,7 @@ test('artwork cache accepts verified images and preserves them for later reuse',
   } finally { await rm(root,{recursive:true,force:true}); }
 });
 
-test('v5 to v6 retires unsupported provider references without losing metadata or artwork', async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-provider-migration-'));
-  const file = path.join(dir,'library.sqlite');
-  try {
-    const initial = new SqliteLibraryStore(file,adapter);
-    initial.saveScan(scan(['old','launch']));
-    initial.saveMetadata(source,'old.nes',{...input,artworkId:`${'a'.repeat(64)}.png`,systemOverride:'Super Nintendo'});
-    initial.saveMetadata(source,'launch.nes',{...input,provider:'launchbox',providerId:'42'});
-    initial.close();
-    const old = new DatabaseSync(file);
-    old.exec(`UPDATE rom_metadata SET provider='retired-provider', provider_id='123', provider_slug='old-link' WHERE relative_path='old.nes';
-      UPDATE schema_version SET version=5;`);
-    old.close();
-    const migrated = new SqliteLibraryStore(file,adapter);
-    const oldGame = migrated.queryLibrary(query).items.find(x => x.relativePath==='old.nes');
-    assert.equal(oldGame?.metadata?.provider,'manual');
-    assert.equal(oldGame?.metadata?.providerId,null);
-    assert.equal(oldGame?.metadata?.providerSlug,null);
-    assert.equal(oldGame?.metadata?.title,input.title);
-    assert.equal(oldGame?.metadata?.systemOverride,'Super Nintendo');
-    assert.equal(oldGame?.metadata?.artworkId,`${'a'.repeat(64)}.png`);
-    assert.equal(migrated.queryLibrary(query).items.find(x => x.relativePath==='launch.nes')?.metadata?.provider,'launchbox');
-    assert.throws(() => migrated.saveMetadata(source,'old.nes',{...input,provider:'retired-provider' as 'manual'}),/Invalid/);
-    migrated.close();
-    const raw = new DatabaseSync(file);
-    assert.equal((raw.prepare('SELECT version FROM schema_version').get() as {version:number}).version,6);
-    raw.close();
-  } finally { await rm(dir,{recursive:true,force:true}); }
-});
-
-test('v4 to v5 migration preserves metadata and manual system across rescans and reopen', async () => {
+test('metadata and manual system survive rescans and reopen', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-system-'));
   const file = path.join(dir, 'library.sqlite');
   try {
@@ -109,23 +76,6 @@ test('v4 to v5 migration preserves metadata and manual system across rescans and
     initial.saveScan(scan(['one', 'two']));
     initial.saveMetadata(source, 'one.nes', input);
     initial.close();
-    // Simulate the old v4 schema with an existing metadata row.
-    const old = new DatabaseSync(file);
-    old.exec(`CREATE TABLE rom_metadata_old AS SELECT source_root, relative_path, title, description,
-      released, developer, publisher, genre, provider, provider_id, provider_slug, artwork_id FROM rom_metadata;
-      DROP TABLE rom_metadata;
-      CREATE TABLE rom_metadata (
-        source_root TEXT NOT NULL, relative_path TEXT NOT NULL,
-        title TEXT NOT NULL, description TEXT NOT NULL, released TEXT NOT NULL,
-        developer TEXT NOT NULL, publisher TEXT NOT NULL, genre TEXT NOT NULL,
-        provider TEXT NOT NULL, provider_id TEXT, provider_slug TEXT, artwork_id TEXT,
-        PRIMARY KEY(source_root, relative_path),
-        FOREIGN KEY(source_root, relative_path) REFERENCES rom_files(source_root, relative_path) ON DELETE CASCADE
-      );
-      INSERT INTO rom_metadata SELECT * FROM rom_metadata_old;
-      DROP TABLE rom_metadata_old;
-      UPDATE schema_version SET version=4;`);
-    old.close();
     const store = new SqliteLibraryStore(file, adapter);
     assert.equal(store.queryLibrary(query).items[0].metadata?.description, input.description);
     store.saveMetadata(source, 'one.nes', { ...input, systemOverride: 'Super Nintendo' });

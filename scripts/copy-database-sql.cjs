@@ -13,7 +13,7 @@ function copyDatabaseSql(target) {
     throw new Error('Usage: copy-database-sql.cjs electron|tests');
   }
   const destination = targets[target];
-  for (const directory of ['schema', 'queries', 'migrations']) {
+  for (const directory of ['schema', 'queries']) {
     const from = path.join(source, directory);
     const to = path.join(destination, directory);
     fs.mkdirSync(to, { recursive: true });

@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { SqliteLibraryStore, type DatabaseHandle, type Statement } from '../src/main/database/library-store';
 import { SCHEMA_VERSION } from '../src/main/database/schema';
-import { PreparedStatements, renderQuery, sql } from '../src/main/database/query-loader';
+import { PreparedStatements, renderQuery } from '../src/main/database/query-loader';
 import type { LibraryQuery, ScanResult } from '../src/shared';
 
 function adapter(file: string): DatabaseHandle {
@@ -174,16 +174,14 @@ const TABLES = [
   'launchbox_staging',
   'rom_files',
   'rom_identifications',
-  'rom_metadata',
-  'schema_version'
+  'rom_metadata'
 ];
 
 function assertCanonical(file: string): void {
   raw(
     file,
     (db) => {
-      const versions = db.prepare('SELECT version FROM schema_version').all();
-      assert.deepEqual(versions.map((row) => row.version), [SCHEMA_VERSION]);
+      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, SCHEMA_VERSION);
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT GLOB 'sqlite_*' ORDER BY name").all();
       assert.deepEqual(tables.map((row) => row.name), TABLES);
       const metadataColumns = db.prepare('PRAGMA table_info(rom_metadata)').all();
@@ -196,7 +194,7 @@ function assertCanonical(file: string): void {
 }
 
 test(
-  'fresh database creates the complete current schema without intermediate migrations',
+  'fresh database creates the complete initial schema at version 1',
   () => fixture((file) => {
     const statements: string[] = [];
     const store = new SqliteLibraryStore(
@@ -212,153 +210,106 @@ test(
       }
     );
     store.close();
-    assert.equal(SCHEMA_VERSION, 6);
+    assert.equal(SCHEMA_VERSION, 1);
     assert.equal(statements.length, 1);
     assert.ok(!statements[0].includes('ALTER TABLE'));
     assertCanonical(file);
   })
 );
 
-// Simulate historical layouts by removing features that did not exist yet.
-// Seed real data first, then compare the version-appropriate records after reopening.
-for (const version of [1, 2, 3, 4, 5, 6]) {
+test(
+  'reopening the initial schema preserves records without executing schema DDL',
+  () => fixture((file) => {
+    populate(file);
+    const store = new SqliteLibraryStore(
+      file,
+      (filename) => {
+        const db = adapter(filename);
+        db.exec = () => {
+          throw new Error('Existing databases must not execute schema DDL');
+        };
+        return db;
+      }
+    );
+    try {
+      assert.equal(store.queryLibrary(query()).total, 2);
+      assert.equal(store.listCollections()[0].label, 'My collection');
+      assert.equal(store.matchFingerprint(HASHES).title, 'Matched');
+      assert.equal(store.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
+      const game = store.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes');
+      assert.equal(game?.identificationStatus, 'verified');
+      assert.equal(game?.metadata?.description, 'Keep this');
+      assert.equal(game?.metadata?.providerId, '1');
+      assert.equal(game?.system, 'SNES');
+      assert.equal(store.getLaunchBoxGame(1)?.title, GAME.title);
+    } finally {
+      store.close();
+    }
+    assertCanonical(file);
+  })
+);
+
+for (const version of [1, 6]) {
   test(
-    `schema ${version} opens as canonical v6 and preserves existing records`,
+    `pre-release database version ${version} is rejected without overwriting records`,
     () => fixture((file) => {
-      populate(file);
-      raw(
-        file,
-        (db) => {
-          db.exec('PRAGMA foreign_keys = OFF');
-          if (version < 4) {
-            db.exec('DROP TABLE rom_metadata');
-          } else if (version === 4) {
-            db.exec('ALTER TABLE rom_metadata DROP COLUMN system_override');
-          }
-          if (version < 3) {
-            db.exec('DROP TABLE rom_identifications; DROP TABLE dat_entries; DROP TABLE dat_sets');
-          }
-          if (version === 1) {
-            db.exec('ALTER TABLE collections DROP COLUMN label');
-          }
-          if (version <= 3) {
-            db.exec('DROP TABLE launchbox_games; DROP TABLE launchbox_staging');
-          }
-          if (version === 4 || version === 5) {
-            db.exec("UPDATE rom_metadata SET provider = 'obsolete', provider_id = 'old', provider_slug = 'old'");
-          }
-          db.prepare('UPDATE schema_version SET version = ?').run(version);
-        }
-      );
-      useStore(
-        file,
-        (store) => {
-          assert.equal(store.queryLibrary(query()).total, 2);
-          assert.equal(store.listCollections()[0].label, version === 1 ? 'roms' : 'My collection');
-          assert.equal(store.matchFingerprint(HASHES).title, version < 3 ? null : 'Matched');
-          const game = store.queryLibrary(query()).items.find((entry) => entry.relativePath === 'a.nes');
-          assert.equal(game?.identificationStatus, version < 3 ? 'pending' : 'verified');
-          assert.equal(game?.metadata?.description, version < 4 ? undefined : 'Keep this');
-          if (version >= 4) {
-            assert.equal(store.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
-            assert.equal(game?.metadata?.provider, version === 6 ? 'launchbox' : 'manual');
-            assert.equal(game?.metadata?.providerId, version === 6 ? '1' : null);
-            assert.equal(game?.system, version >= 5 ? 'SNES' : 'NES');
-            assert.equal(store.getLaunchBoxGame(1)?.title, GAME.title);
-          } else {
-            assert.equal(store.getLaunchBoxGame(1), null);
-          }
-        }
-      );
-      assertCanonical(file);
-      useStore(file, (store) => assert.equal(store.queryLibrary(query()).total, 2));
+      raw(file, (db) => {
+        db.exec('CREATE TABLE schema_version (version INTEGER NOT NULL); CREATE TABLE saved (value TEXT);');
+        db.prepare('INSERT INTO schema_version VALUES (?)').run(version);
+        db.prepare('INSERT INTO saved VALUES (?)').run('keep');
+      });
+      assert.throws(() => new SqliteLibraryStore(file, adapter), /Pre-release RetroHandler database/);
+      raw(file, (db) => {
+        assert.equal(db.prepare('SELECT version FROM schema_version').get()?.version, version);
+        assert.equal(db.prepare('SELECT value FROM saved').get()?.value, 'keep');
+        assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 0);
+        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'collections'").get()?.n, 0);
+      });
     })
   );
 }
 
 test(
-  'existing v6 without lazy LaunchBox tables is completed without losing library data',
+  'future and unversioned nonempty databases are rejected without creating schema tables',
   () => fixture((file) => {
-    populate(file);
-    raw(file, (db) => db.exec('DROP TABLE launchbox_staging; DROP TABLE launchbox_games'));
-    useStore(
-      file,
-      (store) => {
-        assert.equal(store.getLaunchBoxGame(1), null);
-        assert.equal(store.queryLibrary(query()).total, 2);
-        assert.equal(store.getArtworkId(SOURCE, 'a.nes'), ARTWORK);
-        store.beginLaunchBoxImport();
-        store.addLaunchBoxGame(GAME);
-        assert.equal(store.finishLaunchBoxImport(), 1);
-        assert.equal(store.searchLaunchBox('Example', 'NES')[0].id, 1);
-      }
-    );
-    assertCanonical(file);
-  })
-);
-
-test(
-  'future, duplicate and unversioned databases are rejected without creating schema tables',
-  () => fixture((file) => {
-    raw(file, (db) => db.exec('CREATE TABLE unrelated (value TEXT); INSERT INTO unrelated VALUES (\'keep\')'));
+    raw(file, (db) => db.exec("CREATE TABLE unrelated (value TEXT); INSERT INTO unrelated VALUES ('keep')"));
     assert.throws(() => new SqliteLibraryStore(file, adapter), /unversioned, nonempty/);
-    raw(
-      file,
-      (db) => {
-        assert.equal(db.prepare('SELECT value FROM unrelated').get()?.value, 'keep');
-        db.exec('CREATE TABLE schema_version (version INTEGER NOT NULL); INSERT INTO schema_version VALUES (99)');
-      }
-    );
+    raw(file, (db) => db.exec('PRAGMA user_version = 99'));
     assert.throws(() => new SqliteLibraryStore(file, adapter), /Unsupported.*99/);
-    raw(file, (db) => db.exec('INSERT INTO schema_version VALUES (6)'));
-    assert.throws(() => new SqliteLibraryStore(file, adapter), /Invalid.*schema version/);
-    raw(
-      file,
-      (db) => {
-        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'collections'").get()?.n, 0);
-        assert.equal(db.prepare('SELECT COUNT(*) AS n FROM schema_version').get()?.n, 2);
-      }
-    );
+    raw(file, (db) => {
+      assert.equal(db.prepare('SELECT value FROM unrelated').get()?.value, 'keep');
+      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 99);
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'collections'").get()?.n, 0);
+    });
   })
 );
 
 test(
-  'failed legacy upgrade rolls back table creation, column changes and version update',
+  'failed initial version assignment rolls back schema creation and can be retried',
   () => fixture((file) => {
-    populate(file);
-    raw(
-      file,
-      (db) => {
-        db.exec('DROP TABLE launchbox_games; DROP TABLE launchbox_staging');
-        db.exec('ALTER TABLE rom_metadata DROP COLUMN system_override; UPDATE schema_version SET version = 4');
-      }
-    );
     assert.throws(
       () => new SqliteLibraryStore(
         file,
         (filename) => {
           const db = adapter(filename);
-          const prepare = db.prepare.bind(db);
-          db.prepare = (text) => {
-            if (text === sql('schema.updateVersion')) {
-              throw new Error('Simulated version update failure');
+          const pragma = db.pragma.bind(db);
+          db.pragma = (value) => {
+            if (value.startsWith('user_version = ')) {
+              throw new Error('Simulated version assignment failure');
             }
-            return prepare(text);
+            return pragma(value);
           };
           return db;
         }
       ),
-      /Simulated version update failure/
+      /Simulated version assignment failure/
     );
-    raw(
-      file,
-      (db) => {
-        assert.equal(db.prepare('SELECT version FROM schema_version').get()?.version, 4);
-        assert.ok(!db.prepare('PRAGMA table_info(rom_metadata)').all().some((row) => row.name === 'system_override'));
-        assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'launchbox_games'").get()?.n, 0);
-        assert.equal(db.prepare('SELECT description FROM rom_metadata').get()?.description, 'Keep this');
-      }
-    );
+    raw(file, (db) => {
+      assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 0);
+      assert.equal(db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'").get()?.n, 0);
+    });
+    useStore(file, () => undefined);
+    assertCanonical(file);
   })
 );
 

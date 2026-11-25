@@ -37,36 +37,15 @@ function withStore(callback: (store: SqliteLibraryStore, file: string) => void) 
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-test('schema v1 migrates to v2 without losing existing games', () => withStore((store, file) => {
+test('initial schema persists existing games when reopened', () => withStore((store, file) => {
   store.saveScan(scan('C:/roms', [['Zelda', 'NES', 3]]));
   assert.equal(store.listCollections()[0].label, 'roms');
   assert.equal(store.queryLibrary(query()).total, 1);
-  // Opening an already migrated database is safe too.
+  // Opening an existing version-1 database is safe too.
   const reopened = new SqliteLibraryStore(file, adapter);
   assert.equal(reopened.listCollections().length, 1);
   reopened.close();
 }));
-
-test('existing v1 database is migrated preserving data', () => {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'retrohandler-v1-'));
-  const file = path.join(root, 'old.sqlite');
-  try {
-    const db = new DatabaseSync(file);
-    db.exec(`CREATE TABLE schema_version(version INTEGER NOT NULL); INSERT INTO schema_version VALUES(1);
-      CREATE TABLE collections(root_path TEXT PRIMARY KEY, scanned_at TEXT NOT NULL, ignored INTEGER NOT NULL, warnings_json TEXT NOT NULL DEFAULT '[]');
-      CREATE TABLE rom_files(source_root TEXT NOT NULL REFERENCES collections(root_path) ON DELETE CASCADE,
-        relative_path TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL, system TEXT NOT NULL,
-        extension TEXT NOT NULL, bytes INTEGER NOT NULL, PRIMARY KEY(source_root, relative_path));
-      INSERT INTO collections VALUES('C:/roms','2026-11-24T00:00:00Z',0,'[]');
-      INSERT INTO rom_files VALUES('C:/roms','Zelda.nes','1','Zelda','NES','.nes',14);`);
-    db.close();
-    const store = new SqliteLibraryStore(file, adapter);
-    assert.equal(store.listCollections()[0].gameCount, 1);
-    store.renameCollection('C:/roms', 'Nintendo classics');
-    assert.equal(store.listCollections()[0].label, 'Nintendo classics');
-    store.close();
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
 
 test('pagination across collections is stable and sorting works', () => withStore(store => {
   store.saveScan(scan('A:/roms', [['Zelda', 'NES', 12], ['Mario', 'NES', 8]]));
