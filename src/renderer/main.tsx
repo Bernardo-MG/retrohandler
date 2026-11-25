@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FolderOpen, Gamepad2, HardDrive, Library, Settings2, Server, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { CollectionInfo, IdentificationProgress, IdentificationStatus, LibraryEntry, LibraryPage, LibraryQuery, LibrarySort, ScanProgress, SystemCount } from '../shared';
+import { defaultSettings, type AppSettings, type CollectionInfo, type ExportPreferences, type IdentificationProgress, type IdentificationStatus, type LibraryEntry, type LibraryPage, type LibraryPreferences, type LibraryQuery, type LibrarySort, type ScanProgress, type SettingsSnapshot, type SystemCount } from '../shared';
 import { CollectionPanel } from './components/CollectionPanel';
 import { LibraryFilters } from './components/LibraryFilters';
 import { LibraryTable } from './components/LibraryTable';
@@ -9,24 +9,30 @@ import { LibraryGallery } from './components/LibraryGallery';
 import { MetadataPanel } from './components/MetadataPanel';
 import { ScanStatus } from './components/ScanStatus';
 import { RetroPieExport } from './components/RetroPieExport';
+import { SettingsPanel } from './components/SettingsPanel';
 import './styles.css';
+import './preferences.css';
 
 const PAGE_SIZE = 100;
 const EMPTY_PAGE: LibraryPage = { items: [], total: 0 };
 
-function App() {
+function App({ initial }: { initial: SettingsSnapshot }) {
+  const [preferences, setPreferences] = useState(initial.settings);
+  const [showSettings, setShowSettings] = useState(false);
+  const [libraryReady, setLibraryReady] = useState(false);
+  const settingsButton = useRef<HTMLButtonElement>(null);
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
-  const [view, setView] = useState<'list' | 'grid'>('list');
+  const [view, setView] = useState<'list' | 'grid'>(initial.settings.library.view);
   const [details, setDetails] = useState<LibraryEntry | null>(null);
   const [showExport, setShowExport] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initial.settings.library.selected);
   const [page, setPage] = useState<LibraryPage>(EMPTY_PAGE);
   const [systems, setSystems] = useState<SystemCount[]>([]);
-  const [search, setSearch] = useState('');
-  const [system, setSystem] = useState<string | null>(null);
-  const [sort, setSort] = useState<LibrarySort>('name');
-  const [identityFilter, setIdentityFilter] = useState<IdentificationStatus | null>(null);
-  const [descending, setDescending] = useState(false);
+  const [search, setSearch] = useState(initial.settings.library.search);
+  const [system, setSystem] = useState<string | null>(initial.settings.library.system);
+  const [sort, setSort] = useState<LibrarySort>(initial.settings.library.sort);
+  const [identityFilter, setIdentityFilter] = useState<IdentificationStatus | null>(initial.settings.library.identification);
+  const [descending, setDescending] = useState(initial.settings.library.descending);
   const [offset, setOffset] = useState(0);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -35,10 +41,51 @@ function App() {
   const identityJob = useRef<string | null>(null);
   const [identityMessage, setIdentityMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(initial.warning ?? '');
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const activeJob = useRef<string | null>(null);
   const requestId = useRef(0);
+  const [debouncedSearch, setDebouncedSearch] = useState(initial.settings.library.search);
+  const libraryPreferences = useMemo<LibraryPreferences>(() => ({
+    selected, search, system, sort, descending, identification: identityFilter, view
+  }), [selected, search, system, sort, descending, identityFilter, view]);
+
+  // The application is hydrated before the first settings write; startup defaults
+  // cannot overwrite a previous session while the initial IPC request is pending.
+  useEffect(() => {
+    if (!libraryReady) return;
+    void window.retrohandler.saveSettings({ library: libraryPreferences })
+      .catch(reason => setError(`Could not save library preferences: ${String(reason)}`));
+  }, [libraryReady, libraryPreferences]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => { document.documentElement.dataset.theme = preferences.appearance.theme === 'system'
+      ? (media.matches ? 'dark' : 'light') : preferences.appearance.theme; };
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [preferences.appearance.theme]);
+
+  const rememberExport = useCallback((value: ExportPreferences) => {
+    setPreferences(current => ({ ...current, export: value }));
+    void window.retrohandler.saveSettings({ export: value })
+      .catch(reason => setError(`Could not save export preferences: ${String(reason)}`));
+  }, []);
+  function applyPreferences(next: AppSettings) {
+    setPreferences(next);
+    if (JSON.stringify(next.library) !== JSON.stringify(libraryPreferences)) {
+      const v = next.library;
+      setSelected(v.selected); setSearch(v.search); setDebouncedSearch(v.search); setSystem(v.system);
+      setSort(v.sort); setDescending(v.descending); setIdentityFilter(v.identification); setView(v.view);
+      setOffset(0); setDetails(null);
+    }
+  }
+  function closeSettings() {
+    setShowSettings(false);
+    // The button is re-enabled after the dialog unmounts.
+    requestAnimationFrame(() => settingsButton.current?.focus());
+  }
 
   const reloadCollections = useCallback(async () => {
     const results = await window.retrohandler.listCollections();
@@ -49,11 +96,18 @@ function App() {
   useEffect(() => {
     let mounted = true;
     void window.retrohandler.listCollections()
-      .then(results => { if (mounted) setCollections(results); })
+      .then(results => {
+        if (!mounted) return;
+        setCollections(results);
+        const previous = initial.settings.library.selected;
+        if (previous && !results.some(collection => collection.rootPath === previous)) {
+          setSelected(null); setSystem(null); setSearch(''); setDebouncedSearch(''); setIdentityFilter(null);
+        }
+      })
       .catch(reason => { if (mounted) setError(`Could not load collections: ${String(reason)}`); })
-      .finally(() => { if (mounted) setLoading(false); });
+      .finally(() => { if (mounted) { setLibraryReady(true); setLoading(false); } });
     return () => { mounted = false; };
-  }, []);
+  }, [initial]);
 
   useEffect(() => window.retrohandler.onIdentificationProgress(update => {
     if (update.jobId === identityJob.current) setIdentProgress(update.progress);
@@ -64,21 +118,25 @@ function App() {
   }), []);
 
   useEffect(() => {
+    if (!libraryReady) return;
     let cancelled = false;
     void window.retrohandler.listSystems(selected).then(found => {
-      if (!cancelled) setSystems(found);
+      if (!cancelled) {
+        setSystems(found);
+        setSystem(current => current && !found.some(row => row.system === current) ? null : current);
+      }
     }).catch(reason => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; };
-  }, [selected, revision]);
+  }, [libraryReady, selected, revision]);
 
   // Do not query SQLite on every keystroke.
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearch(search), 200);
     return () => clearTimeout(timeout);
   }, [search]);
 
   useEffect(() => {
+    if (!libraryReady) return;
     const id = ++requestId.current;
     setLoading(true);
     const query: LibraryQuery = { identification: identityFilter, source: selected, search: debouncedSearch, system, sort, descending, offset, limit: PAGE_SIZE };
@@ -86,7 +144,7 @@ function App() {
       if (id === requestId.current) setPage(result);
     }).catch(reason => { if (id === requestId.current) setError(String(reason)); })
       .finally(() => { if (id === requestId.current) setLoading(false); });
-  }, [selected, debouncedSearch, system, sort, descending, offset, identityFilter, revision]);
+  }, [libraryReady, selected, debouncedSearch, system, sort, descending, offset, identityFilter, revision]);
 
   useEffect(() => { setDetails(null); }, [selected, offset, system, sort, descending, debouncedSearch, identityFilter]);
 
@@ -103,7 +161,7 @@ function App() {
     setSelected(source); setOffset(0); setSystem(null); setSearch(''); setIdentityFilter(null); setDetails(null);
   };
   const filterSystem = (value: string | null) => { setSystem(value); setOffset(0); };
-  const filterSearch = (value: string) => { setSearch(value); setOffset(0); };
+  const filterSearch = (value: string) => { setSearch(value.slice(0, 256)); setOffset(0); };
   const filterSort = (value: LibrarySort) => { setSort(value); setOffset(0); };
   const filterDescending = (value: boolean) => { setDescending(value); setOffset(0); };
 
@@ -174,7 +232,7 @@ function App() {
       <div className="nav-title">WORKSPACE</div>
       <div className="nav-item active"><Library size={18}/> Game Library</div>
       <div className="nav-item"><HardDrive size={18}/> Metadata <span className="soon">In library</span></div>
-      <div className="nav-item muted"><Settings2 size={18}/> Configuration <span className="soon">Soon</span></div>
+      <button ref={settingsButton} className="nav-item settings-nav" disabled={!libraryReady || busy || identifying || showExport || !!details || showSettings} onClick={() => setShowSettings(true)}><Settings2 size={18}/> Application settings</button>
       <div className="nav-item muted"><Server size={18}/> Deployment <span className="soon">Soon</span></div>
       <CollectionPanel collections={collections} selected={selected} busy={busy} select={selectCollection} rename={rename} remove={remove} assignSystem={assignCollectionSystem}/>
       <div className="sidebar-bottom"><span className="status-dot"/> Local mode · v0.4</div>
@@ -182,11 +240,11 @@ function App() {
     <main>
       <header><div><p className="eyebrow">COLLECTION OVERVIEW</p><h1>Game Library</h1><p className="subtitle">Discover and organize the games in your ROM collection.</p></div>
         <div className="identity-actions">
-          <button className="secondary" disabled={busy || identifying || !collections.length} onClick={() => setShowExport(true)}>RetroPie export</button>
+          <button className="secondary" disabled={!libraryReady || busy || identifying || !collections.length || showSettings || !!details} onClick={() => setShowExport(true)}>RetroPie export</button>
           <button className="secondary" disabled={busy || identifying} onClick={() => void importDat()}>Import DAT XML</button>
           <button className="secondary" disabled={busy || identifying || !selected} onClick={() => void identify()}>Identify collection</button>
         </div>
-        <button className="primary" onClick={scan} disabled={busy || identifying}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button>
+        <button className="primary" onClick={scan} disabled={!libraryReady || busy || identifying || showSettings}>{busy ? <RefreshCw className="spin" size={17}/> : <FolderOpen size={17}/>} {busy ? 'Scanning…' : 'Scan ROM folder'}</button>
       </header>
       {busy && <ScanStatus progress={progress} cancel={cancel}/>}
       {identifying && <section className="scan-status" role="status"><div><strong>Identifying ROMs…</strong><p>{identProgress ? `${identProgress.processed}/${identProgress.total} checked · ${identProgress.verified} verified · ${identProgress.unknown} unknown` : 'Starting identification…'}</p><small>{identProgress?.currentPath}</small></div><button className="secondary" onClick={cancelIdentity}>Cancel identification</button></section>}
@@ -209,17 +267,29 @@ function App() {
         {view === 'list'
           ? <LibraryTable page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>
           : <LibraryGallery page={page} offset={offset} limit={PAGE_SIZE} loading={loading} changeOffset={setOffset} onSelect={setDetails}/>}
-        {details && <MetadataPanel key={`${details.source}\0${details.relativePath}`} entry={page.items.find(item => item.source === details.source && item.relativePath === details.relativePath) ?? details} onClose={() => setDetails(null)} onSaved={() => setRevision(value => value + 1)}/>}
+        {details && <MetadataPanel preferences={preferences.metadata} key={`${details.source}\0${details.relativePath}`} entry={page.items.find(item => item.source === details.source && item.relativePath === details.relativePath) ?? details} onClose={() => setDetails(null)} onSaved={() => setRevision(value => value + 1)}/>}
       </section> : <section className="empty">
         <div className="empty-graphic"><Gamepad2 size={56}/></div><div className="ready">READY TO START</div>
         <h2>Your retro collection, organized.</h2><p>Select a local or network-mounted ROM folder. RetroHandler will index your collection and remember it between launches.</p>
-        <button onClick={scan} disabled={busy} className="secondary"><FolderOpen size={18}/> Choose collection folder</button>
+        <button onClick={scan} disabled={!libraryReady || busy || showSettings} className="secondary"><FolderOpen size={18}/> Choose collection folder</button>
         <div className="safe"><CheckCircle2 size={15}/> Read-only scan. Your original files stay untouched.</div>
       </section>}
-      {showExport && <RetroPieExport source={selected} onClose={() => setShowExport(false)}/>}
+      {showExport && <RetroPieExport source={selected} preferences={preferences.export} onPreferencesChange={rememberExport} onClose={() => setShowExport(false)}/>}
+      {showSettings && <SettingsPanel settings={{ ...preferences, library: libraryPreferences }} collections={collections} onClose={closeSettings} onSaved={next => { applyPreferences(next); closeSettings(); }}/>}
       <p className="footnote">Removing a collection only forgets its database entries; your original ROM files are never deleted.</p>
     </main>
   </div>;
 }
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+const root = createRoot(document.getElementById('root')!);
+async function start() {
+  let initial: SettingsSnapshot;
+  try { initial = await window.retrohandler.getSettings(); }
+  catch (reason) { initial = { settings: defaultSettings(), warning: `Could not load application preferences: ${String(reason)}` }; }
+  // Apply the initial theme before the application is mounted.
+  const theme = initial.settings.appearance.theme;
+  document.documentElement.dataset.theme = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
+  root.render(<React.StrictMode><App initial={initial}/></React.StrictMode>);
+}
+void start();

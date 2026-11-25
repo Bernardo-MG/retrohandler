@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { RETROPIE_SYSTEM_MAP, type ExportOptions, type ExportPlan } from '../../shared';
+import { RETROPIE_SYSTEM_MAP, type ExportOptions, type ExportPlan, type ExportPreferences } from '../../shared';
 
-interface Props { source: string | null; onClose: () => void; }
-export function RetroPieExport({ source, onClose }: Props) {
-  const [destination, setDestination] = useState('');
-  const [includeArtwork, setIncludeArtwork] = useState(true);
+interface Props {
+  source: string | null; onClose: () => void;
+  preferences: ExportPreferences; onPreferencesChange: (value: ExportPreferences) => void;
+}
+export function RetroPieExport({ source, onClose, preferences, onPreferencesChange }: Props) {
+  const [destination, setDestination] = useState(preferences.destination);
+  const [includeArtwork, setIncludeArtwork] = useState(preferences.includeArtwork);
   const [systems, setSystems] = useState<string[]>([]);
-  const [overrides, setOverrides] = useState<Record<string,string>>({});
+  const [overrides, setOverrides] = useState<Record<string,string>>(preferences.overrides);
   const [plan, setPlan] = useState<ExportPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -19,7 +22,17 @@ export function RetroPieExport({ source, onClose }: Props) {
     }).catch(reason => { if (active) setError(String(reason)); });
     return () => { active = false; };
   }, [source]);
-  const options: ExportOptions = { source, destination, includeArtwork, overrides };
+  // Empty overrides restore the normal mapping. Persist only valid edits; the
+  // export IPC still validates the full request before generating a preview.
+  const normalizedOverrides = () => Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== ''));
+  const options: ExportOptions = { source, destination, includeArtwork, overrides: normalizedOverrides() };
+  useEffect(() => {
+    const mappings = Object.fromEntries(Object.entries(overrides).filter(([, value]) => value !== ''));
+    if (Object.entries(mappings).some(([key, value]) => !key.trim() || key.length > 256 ||
+      ['__proto__', 'constructor', 'prototype'].includes(key) || !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(value) ||
+      ['con', 'prn', 'aux', 'nul'].includes(value))) return;
+    onPreferencesChange({ destination, includeArtwork, overrides: mappings });
+  }, [destination, includeArtwork, overrides, onPreferencesChange]);
   async function choose() {
     const folder = await window.retrohandler.chooseExportFolder();
     if (folder) { setDestination(folder); setPlan(null); setDone(''); setCompleted(null); }
@@ -47,7 +60,7 @@ export function RetroPieExport({ source, onClose }: Props) {
     <div className="retropie-destination"><label>Destination folder<input readOnly value={destination} placeholder="Choose a new or existing RetroPie folder"/></label><button className="secondary" disabled={busy} onClick={() => void choose()}>Browse…</button></div>
     <label className="retropie-checkbox"><input type="checkbox" checked={includeArtwork} disabled={busy} onChange={e => { setIncludeArtwork(e.target.checked); setPlan(null); }}/> Include cached artwork</label>
     <h3>System mapping</h3><p>Unknown systems require a RetroPie folder name. Check mappings for your configured emulators.</p>
-    <div className="retropie-mappings">{systems.map(system => <label key={system}><span title={system}>{system}</span><input aria-label={`RetroPie folder for ${system}`} value={overrides[system] ?? RETROPIE_SYSTEM_MAP[system] ?? ''} placeholder="e.g. nes" disabled={busy} onChange={e => { setOverrides(v => ({...v, [system]: e.target.value.toLowerCase()})); setPlan(null); }}/></label>)}</div>
+    <div className="retropie-mappings">{systems.map(system => <label key={system}><span title={system}>{system}</span><input aria-label={`RetroPie folder for ${system}`} value={overrides[system] ?? RETROPIE_SYSTEM_MAP[system] ?? ''} placeholder="e.g. nes" maxLength={50} disabled={busy} onChange={e => { setOverrides(v => ({...v, [system]: e.target.value.toLowerCase()})); setPlan(null); }}/></label>)}</div>
     <button className="primary" disabled={busy || !destination} onClick={() => void preview()}>Preview configuration</button>
     {plan && <div className="retropie-preview"><h3>Preview</h3>
       <p>{plan.files.filter(f => f.kind === 'rom').length} ROM references · {plan.systems.length} systems · {plan.skippedRoms} ROMs skipped</p>

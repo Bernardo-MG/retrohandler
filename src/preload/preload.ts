@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { DesktopApi, IdentificationUpdate, ScanUpdate, LaunchBoxDownloadProgress } from '../shared';
 const api: DesktopApi = {
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: patch => ipcRenderer.invoke('settings:save', patch),
+  resetSettings: () => ipcRenderer.invoke('settings:reset'),
+  getStorageInfo: () => ipcRenderer.invoke('settings:storage'),
+  cleanupArtworkCache: () => ipcRenderer.invoke('settings:cleanup-artwork'),
   bulkAssignSystem: (selection, systemOverride) => ipcRenderer.invoke('library:bulk-system', selection, systemOverride),
   chooseExportFolder: () => ipcRenderer.invoke('export:choose'),
   previewRetroPieExport: options => ipcRenderer.invoke('export:preview', options),

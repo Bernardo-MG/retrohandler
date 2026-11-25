@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { GameMetadataInput, LibraryEntry, MetadataCandidate, MetadataTarget, LibretroCoverChoice } from '../../shared';
+import type { GameMetadataInput, LibraryEntry, MetadataCandidate, MetadataTarget, LibretroCoverChoice, MetadataPreferences } from '../../shared';
 
 const empty = (title: string): GameMetadataInput => ({ title, description: '', released: '', developer: '', publisher: '', genre: '', provider: 'manual', providerId: null, providerSlug: null, artworkId: null });
 const cleanTitle = (entry: LibraryEntry) => (entry.identifiedTitle || entry.name).replace(/\s*[([][^)\]]*[)\]]/g, '').trim();
 
-interface Props { entry: LibraryEntry; onClose(): void; onSaved(): void; }
-export function MetadataPanel({ entry, onClose, onSaved }: Props) {
+interface Props { entry: LibraryEntry; onClose(): void; onSaved(): void; preferences: MetadataPreferences; }
+export function MetadataPanel({ entry, onClose, onSaved, preferences }: Props) {
+  const [showArtworkSearch, setShowArtworkSearch] = useState(preferences.artwork === 'libretro');
   const [form, setForm] = useState<GameMetadataInput>(entry.metadata ?? empty(entry.identifiedTitle || entry.name));
   const [systemOverride, setSystemOverride] = useState(entry.metadata?.systemOverride ?? '');
   const [query, setQuery] = useState(cleanTitle(entry));
@@ -92,7 +93,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
     {form.artworkId && <img className="metadata-cover" src={`retro-art://cover/${form.artworkId}`} alt={`${form.title} artwork`}/>}
     <div className="metadata-fields">
       {(['title','released','developer','publisher','genre'] as const).map(name =>
-        <label key={name}>{name[0].toUpperCase() + name.slice(1)}<input value={form[name]} maxLength={200} autoFocus={name === 'title'} onChange={event => set(name, event.target.value)}/></label>)}
+        <label key={name}>{name[0].toUpperCase() + name.slice(1)}<input value={form[name]} maxLength={200} autoFocus={name === 'title' && preferences.startWith === 'manual'} onChange={event => set(name, event.target.value)}/></label>)}
       <label>System <input list="retrohandler-systems" value={systemOverride} maxLength={120}
         placeholder={`Auto: ${entry.system}`} onChange={event => setSystemOverride(event.target.value)}/></label>
       <datalist id="retrohandler-systems">
@@ -110,11 +111,12 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
       {updating && updateProgress && <p role="status">{updateProgress.phase === 'import' ? `Importing ${updateProgress.processed.toLocaleString()} games…` : `${updateProgress.phase === 'download' ? 'Downloading' : 'Extracting'} ${(updateProgress.processed / 1048576).toFixed(1)} MiB${updateProgress.total ? ` / ${(updateProgress.total / 1048576).toFixed(1)} MiB` : ''}`}</p>}
       <button className="secondary" disabled={busy} onClick={() => void importLaunchBox()}>Import LaunchBox Metadata.xml… (manual)</button>
       {imported && <p role="status">{imported}</p>}
-      <label>Game title <input value={query} maxLength={120} onChange={event => setQuery(event.target.value)}/></label>
+      <label>Game title <input value={query} autoFocus={preferences.startWith === 'launchbox'} maxLength={120} onChange={event => setQuery(event.target.value)}/></label>
       <button className="secondary" disabled={busy || !query.trim()} onClick={() => void search()}>Search LaunchBox</button>
       {results.map(result => <div className="metadata-result" key={result.id}><span>{result.title} {result.released && `(${result.released})`} {result.platform && `— ${result.platform}`}</span><button disabled={busy} onClick={() => void apply(result.id)}>Use this match</button></div>)}
       {results.length > 0 && <p>Check the platform and edition before applying a match. Your manually assigned ROM system is retained.</p>}
-      <h3>Libretro box art (no API key)</h3>
+      <div className="settings-artwork-heading"><h3>Libretro box art (no API key)</h3><button className="secondary" type="button" aria-expanded={showArtworkSearch} onClick={() => setShowArtworkSearch(value => !value)}>{showArtworkSearch ? 'Hide search' : 'Show search'}</button></div>
+      {showArtworkSearch && <>
       <p>Search the assigned console's artwork catalogue by game title. Preview real downloadable images, then choose the correct region or edition.</p>
       <label>Artwork title <input value={coverQuery} maxLength={120} onChange={event => setCoverQuery(event.target.value)}/></label>
       <button className="secondary" disabled={busy || !coverQuery.trim()} onClick={() => void artwork()}>Find Libretro box art</button>
@@ -126,6 +128,7 @@ export function MetadataPanel({ entry, onClose, onSaved }: Props) {
           <button className="secondary" disabled={busy} onClick={() => selectCover(cover.artworkId)}>{form.artworkId === cover.artworkId ? 'Selected' : 'Use this cover'}</button>
         </div>)}
       </div>}
+      </>}
     </div>
     {notice && <p role="status" className="identity-message">{notice}</p>}
     {error && <p role="alert" className="error">{error}</p>}

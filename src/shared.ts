@@ -79,7 +79,53 @@ export interface ExportPlan {
 export interface ExportReceipt { copied: number; backups?: string[]; }
 export interface LibretroCoverChoice { title: string; artworkId: string; }
 
+/** Patch 009: preferences are independent from the library and artwork database. */
+export interface LibraryPreferences {
+  selected: string | null; search: string; system: string | null;
+  sort: LibrarySort; descending: boolean; identification: IdentificationStatus | null;
+  view: 'list' | 'grid';
+}
+export type ExportPreferences = Pick<ExportOptions, 'destination' | 'includeArtwork' | 'overrides'>;
+export interface MetadataPreferences {
+  startWith: 'manual' | 'launchbox';
+  artwork: 'libretro' | 'saved-only';
+}
+export interface AppearancePreferences { theme: 'dark' | 'light' | 'system'; }
+export interface WindowBounds { x: number; y: number; width: number; height: number; }
+export interface WindowPreferences { bounds: WindowBounds | null; maximized: boolean; }
+export interface AppSettings {
+  version: 1;
+  library: LibraryPreferences;
+  export: ExportPreferences;
+  metadata: MetadataPreferences;
+  appearance: AppearancePreferences;
+  window: WindowPreferences;
+}
+export type SettingsPatch = Partial<Pick<AppSettings, 'library' | 'export' | 'metadata' | 'appearance'>>;
+export interface SettingsSnapshot { settings: AppSettings; warning: string | null; }
+export interface StorageInfo {
+  databasePath: string; settingsPath: string; artworkPath: string;
+  artworkFiles: number; artworkBytes: number; reclaimableFiles: number; reclaimableBytes: number;
+}
+export interface CacheCleanupReceipt { removedFiles: number; removedBytes: number; failedFiles: number; }
+
+export function defaultSettings(): AppSettings {
+  return {
+    version: 1,
+    library: { selected: null, search: '', system: null, sort: 'name', descending: false, identification: null, view: 'list' },
+    export: { destination: '', includeArtwork: true, overrides: {} },
+    metadata: { startWith: 'manual', artwork: 'libretro' },
+    appearance: { theme: 'dark' },
+    window: { bounds: null, maximized: false }
+  };
+}
+
 export interface DesktopApi {
+  getSettings(): Promise<SettingsSnapshot>;
+  saveSettings(patch: SettingsPatch): Promise<AppSettings>;
+  resetSettings(): Promise<AppSettings>;
+  getStorageInfo(): Promise<StorageInfo>;
+  cleanupArtworkCache(): Promise<CacheCleanupReceipt>;
   bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   chooseExportFolder(): Promise<string | null>;
   previewRetroPieExport(options: ExportOptions): Promise<ExportPlan>;
