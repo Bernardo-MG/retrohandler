@@ -1,7 +1,6 @@
-import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   RETROPIE_SYSTEM_MAP,
   type ExportOptions,
@@ -14,6 +13,9 @@ import {
 } from '../../shared';
 import { artworkPath, isArtworkId } from '../metadata/artwork';
 import { mergeGameLists } from './gamelist-merge';
+import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../components/filesystem/paths';
+import { readRegular } from '../components/filesystem/file-reader';
+import { replaceWithBackup, writeExclusive } from '../components/filesystem/file-writer';
 
 // RetroPie ROM directory names; unknown platforms require an explicit override.
 const SYSTEM_MAP = RETROPIE_SYSTEM_MAP;
@@ -33,11 +35,6 @@ const xmlEscape = (s: string) => s.replace(new RegExp(invalidXmlChars, 'gu'), ''
     /'/g,
     '&apos;'
   );
-const childOf = (parent: string, child: string) => {
-  const rel = path.relative(parent, child);
-  return !!rel && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
-};
-const overlaps = (a: string, b: string) => a === b || childOf(a, b) || childOf(b, a);
 const validSystem = (s: string) => /^[a-z0-9][a-z0-9_-]{0,49}$/.test(s) && !['con', 'prn', 'nul', 'aux'].includes(s);
 const knownSystem = (name: string) => Object.prototype.hasOwnProperty.call(SYSTEM_MAP, name) ? SYSTEM_MAP[name] : undefined;
 const filenameOf = (relative: string): string => path.win32.basename(relative.replace(/\//g, '\\'));
@@ -111,69 +108,6 @@ const MAX_ART_BYTES = 5 * 1024 * 1024;
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 const hashOrNull = (bytes: Buffer | null) => bytes === null ? null : hash(bytes);
 const targetPath = (root: string, relative: string) => path.join(root, ...relative.split('/'));
-
-// Only a missing file counts as absent. Permission errors, links and other
-// file types must never be mistaken for a free destination path.
-async function statIfExists(file: string) {
-  try {
-    return await lstat(file);
-  }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
-    throw error;
-  }
-}
-const canonicalKey = (p: string) => process.platform === 'win32' ? path.normalize(p).toLowerCase() : path.normalize(p);
-async function assertSafeDirectory(folder: string): Promise<void> {
-  // Check every ancestor, including those above a not-yet-created folder.
-  for (let current = folder; ; current = path.dirname(current)) {
-    const st = await statIfExists(current);
-    if (st && (!st.isDirectory() || st.isSymbolicLink() ||
-      canonicalKey(await realpath(current)) !== canonicalKey(current))) {
-      throw new Error(`Export directory redirected or not a directory: ${current}`);
-    }
-    if (path.dirname(current) === current) {
-      break;
-    }
-  }
-}
-async function readRegular(file: string, maxBytes: number): Promise<Buffer | null> {
-  const before = await statIfExists(file);
-  if (!before) {
-    return null;
-  }
-  if (!before.isFile() || before.isSymbolicLink() || before.size > maxBytes) {
-    throw new Error(`Unsafe or oversized file: ${file}`);
-  }
-  const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
-  try {
-    const st = await handle.stat();
-    if (!st.isFile() || st.dev !== before.dev || st.ino !== before.ino || st.size > maxBytes) {
-      throw new Error(`File changed: ${file}`);
-    }
-    // Read at most the approved file size plus one byte, even if it grows.
-    const buffer = Buffer.alloc(st.size + 1);
-    let count = 0;
-    while (count < buffer.length) {
-      const { bytesRead } = await handle.read(buffer, count, buffer.length - count, count);
-      if (!bytesRead) {
-        break;
-      }
-      count += bytesRead;
-    }
-    const after = await handle.stat();
-    const named = await statIfExists(file);
-    if (count !== st.size || after.size !== st.size || after.mtimeMs !== st.mtimeMs ||
-      !named?.isFile() || named.dev !== st.dev || named.ino !== st.ino || named.mtimeMs !== st.mtimeMs || named.size !== st.size) {
-      throw new Error(`File changed: ${file}`);
-    }
-    return buffer.subarray(0, count);
-  } finally {
-    await handle.close();
-  }
-}
 
 type ExportJob = {
   previous: string | null;
@@ -396,24 +330,6 @@ export async function previewExport(library: ExportLibrary, options: ExportOptio
   return (await prepareExport(library, options, artworkFolder)).plan;
 }
 
-// Open exclusively so even a name collision cannot overwrite another file.
-// Flush the contents before considering a backup or replacement ready.
-async function writeExclusive(file: string, content: Buffer): Promise<void> {
-  const handle = await open(file, 'wx');
-  try {
-    try {
-      await handle.writeFile(content);
-      await handle.sync();
-    }
-    finally {
-      await handle.close();
-    }
-  } catch (error) {
-    await rm(file, { force: true }).catch(() => undefined);
-    throw error;
-  }
-}
-
 let exporting = false;
 export async function executeExport(
   library: ExportLibrary,
@@ -450,10 +366,7 @@ export async function executeExport(
           throw new Error('Export job missing; preview again.');
         }
         const target = targetPath(plan.destination, item.relativeDestination);
-        const folder = path.dirname(target);
-        await assertSafeDirectory(folder);
-        await mkdir(folder, { recursive: true });
-        await assertSafeDirectory(folder);
+        await ensureSafeDirectory(path.dirname(target));
         const max = item.kind === 'gamelist' ? MAX_XML_BYTES : MAX_ART_BYTES;
         const prior = await readRegular(target, max);
         if (hashOrNull(prior) !== job.previous) {
@@ -469,23 +382,9 @@ export async function executeExport(
         if (item.action === 'create') {
           await writeExclusive(target, content);
         } else if (item.kind === 'gamelist' && item.action === 'update' && prior !== null) {
-          // Stage the replacement and back up the exact old bytes beside it.
-          // Only rename after the backup is flushed and the old file rechecked.
-          const suffix = randomUUID();
-          const backup = `${target}.retrohandler-${suffix}.bak`;
-          const temp = path.join(folder, `.gamelist-${suffix}.tmp`);
-          await writeExclusive(temp, content);
-          try {
-            await writeExclusive(backup, prior);
+          await replaceWithBackup(target, content, prior, max, 'retrohandler', backup => {
             backups.push(path.relative(plan.destination, backup).split(path.sep).join('/'));
-            await assertSafeDirectory(folder);
-            if (hashOrNull(await readRegular(target, max)) !== job.previous) {
-              throw new Error(`Destination changed; preview again: ${item.relativeDestination}`);
-            }
-            await rename(temp, target);
-          } finally {
-            await rm(temp, { force: true });
-          }
+          });
         } else {
           throw new Error('Invalid export job.');
         }
