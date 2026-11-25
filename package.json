@@ -13,6 +13,8 @@
     "build:electron": "tsc -p tsconfig.node.json",
     "test": "npm run build:tests && node --test dist-tests/tests/*.test.js && node --test tests/packaging.test.cjs",
     "build:tests": "tsc -p tsconfig.test.json",
+    "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts",
+    "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:native": "electron-builder install-app-deps",
     "build:dir": "npm run clean:release && npm run build:web && electron-builder --win --x64 --dir --publish never && npm run verify:package -- --directory-only",

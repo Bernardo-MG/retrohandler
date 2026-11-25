@@ -23,3 +23,19 @@ The installer is `release/RetroHandler-Setup-<version>-x64.exe`.
 
 The manual **Windows package** GitHub Actions workflow also builds and uploads an installer
 artifact without publishing a release.
+
+## Formatting commands
+
+```powershell
+npm run format
+npm run format:check
+```
+
+## Validation
+
+```powershell
+npm run format:check
+git diff --check
+npm run typecheck
+npm test
+```

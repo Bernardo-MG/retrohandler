@@ -2,7 +2,7 @@
 * text=auto
 
 # Known text files
-*.css           text diff=css
+*.css           text eol=lf diff=css
 *.js            text
 *.json          text
 *.htm           text diff=html
@@ -11,7 +11,9 @@
 *.sass          text
 *.sh            text
 *.md            text
-*.ts            text
+*.ts            text eol=lf
+*.tsx           text eol=lf
+*.cjs           text eol=lf
 *.txt           text
 *.xml           text
 *.yml           text

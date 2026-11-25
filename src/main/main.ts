@@ -13,14 +13,22 @@ import { registerSettingsIpc } from './settings/settings-ipc';
 import { restoreWindowBounds } from './settings/window-bounds';
 
 app.setName('RetroHandler');
-if (process.platform === 'win32') app.setAppUserModelId('com.retrohandler.desktop');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.retrohandler.desktop');
+}
 protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 function createWindow(settings: SettingsStore) {
   const saved = settings.snapshot().settings.window;
-  const bounds = restoreWindowBounds(saved.bounds, screen.getAllDisplays().map(display => display.workArea), screen.getPrimaryDisplay().workArea);
+  const bounds = restoreWindowBounds(
+    saved.bounds,
+    screen.getAllDisplays().map(display => display.workArea),
+    screen.getPrimaryDisplay().workArea
+  );
   const win = new BrowserWindow({
-    ...bounds, minWidth: Math.min(bounds.width, 880), minHeight: Math.min(bounds.height, 600),
+    ...bounds,
+    minWidth: Math.min(bounds.width, 880),
+    minHeight: Math.min(bounds.height, 600),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0d111b' : '#f4f6fa',
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
@@ -29,18 +37,31 @@ function createWindow(settings: SettingsStore) {
       sandbox: true
     }
   });
-  if (saved.maximized) win.maximize();
+  if (saved.maximized) {
+    win.maximize();
+  }
   const updateBackground = () => win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0d111b' : '#f4f6fa');
   nativeTheme.on('updated', updateBackground);
-  win.on('close', () => {
-    try { settings.saveWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() }); }
-    catch (error) { console.error('Could not save window preferences:', error); }
-  });
+  win.on(
+    'close',
+    () => {
+      try {
+        settings.saveWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
+      }
+      catch (error) {
+        console.error('Could not save window preferences:', error);
+      }
+    }
+  );
   win.once('closed', () => nativeTheme.removeListener('updated', updateBackground));
   // Development URLs must never override the packaged renderer.
   const devUrl = !app.isPackaged ? process.env.VITE_DEV_SERVER_URL : undefined;
-  if (devUrl && /^http:\/\/127\.0\.0\.1:5173\/?$/.test(devUrl)) void win.loadURL(devUrl);
-  else void win.loadFile(path.join(__dirname, '../../dist/index.html'));
+  if (devUrl && /^http:\/\/127\.0\.0\.1:5173\/?$/.test(devUrl)) {
+    void win.loadURL(devUrl);
+  }
+  else {
+    void win.loadFile(path.join(__dirname, '../../dist/index.html'));
+  }
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
@@ -59,10 +80,15 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     registerLibraryIpc(new FileSystemLibraryService(db));
     registerSettingsIpc(settings, path.join(temp, 'library.sqlite'), artworkFolder);
     db.listCollections();
-    const win = new BrowserWindow({ show: false, webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.js'),
-      nodeIntegration: false, contextIsolation: true, sandbox: true
-    } });
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true
+      }
+    });
     try {
       await win.loadFile(path.join(__dirname, '../../dist/index.html'));
       const ready = await win.webContents.executeJavaScript(`new Promise(resolve => {
@@ -73,20 +99,42 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
           } else if (++attempts >= 100) { clearInterval(timer); resolve(false); }
         }, 100);
       })`);
-      if (!ready) throw new Error('Packaged renderer or preload did not initialize.');
-    } finally { win.destroy(); db.close(); }
+      if (!ready) {
+        throw new Error('Packaged renderer or preload did not initialize.');
+      }
+    } finally {
+      win.destroy();
+      db.close();
+    }
     app.exit(0);
-  }).catch(error => { console.error(error); app.exit(1); });
-  process.once('exit', () => { try { rmSync(temp, { recursive: true, force: true }); } catch { /* Windows may still hold Chromium files. */ } });
+  }).catch(error => {
+    console.error(error);
+    app.exit(1);
+  });
+  process.once(
+    'exit',
+    () => {
+      try {
+        rmSync(temp, { recursive: true, force: true });
+      } catch { /* Windows may still hold Chromium files. */ }
+    }
+  );
 } else if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    const window = BrowserWindow.getAllWindows()[0];
-    if (!window) return;
-    if (window.isMinimized()) window.restore();
-    window.focus();
-  });
+  app.on(
+    'second-instance',
+    () => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (!window) {
+        return;
+      }
+      if (window.isMinimized()) {
+        window.restore();
+      }
+      window.focus();
+    }
+  );
   app.whenReady().then(() => {
     const databasePath = path.join(app.getPath('userData'), 'library.sqlite');
     const store = new SqliteLibraryStore(databasePath);
@@ -97,18 +145,36 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     registerMetadataIpc(store, artworkFolder);
     registerSettingsIpc(settings, databasePath, artworkFolder);
     registerExportIpc(new FileSystemLibraryService(store), artworkFolder);
-    protocol.handle('retro-art', async request => {
-      try {
-        const url = new URL(request.url);
-        const id = decodeURIComponent(url.pathname.slice(1));
-        if (url.hostname !== 'cover' || !isArtworkId(id) || url.search || url.hash) return new Response('Not found', { status: 404 });
-        const art = await getArtwork(artworkFolder, id);
-        return new Response(new Uint8Array(art.body), { headers: { 'Content-Type': art.mime, 'Cache-Control': 'private, max-age=86400' } });
-      } catch { return new Response('Not found', { status: 404 }); }
-    });
+    protocol.handle(
+      'retro-art',
+      async request => {
+        try {
+          const url = new URL(request.url);
+          const id = decodeURIComponent(url.pathname.slice(1));
+          if (url.hostname !== 'cover' || !isArtworkId(id) || url.search || url.hash) {
+            return new Response('Not found', { status: 404 });
+          }
+          const art = await getArtwork(artworkFolder, id);
+          return new Response(
+            new Uint8Array(art.body),
+            { headers: { 'Content-Type': art.mime, 'Cache-Control': 'private, max-age=86400' } }
+          );
+        } catch {
+          return new Response('Not found', { status: 404 });
+        }
+      }
+    );
     app.once('before-quit', () => store.close());
     createWindow(settings);
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(settings); });
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow(settings);
+      }
+    });
   });
-  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
 }
