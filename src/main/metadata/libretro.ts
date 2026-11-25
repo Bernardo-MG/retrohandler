@@ -127,15 +127,15 @@ export function parseLibretroIndex(data: string): string[] {
   return names;
 }
 
-async function boundedText(response: Response): Promise<string> {
+async function boundedText(response: Response, maxBytes = MAX_INDEX_BYTES): Promise<string> {
   const length = Number(response.headers.get('content-length'));
-  if (length > MAX_INDEX_BYTES) throw new Error('Libretro artwork index exceeds 4 MiB.');
+  if (length > maxBytes) throw new Error(`Libretro artwork index exceeds ${maxBytes / (1024 * 1024)} MiB.`);
   if (!response.body) throw new Error('Libretro artwork index is empty.');
   const chunks: Buffer[] = [];
   let count = 0;
   for await (const chunk of response.body) {
     const bytes = Buffer.from(chunk); count += bytes.length;
-    if (count > MAX_INDEX_BYTES) throw new Error('Libretro artwork index exceeds 4 MiB.');
+    if (count > maxBytes) throw new Error(`Libretro artwork index exceeds ${maxBytes / (1024 * 1024)} MiB.`);
     chunks.push(bytes);
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -153,7 +153,7 @@ async function githubBoxartIndex(platform: string, request: typeof fetch): Promi
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Retrohandler' }
     });
     if (!response.ok) throw new Error(`GitHub tree HTTP ${response.status}.`);
-    const data = JSON.parse(await boundedText(response));
+    const data = JSON.parse(await boundedText(response, 32 * 1024 * 1024));
     if (data.truncated || !Array.isArray(data.tree)) throw new Error('GitHub artwork tree is incomplete.');
     return data.tree as { path: string; type: string; sha: string }[];
   };
