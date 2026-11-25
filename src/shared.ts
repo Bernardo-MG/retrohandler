@@ -67,18 +67,23 @@ export interface ExportOptions {
   source: string | null; destination: string; includeArtwork: boolean;
   overrides: Record<string, string>;
 }
-export interface ExportFile { source: string; relativeDestination: string; size: number; kind: 'rom' | 'artwork' | 'gamelist'; }
+export interface ExportFile {
+  source: string; relativeDestination: string; size: number; kind: 'rom' | 'artwork' | 'gamelist';
+  action?: 'create' | 'update' | 'reuse';
+}
 export interface ExportPlan {
   destination: string; files: ExportFile[]; systems: string[];
   warnings: string[]; conflicts: string[]; bytes: number; fingerprint: string;
+  skippedRoms: number;
 }
+export interface ExportReceipt { copied: number; backups?: string[]; }
 export interface LibretroCoverChoice { title: string; artworkId: string; }
 
 export interface DesktopApi {
   bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   chooseExportFolder(): Promise<string | null>;
   previewRetroPieExport(options: ExportOptions): Promise<ExportPlan>;
-  runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<{ copied: number }>;
+  runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<ExportReceipt>;
 
   importLaunchBox(): Promise<{ count: number } | null>;
   downloadLaunchBox(): Promise<{ count: number }>;
