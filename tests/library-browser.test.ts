@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import type { DatabaseHandle, Statement } from '../src/main/database/types';
-import { openTestRepositories, type TestRepositories } from './helpers/database-connection';
+import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
+import { openTestRepositories, type TestRepositories } from './helpers/database';
 import type { LibraryQuery, ScanResult } from '../src/shared';
 
 function adapter(filename: string): DatabaseHandle {

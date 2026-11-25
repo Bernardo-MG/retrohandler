@@ -3,7 +3,7 @@ import path from 'node:path';
 import { initializeSchema } from './schema';
 import { QueryExecutor } from './sql/query-executor';
 import { QueryRegistry } from './sql/query-registry';
-import type { DatabaseFactory, DatabaseHandle } from './types';
+import type { DatabaseFactory, DatabaseHandle } from './sql/types';
 
 /** Owns one connection; the public API exposes only its lifecycle. */
 export class DatabaseConnection {

@@ -5,8 +5,8 @@ import {
   createIdentificationRepository,
   createMetadataRepository,
   createLaunchBoxRepository
-} from '../../src/main/database-connection';
-import type { DatabaseFactory } from '../../src/main/database/types';
+} from '../../src/main/database';
+import type { DatabaseFactory } from '../../src/main/database/sql/types';
 
 /** Integration-test fixture. Production code constructs only the repositories it needs. */
 export function openTestRepositories(file: string, adapter: DatabaseFactory) {

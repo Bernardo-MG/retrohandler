@@ -4,7 +4,16 @@ import type { ParsedDat } from '../../identification/dat';
 import type { RomHashes } from '../../identification/hashes';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
-import type { FingerprintMatchRow, FingerprintRow } from '../types';
+
+type FingerprintMatchRow = {
+  game: string;
+  datName: string;
+  evidence: string
+};
+
+type FingerprintRow = Omit<RomHashes, 'size'> & {
+  bytes: number
+};
 
 export class SqliteIdentificationRepository implements IdentificationRepository {
   constructor(private readonly executor: QueryExecutor) {}

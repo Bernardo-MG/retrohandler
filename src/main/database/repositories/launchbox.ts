@@ -2,7 +2,8 @@ import type { MetadataCandidate } from '../../../shared';
 import type { LaunchBoxGame, LaunchBoxRepository } from '../../contracts/persistence';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
-import type { LaunchBoxCandidateRow } from '../types';
+
+type LaunchBoxCandidateRow = Pick<LaunchBoxGame, 'id' | 'title' | 'platform' | 'released'>;
 
 export function normalizeLaunchBoxName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');

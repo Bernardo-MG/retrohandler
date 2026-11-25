@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import { PreparedStatements } from '../src/main/database/sql/prepared-statements';
 import { QueryRegistry } from '../src/main/database/sql/query-registry';
-import type { DatabaseHandle, Statement } from '../src/main/database/types';
+import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
 
 function fixture(run: (file: (name: string, contents: string) => string) => void) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'retrohandler-queries-'));

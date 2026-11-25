@@ -3,7 +3,26 @@ import type { CollectionInfo, Rom, ScanResult, ScanWarning } from '../../../shar
 import type { CollectionRepository } from '../../contracts/persistence';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
-import type { CollectionListRow, CollectionRow, RomRow } from '../types';
+
+type CollectionListRow = Omit<CollectionInfo, 'warningCount'> & {
+  warningsJson: string
+};
+
+type CollectionRow = {
+  root_path: string;
+  scanned_at: string;
+  ignored: number;
+  warnings_json: string
+};
+
+type RomRow = {
+  id: string;
+  name: string;
+  system: string;
+  relative_path: string;
+  extension: string;
+  bytes: number
+};
 
 export class SqliteCollectionRepository implements CollectionRepository {
   constructor(private readonly executor: QueryExecutor) {}

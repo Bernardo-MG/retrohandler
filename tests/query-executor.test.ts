@@ -7,8 +7,8 @@ import { test } from 'node:test';
 import { QueryExecutor } from '../src/main/database/sql/query-executor';
 import { QueryRegistry } from '../src/main/database/sql/query-registry';
 import { DatabaseConnection } from '../src/main/database/database-connection';
-import { createCollectionRepository, createRomRepository, createMetadataRepository, createIdentificationRepository, createLaunchBoxRepository } from '../src/main/database-connection';
-import type { DatabaseHandle, Statement } from '../src/main/database/types';
+import { createCollectionRepository, createRomRepository, createMetadataRepository, createIdentificationRepository, createLaunchBoxRepository } from '../src/main/database';
+import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
 import type { GameMetadataInput, LibraryQuery, ScanResult } from '../src/shared';
 
 function adapt(db: DatabaseSync, onPrepare: (sql: string) => void = () => {}): DatabaseHandle {

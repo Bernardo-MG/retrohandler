@@ -2,8 +2,17 @@ import type { BulkSystemSelection, GameMetadata, GameMetadataInput } from '../..
 import type { ArtworkReferences, MetadataRepository, SystemOverrideRepository } from '../../contracts/persistence';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
-import type { ArtworkRow, BulkTargetRow } from '../types';
 import { buildFilter, type LibraryFilter } from './library-filter';
+
+type ArtworkRow = {
+  artworkId: string | null
+};
+
+type BulkTargetRow = {
+  source: string;
+  relativePath: string;
+  name: string
+};
 
 function buildBulkTargetsQuery(executor: QueryExecutor, filter: LibraryFilter) {
   const { where, params } = buildFilter(executor, filter);

@@ -1,9 +1,32 @@
-import type { LibraryPage, LibraryQuery, SystemCount } from '../../../shared';
+import type { IdentificationStatus, LibraryPage, LibraryQuery, SystemCount } from '../../../shared';
 import type { RomRepository } from '../../contracts/persistence';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
-import type { LibraryRow } from '../types';
 import { buildFilter } from './library-filter';
+
+type LibraryRow = {
+  source: string;
+  id: string;
+  name: string;
+  system: string;
+  relativePath: string;
+  extension: string;
+  bytes: number;
+  identificationStatus: IdentificationStatus | null;
+  identifiedTitle: string | null;
+  datName: string | null;
+  metadataTitle: string | null;
+  metadataDescription: string | null;
+  metadataReleased: string | null;
+  metadataDeveloper: string | null;
+  metadataPublisher: string | null;
+  metadataGenre: string | null;
+  metadataProvider: 'manual' | 'launchbox' | null;
+  metadataProviderId: string | null;
+  metadataProviderSlug: string | null;
+  metadataArtworkId: string | null;
+  metadataSystemOverride: string | null;
+};
 
 const SORT_COLUMNS = {
   name: 'library.sortName',

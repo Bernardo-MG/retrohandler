@@ -66,12 +66,12 @@ test('database access and internal imports are confined to the database package'
 test('boundary checker catches type imports, dynamic imports and native driver requirements', () => {
   const file = path.join(root, 'main', 'settings', 'example.ts');
   assert.deepEqual(violations(file, `
-    import type { DatabaseHandle } from '../database/types';
+    import type { DatabaseHandle } from '../database/sql/types';
     const db = require('better-sqlite3');
     const registry = import('../database/sql/query-registry');
-    export type T = import('../database/types').Statement;
+    export type T = import('../database/sql/types').Statement;
     import type { ArtworkReferences } from '../contracts/persistence';
-  `), ['../database/types', 'better-sqlite3', '../database/sql/query-registry', '../database/types']);
-  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from './database-connection';"), []);
-  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from './database/database-connection';"), ['./database/database']);
+  `), ['../database/sql/types', 'better-sqlite3', '../database/sql/query-registry', '../database/sql/types']);
+  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from './database';"), []);
+  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from './database/database-connection';"), ['./database/database-connection']);
 });

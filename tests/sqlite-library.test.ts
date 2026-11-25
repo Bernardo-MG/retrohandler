@@ -3,8 +3,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import type { DatabaseHandle, Statement } from '../src/main/database/types';
-import { openTestRepositories } from './helpers/database-connection';
+import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
+import { openTestRepositories } from './helpers/database';
 import type { ScanResult } from '../src/shared';
 
 // Node 22+ includes a SQLite implementation that can exercise the real SQL,

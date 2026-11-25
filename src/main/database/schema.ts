@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { QueryExecutor } from './sql/query-executor';
-import type { DatabaseHandle } from './types';
+import type { DatabaseHandle } from './sql/types';
 
 /** Initial release schema, stored in SQLite's user_version field. */
 export const SCHEMA_VERSION = 1;

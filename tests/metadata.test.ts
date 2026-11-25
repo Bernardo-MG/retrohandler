@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
-import type { DatabaseHandle, Statement } from '../src/main/database/types';
-import { openTestRepositories } from './helpers/database-connection';
+import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
+import { openTestRepositories } from './helpers/database';
 import { artworkPath, cacheArtworkBytes, getArtwork, isArtworkId } from '../src/main/metadata/artwork';
 import type { GameMetadataInput, LibraryQuery } from '../src/shared';
 
