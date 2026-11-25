@@ -17,3 +17,4 @@
 *.txt           text
 *.xml           text
 *.yml           text
+*.sql           text eol=lf

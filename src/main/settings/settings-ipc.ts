@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electron';
 import type { CacheCleanupReceipt, StorageInfo } from '../../shared';
-import type { DatabaseHandle } from '../database/library-store';
+import { sql } from '../database/query-loader';
+import type { DatabaseHandle } from '../database/types';
 import { cleanupArtworkCache, inspectArtworkCache } from './artwork-cache';
 import { SettingsStore } from './settings-store';
 import { restoreWindowBounds } from './window-bounds';
@@ -14,7 +15,7 @@ function referencedArtwork(databasePath: string): Set<string> {
   }) => DatabaseHandle;
   const db = new Database(databasePath, { readonly: true, fileMustExist: true });
   try {
-    const rows = db.prepare('SELECT DISTINCT artwork_id AS id FROM rom_metadata WHERE artwork_id IS NOT NULL').all() as {
+    const rows = db.prepare(sql('metadata.referencedArtwork')).all() as {
       id: string
     }[];
     return new Set(rows.map(row => row.id));
