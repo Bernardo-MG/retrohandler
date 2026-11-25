@@ -72,8 +72,7 @@ export async function findLibretroCover(system: string, names: string[], folder:
   const platform = libretroPlatform(system);
   if (!platform) throw new Error(`No Libretro artwork catalogue for system: ${system || '(unassigned)'}. Assign a supported system to the ROM first.`);
   for (const title of libretroCandidates(names)) {
-    const url = `https://thumbnails.libretro.com/${encodeURIComponent(platform)}/Named_Boxarts/${encodeURIComponent(title)}.png`;
-    const response = await request(url, {redirect:'error',signal:AbortSignal.timeout(12000)});
+    const response = await requestBoxart(platform, `${title}.png`, request);
     if (response.status === 404) continue;
     if (!response.ok) throw new Error(`Libretro artwork HTTP ${response.status}.`);
     const length = Number(response.headers.get('content-length'));
@@ -142,19 +141,70 @@ async function boundedText(response: Response): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+function githubRepo(platform: string): string {
+  return encodeURIComponent(platform.replace(/ /g, '_'));
+}
+
+async function githubBoxartIndex(platform: string, request: typeof fetch): Promise<string[]> {
+  const base = `https://api.github.com/repos/libretro-thumbnails/${githubRepo(platform)}/git/trees/`;
+  const loadTree = async (ref: string) => {
+    const response = await request(base + encodeURIComponent(ref), {
+      redirect: 'error', signal: AbortSignal.timeout(15000),
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Retrohandler' }
+    });
+    if (!response.ok) throw new Error(`GitHub tree HTTP ${response.status}.`);
+    const data = JSON.parse(await boundedText(response));
+    if (data.truncated || !Array.isArray(data.tree)) throw new Error('GitHub artwork tree is incomplete.');
+    return data.tree as { path: string; type: string; sha: string }[];
+  };
+  const root = await loadTree('master');
+  const boxarts = root.find(entry => entry.path === 'Named_Boxarts' && entry.type === 'tree');
+  if (!boxarts || !/^[a-f0-9]{40}$/i.test(boxarts.sha)) throw new Error('GitHub Named_Boxarts tree not found.');
+  const entries = await loadTree(boxarts.sha);
+  const files: string[] = [];
+  for (const entry of entries) {
+    if (entry.type !== 'blob' || typeof entry.path !== 'string') continue;
+    const name = safeBoxartName(entry.path);
+    if (name) files.push(name);
+    if (files.length >= MAX_INDEX_ITEMS) break;
+  }
+  return files;
+}
+
+async function requestBoxart(platform: string, filename: string, request: typeof fetch): Promise<Response> {
+  const suffix = `Named_Boxarts/${encodeURIComponent(filename)}`;
+  const options = () => ({ redirect: 'error' as const, signal: AbortSignal.timeout(12000) });
+  try {
+    const response = await request(`https://thumbnails.libretro.com/${encodeURIComponent(platform)}/${suffix}`, options());
+    if (response.ok) return response;
+    await response.body?.cancel();
+  } catch { /* try the official GitHub mirror */ }
+  return request(`https://raw.githubusercontent.com/libretro-thumbnails/${githubRepo(platform)}/master/${suffix}`, options());
+}
+
 async function boxartIndex(platform: string, request: typeof fetch, refresh: boolean): Promise<string[]> {
   const cached = indexCache.get(platform);
   if (!refresh && cached && cached.expires > Date.now()) return cached.files;
   const base = `https://thumbnails.libretro.com/${encodeURIComponent(platform)}/Named_Boxarts/`;
   let files: string[] = [];
+  const errors: string[] = [];
   for (const relative of ['.index', '']) {
-    const response = await request(base + relative, { redirect: 'error', signal: AbortSignal.timeout(15000) });
-    if (response.status === 404) continue;
-    if (!response.ok) throw new Error(`Libretro artwork index HTTP ${response.status}.`);
-    files = parseLibretroIndex(await boundedText(response));
-    if (files.length) break;
+    try {
+      const response = await request(base + relative, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status}`);
+      }
+      files = parseLibretroIndex(await boundedText(response));
+      if (files.length) break;
+      throw new Error('empty catalogue');
+    } catch (error) { errors.push(`${relative || 'directory listing'}: ${String(error)}`); }
   }
-  if (!files.length) throw new Error('Libretro artwork catalogue could not be loaded.');
+  if (!files.length) {
+    try { files = await githubBoxartIndex(platform, request); }
+    catch (error) { errors.push(`GitHub: ${String(error)}`); }
+  }
+  if (!files.length) throw new Error(`Libretro artwork catalogue unavailable for ${platform} (${errors.join('; ') || 'empty catalogue'}).`);
   indexCache.set(platform, { expires: Date.now() + INDEX_TTL_MS, files });
   return files;
 }
@@ -200,8 +250,7 @@ export async function searchLibretroCovers(system: string, query: string, region
   const results: LibretroCoverChoice[] = [];
   for (const filename of matches) {
     if (results.length >= 8) break;
-    const url = `https://thumbnails.libretro.com/${encodeURIComponent(platform)}/Named_Boxarts/${encodeURIComponent(filename)}`;
-    const response = await request(url, {redirect:'error', signal:AbortSignal.timeout(12000)});
+    const response = await requestBoxart(platform, filename, request);
     if (response.status === 404) continue;
     if (!response.ok) throw new Error(`Libretro image HTTP ${response.status}.`);
     const length = Number(response.headers.get('content-length'));
