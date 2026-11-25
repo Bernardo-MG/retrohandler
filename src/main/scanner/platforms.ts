@@ -40,7 +40,7 @@ export function isCandidateRom(filename: string): boolean {
 export function inferPlatform(relativePath: string): string {
   const extension = path.extname(relativePath).toLowerCase();
   const parts = relativePath.split(path.sep);
-  return parts.slice(0, -1).map(p => aliases[normalize(p)]).find(Boolean)
+  return parts.slice(0, -1).map(p => Object.hasOwn(aliases, normalize(p)) ? aliases[normalize(p)] : undefined).find(Boolean)
     ?? extensionHints[extension] ?? 'Needs identification';
 }
 

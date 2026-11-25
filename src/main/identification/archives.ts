@@ -25,18 +25,19 @@ export function selectRomMember(members: ArchiveMember[]): ArchiveMember | null 
 }
 
 export function parse7ZipListing(output: string): ArchiveMember[] {
-  const divider = output.indexOf('----------');
-  if (divider < 0) throw new Error('Invalid 7-Zip archive listing.');
+  const divider = /^----------\r?$/m.exec(output);
+  if (!divider) throw new Error('Invalid 7-Zip archive listing.');
   const entries: ArchiveMember[] = [];
-  for (const block of output.slice(divider + 10).split(/\r?\n\s*\r?\n/)) {
+  for (const block of output.slice(divider.index + divider[0].length).split(/\r?\n\s*\r?\n/)) {
     const values = new Map<string, string>();
     for (const line of block.split(/\r?\n/)) {
       const split = line.indexOf(' = ');
       if (split !== -1) values.set(line.slice(0, split).trim(), line.slice(split + 3));
     }
     if (!values.has('Path')) continue;
-    const size = Number(values.get('Size'));
-    if (!Number.isSafeInteger(size) || size < 0) throw new Error('Archive has invalid member size.');
+    const rawSize = values.get('Size');
+    const size = Number(rawSize);
+    if (!/^[0-9]+$/.test(rawSize ?? '') || !Number.isSafeInteger(size) || size < 0) throw new Error('Archive has invalid member size.');
     entries.push({ name: values.get('Path')!, size, directory: values.get('Folder') === '+' });
     if (entries.length > MAX_ARCHIVE_MEMBERS) throw new Error('Too many archive entries.');
   }

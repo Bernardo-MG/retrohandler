@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
+import { mkdir, lstat, open, writeFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -32,8 +32,27 @@ export async function cacheArtworkBytes(bytes: Buffer, folder: string): Promise<
 }
 export async function getArtwork(root: string, id: string): Promise<{ body: Buffer; mime: string }> {
   const file = artworkPath(root, id);
-  const body = await readFile(file);
-  if (body.length > MAX_IMAGE_BYTES || typeFromBytes(body) !== id.split('.').at(-1)) throw new Error('Invalid cached artwork.');
+  const info = await lstat(file);
+  if (!info.isFile() || info.size > MAX_IMAGE_BYTES) throw new Error('Invalid cached artwork.');
+  const handle = await open(file, 'r');
+  let body: Buffer;
+  try {
+    const opened = await handle.stat();
+    if (!opened.isFile() || opened.size > MAX_IMAGE_BYTES) throw new Error('Invalid cached artwork.');
+    // Read at most the observed size plus one byte, even if the file grows.
+    const buffer = Buffer.alloc(opened.size + 1);
+    let total = 0;
+    while (total < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, total, buffer.length - total, null);
+      if (!bytesRead) break;
+      total += bytesRead;
+    }
+    if (total !== opened.size) throw new Error('Invalid cached artwork.');
+    body = buffer.subarray(0, total);
+  } finally { await handle.close(); }
+  if (typeFromBytes(body) !== id.split('.').at(-1) || createHash('sha256').update(body).digest('hex') !== id.slice(0, 64)) {
+    throw new Error('Invalid cached artwork.');
+  }
   const mime = id.endsWith('.png') ? 'image/png' : id.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
   return { body, mime };
 }
