@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { executeExport, previewExport, type ExportLibrary } from '../src/main/export/export';
-import { mergeGameLists } from '../src/main/export/gamelist-merge';
+import { mergeGameLists } from '../src/main/export/retropie/gamelist';
 import { cacheArtworkBytes } from '../src/main/metadata/artwork';
 import type { ExportOptions, LibraryEntry } from '../src/shared';
 

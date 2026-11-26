@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { ExportOptions, LibraryEntry } from '../src/shared';
-import { executeExport, gameListXml, previewExport, type ExportLibrary } from '../src/main/export/export';
+import { executeExport, previewExport, type ExportLibrary } from '../src/main/export/export';
+import { gameListXml } from '../src/main/export/retropie/gamelist';
 
 const entry = (source: string, relativePath: string, system = 'Nintendo Entertainment System'): LibraryEntry => ({
   id: relativePath, name: 'A & B <Game>', system, source, relativePath, extension: '.zip', bytes: 4,

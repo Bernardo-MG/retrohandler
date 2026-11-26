@@ -1,96 +1,7 @@
 import path from 'node:path';
-import { createXmlCursor, type XmlTextElement } from '../components/xml/xml-parser';
-import { applyXmlEdits, type Span, type XmlEdit } from '../components/xml/xml-editor';
+import { applyXmlEdits, type XmlEdit } from '../xml/xml-editor';
+import { invalidGameList, parseGameList, type RecordNode } from './gamelist-parser';
 
-// EmulationStation gamelists contain a gameList root, game/folder records and
-// flat metadata elements. Preserve original bytes outside changed fields. Do
-// not try to repair unknown XML structures, DTDs or malformed documents.
-type RecordNode = Span & {
-  name: string;
-  fields: XmlTextElement[];
-  close: number
-};
-type DocumentNode = {
-  records: RecordNode[];
-  close: number;
-  empty: boolean;
-  rootEnd: number
-};
-const invalid = (): never => {
-  throw new Error('Malformed or unsupported gamelist XML.');
-};
-function parse(xml: string): DocumentNode {
-  const cursor = createXmlCursor(xml, invalid);
-  const { trivia, openTag, closeTag, readTextElement } = cursor;
-  trivia();
-  const root = openTag();
-  if (root.name !== 'gameList') {
-    invalid();
-  }
-  const rootEnd = cursor.position;
-  const records: RecordNode[] = [];
-  let close = cursor.position - 2;
-  if (!root.empty) {
-    for (; ;) {
-      trivia();
-      if (cursor.atClosingTag) {
-        close = closeTag(root.name);
-        break;
-      }
-      const tag = openTag();
-      if (tag.empty || (tag.name !== 'game' && tag.name !== 'folder')) {
-        invalid();
-      }
-      const fields: XmlTextElement[] = [];
-      for (; ;) {
-        trivia();
-        if (cursor.atClosingTag) {
-          break;
-        }
-        fields.push(readTextElement());
-      }
-      const recordClose = closeTag(tag.name);
-      if (fields.filter(f => f.name === 'path').length !== 1 || !fields.find(f => f.name === 'path')!.value.trim()) {
-        invalid();
-      }
-      records.push({
-        name: tag.name,
-        start: tag.start,
-        end: cursor.position,
-        close: recordClose,
-        fields
-      });
-    }
-  }
-  trivia();
-  if (!cursor.atEnd) {
-    invalid();
-  }
-  return {
-    records,
-    close,
-    empty: root.empty,
-    rootEnd
-  };
-}
-
-// Match local system-relative paths and standard RetroPie home-directory paths.
-// Do not infer that a game in a different subdirectory is the same ROM.
-function keyFor(value: string, system: string): string | null {
-  let p = value.trim();
-  const absolute = /^(?:~|\/home\/[^/]+)\/RetroPie\/roms\/([^/]+)\/(.*)$/.exec(p);
-  if (absolute) {
-    if (absolute[1] !== system) {
-      return null;
-    }
-    p = absolute[2];
-  }
-  if (p.startsWith('/') || p.startsWith('~') || p.includes('\\') || /^[A-Za-z]:/.test(p)) {
-    return null;
-  }
-  const key = path.posix.normalize(p);
-  return key === '..' || key.startsWith('../') ? null : key;
-}
 const gamePath = (record: RecordNode) => record.fields.find(f => f.name === 'path')!.value;
 
 /** Nonempty exported metadata wins for matching ROM paths. Keep the existing
@@ -99,18 +10,18 @@ const gamePath = (record: RecordNode) => record.fields.find(f => f.name === 'pat
 export function mergeGameLists(
   existing: string,
   generated: string,
-  system: string,
+  resolvePath: (value: string) => string | null,
   fallbackNames: ReadonlySet<string> = new Set()
 ): string {
-  const old = parse(existing);
-  const fresh = parse(generated);
+  const old = parseGameList(existing);
+  const fresh = parseGameList(generated);
   const byPath = new Map<string, Array<{
     key: string;
     record: RecordNode
   }>>();
   const unknownBasenames = new Set<string>();
   for (const record of old.records) {
-    const key = keyFor(gamePath(record), system);
+    const key = resolvePath(gamePath(record));
     if (key === null) {
       // A nonstandard absolute/escaping path cannot be safely mapped to the
       // chosen system. Block a possible duplicate rather than guessing.
@@ -124,7 +35,7 @@ export function mergeGameLists(
   const edits: XmlEdit[] = [];
   const additions: string[] = [];
   for (const record of fresh.records) {
-    const key = keyFor(gamePath(record), system) ?? invalid();
+    const key = resolvePath(gamePath(record)) ?? invalidGameList();
     const matches = byPath.get(key.toLowerCase()) ?? [];
     if (unknownBasenames.has(path.posix.basename(key).toLowerCase())) {
       throw new Error(`Unmapped existing ROM path may conflict: ${key}`);

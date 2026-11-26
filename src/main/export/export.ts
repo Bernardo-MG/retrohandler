@@ -12,8 +12,8 @@ import {
   type LibraryPage
 } from '../../shared';
 import { artworkPath, isArtworkId } from '../metadata/artwork';
-import { hasInvalidXmlChars, xmlEscape } from '../components/xml/xml-text';
-import { mergeGameLists } from './gamelist-merge';
+import { hasInvalidXmlChars } from '../components/xml/xml-text';
+import { gameListXml, mergeGameLists, type RetroPieGame } from './retropie/gamelist';
 import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../components/filesystem/paths';
 import { readRegular } from '../components/filesystem/file-reader';
 import { replaceWithBackup, writeExclusive } from '../components/filesystem/file-writer';
@@ -27,49 +27,6 @@ export type ExportLibrary = {
 const validSystem = (s: string) => /^[a-z0-9][a-z0-9_-]{0,49}$/.test(s) && !['con', 'prn', 'nul', 'aux'].includes(s);
 const knownSystem = (name: string) => Object.prototype.hasOwnProperty.call(SYSTEM_MAP, name) ? SYSTEM_MAP[name] : undefined;
 const filenameOf = (relative: string): string => path.win32.basename(relative.replace(/\//g, '\\'));
-function formatDate(s: string): string | null {
-  // EmulationStation requires a full timestamp, but metadata can contain a
-  // year or a year-month when the exact release day is unknown.
-  const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(s.trim());
-  if (!match) {
-    return null;
-  }
-  const year = Number(match[1]);
-  const month = Number(match[2] ?? '01');
-  const day = Number(match[3] ?? '01');
-  if (year < 1 || month < 1 || month > 12) {
-    return null;
-  }
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (day < 1 || day > daysInMonth[month - 1]) {
-    return null;
-  }
-  return `${match[1]}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}T000000`;
-}
-
-export function gameListXml(games: Array<{
-  entry: LibraryEntry;
-  filename: string;
-  image: string | null
-}>): string {
-  const elements = games.map(({ entry, filename, image }) => {
-    const m = entry.metadata;
-    const props = [
-      ['path', `./${filename}`],
-      ['name', m?.title?.trim() || entry.identifiedTitle?.trim() || entry.name],
-      ['desc', m?.description],
-      ['image', image ? `./images/${image}` : null],
-      ['releasedate', formatDate(m?.released || '')],
-      ['developer', m?.developer],
-      ['publisher', m?.publisher],
-      ['genre', m?.genre]
-    ].filter((pair): pair is [string, string] => !!pair[1]?.trim());
-    return '  <game>\n' + props.map(([k, v]) => `    <${k}>${xmlEscape(v)}</${k}>`).join('\n') + '\n  </game>';
-  });
-  return '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n' + elements.join('\n') + '\n</gameList>\n';
-}
-
 async function collect(library: ExportLibrary, source: string | null): Promise<LibraryEntry[]> {
   const all: LibraryEntry[] = [];
   for (let offset = 0; ; offset += 200) {
@@ -138,11 +95,7 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
   const files: ExportFile[] = [];
   const warnings: string[] = [];
   const seen = new Set<string>();
-  const bySystem = new Map<string, Array<{
-    entry: LibraryEntry;
-    filename: string;
-    image: string | null
-  }>>();
+  const bySystem = new Map<string, RetroPieGame[]>();
   for (const entry of entries) {
     const mapped = Object.prototype.hasOwnProperty.call(options.overrides, entry.system) ? options.overrides[entry.system] : knownSystem(entry.system);
     if (!mapped || !validSystem(mapped)) {
