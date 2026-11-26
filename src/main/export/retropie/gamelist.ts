@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { LibraryEntry } from '../../../shared';
-import { writeGameList } from '../../components/emulationstation/gamelist-writer';
 import { mergeGameLists as mergeEmulationStationGameLists } from '../../components/emulationstation/gamelist-merger';
+import { writeGameList } from '../../components/emulationstation/gamelist-writer';
 
 export type RetroPieGame = {
   entry: LibraryEntry;

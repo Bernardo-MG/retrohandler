@@ -1,8 +1,8 @@
 import path from 'node:path';
 import type { ExportReceipt } from '../../shared';
-import { ensureSafeDirectory } from '../components/filesystem/paths';
 import { readRegular } from '../components/filesystem/file-reader';
 import { replaceWithBackup, writeExclusive } from '../components/filesystem/file-writer';
+import { ensureSafeDirectory } from '../components/filesystem/paths';
 import { hash, hashOrNull, targetPath, type FileOperation } from './export-plan';
 
 /** Execute approved operations in order; preview references never reach this layer. */

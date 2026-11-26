@@ -2,8 +2,8 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry } from '../../shared';
 import { assertSafeDirectory, overlaps } from '../components/filesystem/paths';
-import { finalizeExport, type PreparedExport } from './export-plan';
 import { executeOperations } from './export-executor';
+import { finalizeExport, type PreparedExport } from './export-plan';
 import type { Exporter } from './exporter';
 import { readLibraryEntries, type ExportLibrary } from './library-reader';
 
@@ -14,7 +14,7 @@ export class ExportService {
   constructor(
     private readonly library: ExportLibrary,
     private readonly exporter: Exporter
-  ) {}
+  ) { }
 
   async preview(options: ExportOptions): Promise<ExportPlan> {
     return (await this.prepare(options)).plan;

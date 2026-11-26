@@ -9,7 +9,7 @@ const MAX_ENTRIES = 250000;
 
 export async function readLibraryEntries(library: ExportLibrary, source: string | null): Promise<LibraryEntry[]> {
   const all: LibraryEntry[] = [];
-  for (;;) {
+  for (; ;) {
     const page = await library.queryLibrary({
       source,
       search: '',

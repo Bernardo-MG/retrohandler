@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { assertSafeDirectory } from '../components/filesystem/paths';
 import { readRegular } from '../components/filesystem/file-reader';
+import { assertSafeDirectory } from '../components/filesystem/paths';
 import { hash, hashOrNull, targetPath, type FileOperation } from './export-plan';
 
 /** Inspect a source file without retaining its bytes in the prepared export. */

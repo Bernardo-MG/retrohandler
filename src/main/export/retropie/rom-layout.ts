@@ -4,8 +4,7 @@ import { hasInvalidXmlChars } from '../../components/xml/xml-text';
 import { mapSystem } from './system-mapping';
 
 /** Determine the RetroPie ROM reference, or explain why it cannot be exported. */
-export function resolveRomLayout(entry: Pick<LibraryEntry, 'system' | 'relativePath'>, overrides: Readonly<Record<string, string>>):
-  { system: string; filename: string; relativeDestination: string } | { warning: string } {
+export function resolveRomLayout(entry: Pick<LibraryEntry, 'system' | 'relativePath'>, overrides: Readonly<Record<string, string>>): { system: string; filename: string; relativeDestination: string } | { warning: string } {
   const system = mapSystem(entry.system, overrides);
   if (!system) {
     return { warning: `Unmapped system: ${entry.system}` };

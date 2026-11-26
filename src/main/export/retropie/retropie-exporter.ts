@@ -1,11 +1,11 @@
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { ExportFile, LibraryEntry } from '../../../shared';
-import { artworkPath, isArtworkId } from '../../metadata/artwork';
 import { childOf } from '../../components/filesystem/paths';
+import { artworkPath, isArtworkId } from '../../metadata/artwork';
 import type { ExportDraft, FileOperation } from '../export-plan';
-import type { Exporter, ExportTargetOptions } from '../exporter';
 import { planCopy, planGenerated } from '../export-planner';
+import type { Exporter, ExportTargetOptions } from '../exporter';
 import { prepareGameList, type RetroPieGame } from './gamelist';
 import { resolveRomLayout } from './rom-layout';
 
@@ -14,7 +14,7 @@ const MAX_ART_BYTES = 5 * 1024 * 1024;
 
 /** Prepares RetroPie configuration files; ROMs remain references only. */
 export class RetroPieExporter implements Exporter {
-  constructor(private readonly artworkFolder: string) {}
+  constructor(private readonly artworkFolder: string) { }
 
   async prepare(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
     const { files, warnings, bySystem } = await this.collectFiles(entries, options);
