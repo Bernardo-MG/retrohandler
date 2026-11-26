@@ -1,3 +1,4 @@
 export { ExportService } from './export-service';
 export type { ExportLibrary } from './library-reader';
-export type { Exporter, ExportDraft } from './exporter';
+export type { Exporter, ExportTargetOptions } from './exporter';
+export type { ExportDraft } from './export-plan';

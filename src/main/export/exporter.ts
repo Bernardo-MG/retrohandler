@@ -1,12 +1,10 @@
-import type { ExportOptions, ExportPlan, LibraryEntry } from '../../shared';
-import type { FileOperation } from './export-plan';
+import type { ExportOptions, LibraryEntry } from '../../shared';
+import type { ExportDraft } from './export-plan';
 
-export type ExportDraft = {
-  plan: Omit<ExportPlan, 'destination' | 'fingerprint'>;
-  operations: FileOperation[];
-};
+/** Only the validated destination and target settings are needed by a strategy. */
+export type ExportTargetOptions = Readonly<Pick<ExportOptions, 'destination' | 'includeArtwork' | 'overrides'>>;
 
-/** Prepare a read-only preview and write operations for a validated destination. */
+/** Prepare a read-only draft and write operations for a validated destination. */
 export interface Exporter {
-  prepare(entries: readonly LibraryEntry[], options: ExportOptions, destination: string): Promise<ExportDraft>;
+  prepare(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft>;
 }

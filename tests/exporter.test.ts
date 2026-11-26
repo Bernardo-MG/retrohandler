@@ -5,8 +5,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import type { ExportOptions, LibraryEntry } from '../src/shared';
 import { ExportService, type ExportLibrary, type Exporter } from '../src/main/export';
-import { fingerprint, type FileOperation } from '../src/main/export/export-plan';
+import { finalizeExport, fingerprint, type ExportDraft, type FileOperation } from '../src/main/export/export-plan';
 import { planGenerated } from '../src/main/export/export-planner';
+import { readLibraryEntries } from '../src/main/export/library-reader';
 import { mapSystem } from '../src/main/export/retropie/system-mapping';
 import { resolveRomLayout } from '../src/main/export/retropie/rom-layout';
 import { RetroPieExporter } from '../src/main/export/retropie/retropie-exporter';
@@ -55,17 +56,16 @@ test('the export workflow accepts an independent strategy and owns the validated
   const options = optionsFor(destination);
   let operations: FileOperation[] = [];
   const exporter: Exporter = {
-    async prepare(received, receivedOptions, target) {
+    async prepare(received, receivedOptions) {
       assert.deepEqual(received, entries);
-      assert.equal(receivedOptions, options);
-      assert.equal(target, destination);
-      const operation = await planGenerated(target, 'index.json', 100, () => Buffer.from('{}'));
+      assert.deepEqual(receivedOptions, { destination, includeArtwork: false, overrides: {} });
+      const operation = await planGenerated(receivedOptions.destination, 'index.json', 100, () => Buffer.from('{}'));
       operations = [operation];
       return {
         plan: {
           files: [
             { source: path.join(source, 'Game.zip'), relativeDestination: 'Game.zip', size: 4, kind: 'rom' },
-            { source: '', relativeDestination: operation.relativeDestination, size: operation.size, kind: 'gamelist', action: operation.action }
+            { source: '', relativeDestination: operation.relativeDestination, size: 0, kind: 'gamelist' }
           ],
           systems: [], warnings: [], conflicts: [], bytes: 0, skippedRoms: 0
         },
@@ -78,6 +78,8 @@ test('the export workflow accepts an independent strategy and owns the validated
   assert.equal(plan.destination, destination);
   assert.equal(plan.fingerprint, fingerprint(plan, options, operations));
   assert.equal(operations[0].relativeDestination, 'index.json');
+  assert.equal(plan.files[1].size, 2);
+  assert.equal(plan.files[1].action, 'create');
   await assert.rejects(readdir(destination));
   assert.deepEqual(await service.execute(options, plan.fingerprint), { copied: 1 });
   assert.equal(await readFile(path.join(destination, 'index.json'), 'utf8'), '{}');
@@ -96,7 +98,7 @@ test('RetroPie strategy returns references separately from executable operations
   await writeFile(path.join(source, 'Game.zip'), 'data');
   const entries = [game(source, 'Game.zip')];
   const exporter = new RetroPieExporter(path.join(root, 'cache'));
-  const draft = await exporter.prepare(entries, optionsFor(destination), destination);
+  const draft = await exporter.prepare(entries, { destination, includeArtwork: false, overrides: {} });
   assert.deepEqual(draft.plan.files.map(file => file.kind), ['rom', 'gamelist']);
   assert.deepEqual(draft.operations.map(operation => operation.relativeDestination), ['roms/nes/gamelist.xml']);
   assert.equal(draft.plan.skippedRoms, 0);
@@ -114,12 +116,12 @@ test('one export service rejects concurrent execution and releases its lock afte
   const started = new Promise<void>(resolve => { entered = resolve; });
   const gate = new Promise<void>(resolve => { release = resolve; });
   const exporter: Exporter = {
-    async prepare(items, opts, dest) {
+    async prepare(items, opts) {
       if (block) {
         entered();
         await gate;
       }
-      return target.prepare(items, opts, dest);
+      return target.prepare(items, opts);
     }
   };
   const service = new ExportService(libraryFor(entries), exporter);
@@ -149,9 +151,9 @@ test('the export service releases its execution lock after a preparation failure
   const target = new RetroPieExporter(path.join(root, 'cache'));
   let fail = false;
   const exporter: Exporter = {
-    async prepare(items, options, dest) {
+    async prepare(items, options) {
       if (fail) throw new Error('Preparation failed');
-      return target.prepare(items, options, dest);
+      return target.prepare(items, options);
     }
   };
   const service = new ExportService(libraryFor([game(source, 'Game.zip')]), exporter);
@@ -163,3 +165,48 @@ test('the export service releases its execution lock after a preparation failure
   fail = false;
   assert.deepEqual(await service.execute(options, preview.fingerprint), { copied: 1 });
 }));
+
+
+test('export finalization rejects unlisted, missing, duplicate and ROM write operations', async () => fixture(async (_, source, destination) => {
+  const options = optionsFor(destination);
+  const operation = await planGenerated(destination, 'Game.zip', 100, () => Buffer.from('new'));
+  const draft: ExportDraft = {
+    plan: {
+      files: [{ source: path.join(source, 'Game.zip'), relativeDestination: 'Game.zip', size: 4, kind: 'rom' }],
+      systems: [], warnings: [], conflicts: [], bytes: 0, skippedRoms: 0
+    },
+    operations: [operation]
+  };
+  assert.throws(() => finalizeExport(draft, options, destination), /ROM reference cannot be an export operation/);
+  assert.throws(() => finalizeExport({ ...draft, plan: { ...draft.plan, files: [] } }, options, destination), /missing from preview/);
+  assert.throws(() => finalizeExport({ ...draft, operations: [operation, operation] }, options, destination), /Duplicate export operation/);
+  const file = { source: '', relativeDestination: 'Game.zip', size: 0, kind: 'gamelist' as const };
+  const missing = { ...draft, operations: [], plan: { ...draft.plan, files: [file] } };
+  assert.throws(() => finalizeExport(missing, options, destination), /Export operation missing/);
+  const conflicted = { ...missing, plan: { ...missing.plan, conflicts: ['Existing destination conflict'] } };
+  assert.deepEqual(finalizeExport(conflicted, options, destination).plan.files, [file]);
+  const duplicate = { ...draft, plan: { ...draft.plan, files: [file, { ...file, relativeDestination: 'game.zip' }] } };
+  assert.throws(() => finalizeExport(duplicate, options, destination), /Duplicate export destination/);
+  await assert.rejects(readdir(destination));
+}));
+
+test('library pagination uses actual returned counts and never skips short pages', async () => {
+  const entries = Array.from({ length: 5 }, (_, i) => game('/collection', `${i}.zip`));
+  const offsets: number[] = [];
+  const library: ExportLibrary = {
+    async queryLibrary(query) {
+      offsets.push(query.offset);
+      return { items: entries.slice(query.offset, query.offset + 2), total: entries.length };
+    }
+  };
+  assert.deepEqual(await readLibraryEntries(library, null), entries);
+  assert.deepEqual(offsets, [0, 2, 4]);
+});
+
+test('library pagination rejects oversized or stalled results', async () => {
+  const item = game('/collection', 'Game.zip');
+  const oversized: ExportLibrary = { queryLibrary: async () => ({ items: [item], total: 250001 }) };
+  const stalled: ExportLibrary = { queryLibrary: async () => ({ items: [], total: 1 }) };
+  await assert.rejects(readLibraryEntries(oversized, null), /Library changed during export preview/);
+  await assert.rejects(readLibraryEntries(stalled, null), /Library changed during export preview/);
+});

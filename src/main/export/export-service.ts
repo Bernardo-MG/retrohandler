@@ -1,8 +1,8 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { ExportOptions, ExportPlan, ExportReceipt } from '../../shared';
+import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry } from '../../shared';
 import { assertSafeDirectory, overlaps } from '../components/filesystem/paths';
-import { fingerprint, type PreparedExport } from './export-plan';
+import { finalizeExport, type PreparedExport } from './export-plan';
 import { executeOperations } from './export-executor';
 import type { Exporter } from './exporter';
 import { readLibraryEntries, type ExportLibrary } from './library-reader';
@@ -54,26 +54,36 @@ export class ExportService {
       throw new Error('Invalid export options.');
     }
     const entries = await readLibraryEntries(this.library, options.source);
-    const dest = path.resolve(options.destination);
-    await assertSafeDirectory(dest);
-    const roots = [...new Set(entries.map(e => path.resolve(e.source)))];
+    const destination = path.resolve(options.destination);
+    await this.validateDestination(destination, entries, options.source);
+    const draft = await this.exporter.prepare(entries, {
+      destination,
+      includeArtwork: options.includeArtwork,
+      overrides: options.overrides
+    });
+    return finalizeExport(draft, options, destination);
+  }
+
+  private async validateDestination(destination: string, entries: readonly LibraryEntry[], source: string | null): Promise<void> {
+    await assertSafeDirectory(destination);
+    const roots = new Set(entries.map(entry => path.resolve(entry.source)));
     // Protect sources even if the selected collection happens to have zero indexed files.
-    if (options.source) {
-      roots.push(path.resolve(options.source));
+    if (source) {
+      roots.add(path.resolve(source));
     }
-    for (const root of roots) if (overlaps(root.toLowerCase(), dest.toLowerCase())) {
-      throw new Error('Export destination overlaps a ROM collection.');
+    const destinationKey = destination.toLowerCase();
+    for (const root of roots) {
+      if (overlaps(root.toLowerCase(), destinationKey)) {
+        throw new Error('Export destination overlaps a ROM collection.');
+      }
     }
     // The destination has no redirected ancestors. Also protect canonical source
     // roots, even if the requested destination parent does not exist yet.
     for (const root of roots) {
       const realRoot = await realpath(root).catch(() => root);
-      if (overlaps(realRoot.toLowerCase(), dest.toLowerCase())) {
+      if (overlaps(realRoot.toLowerCase(), destinationKey)) {
         throw new Error('Export destination overlaps a ROM collection.');
       }
     }
-    const draft = await this.exporter.prepare(entries, options, dest);
-    const plan = { ...draft.plan, destination: dest };
-    return { plan: { ...plan, fingerprint: fingerprint(plan, options, draft.operations) }, operations: draft.operations };
   }
 }
