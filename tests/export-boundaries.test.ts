@@ -45,3 +45,17 @@ test('export IPC depends only on the public export entry point, not concrete str
     inside(exportRoot, path.resolve(path.dirname(file), reference)));
   assert.deepEqual(references, ['../export']);
 });
+
+test('reusable export components do not depend on application models or packages', () => {
+  const componentsRoot = path.join(mainRoot, 'components');
+  const files = sourceFiles(componentsRoot);
+  assert.ok(files.includes(path.join(componentsRoot, 'file-operations', 'file-operation-planner.ts')));
+  assert.ok(files.includes(path.join(componentsRoot, 'emulationstation', 'gamelist-document.ts')));
+  const violations = files.flatMap(file => imports(file).filter(reference => {
+    if (reference.startsWith('.')) {
+      return !inside(componentsRoot, path.resolve(path.dirname(file), reference));
+    }
+    return /^electron(?:\/|$)/.test(reference);
+  }).map(reference => `${path.relative(mainRoot, file)}: ${reference}`));
+  assert.deepEqual(violations, []);
+});

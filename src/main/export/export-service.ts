@@ -1,11 +1,17 @@
-import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry } from '../../shared';
-import { assertSafeDirectory, overlaps } from '../components/filesystem/paths';
-import { executeOperations } from './export-executor';
-import { finalizeExport, type PreparedExport } from './export-plan';
+import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry, LibraryPage, LibraryQuery } from '../../shared';
+import { FileDestination } from '../components/file-operations/file-destination';
+import { FileOperationExecutor } from '../components/file-operations/file-operation-executor';
+import { FileWriter } from '../components/filesystem/file-writer';
 import type { Exporter } from './exporter';
-import { readLibraryEntries, type ExportLibrary } from './library-reader';
+import { PreparedExport } from './prepared-export';
+
+export type ExportLibrary = {
+  queryLibrary(query: LibraryQuery): Promise<LibraryPage>
+};
+
+const PAGE_SIZE = 200;
+const MAX_ENTRIES = 250000;
 
 /** Owns the preview/confirmation workflow. Share one instance for export concurrency control. */
 export class ExportService {
@@ -26,17 +32,10 @@ export class ExportService {
     }
     this.exporting = true;
     try {
-      const { plan, operations } = await this.prepare(options);
-      if (plan.fingerprint !== approvedFingerprint) {
-        throw new Error('Export preview changed; preview again.');
-      }
-      if (plan.conflicts.length) {
-        throw new Error('Resolve destination conflicts before export.');
-      }
-      if (!plan.files.some(file => file.kind === 'rom')) {
-        throw new Error('No exportable ROMs in preview.');
-      }
-      return await executeOperations(plan.destination, operations);
+      const prepared = await this.prepare(options);
+      prepared.confirm(approvedFingerprint);
+      const executor = new FileOperationExecutor(prepared.destination, new FileWriter('retrohandler'));
+      return await executor.execute(prepared.operations);
     } finally {
       this.exporting = false;
     }
@@ -53,36 +52,41 @@ export class ExportService {
     if (typeof options.includeArtwork !== 'boolean' || !options.overrides || Array.isArray(options.overrides) || typeof options.overrides !== 'object') {
       throw new Error('Invalid export options.');
     }
-    const entries = await readLibraryEntries(this.library, options.source);
-    const destination = path.resolve(options.destination);
-    await this.validateDestination(destination, entries, options.source);
+    const entries = await this.readLibraryEntries(options.source);
+    const destination = new FileDestination(options.destination);
+    const roots = entries.map(entry => entry.source);
+    // Protect the selected collection even when it contains no indexed files.
+    if (options.source) roots.push(options.source);
+    await destination.validate(roots, 'Export destination overlaps a ROM collection.');
     const draft = await this.exporter.prepare(entries, {
       destination,
       includeArtwork: options.includeArtwork,
       overrides: options.overrides
     });
-    return finalizeExport(draft, options, destination);
+    return PreparedExport.fromDraft(draft, options, destination);
   }
 
-  private async validateDestination(destination: string, entries: readonly LibraryEntry[], source: string | null): Promise<void> {
-    await assertSafeDirectory(destination);
-    const roots = new Set(entries.map(entry => path.resolve(entry.source)));
-    // Protect sources even if the selected collection happens to have zero indexed files.
-    if (source) {
-      roots.add(path.resolve(source));
-    }
-    const destinationKey = destination.toLowerCase();
-    for (const root of roots) {
-      if (overlaps(root.toLowerCase(), destinationKey)) {
-        throw new Error('Export destination overlaps a ROM collection.');
+  private async readLibraryEntries(source: string | null): Promise<LibraryEntry[]> {
+    const all: LibraryEntry[] = [];
+    for (; ;) {
+      const page = await this.library.queryLibrary({
+        source,
+        search: '',
+        system: null,
+        sort: 'name',
+        descending: false,
+        offset: all.length,
+        limit: PAGE_SIZE
+      });
+      if (page.total > MAX_ENTRIES || all.length + page.items.length > MAX_ENTRIES) {
+        throw new Error('Library changed during export preview.');
       }
-    }
-    // The destination has no redirected ancestors. Also protect canonical source
-    // roots, even if the requested destination parent does not exist yet.
-    for (const root of roots) {
-      const realRoot = await realpath(root).catch(() => root);
-      if (overlaps(realRoot.toLowerCase(), destinationKey)) {
-        throw new Error('Export destination overlaps a ROM collection.');
+      all.push(...page.items);
+      if (all.length >= page.total) {
+        return all;
+      }
+      if (!page.items.length) {
+        throw new Error('Library changed during export preview.');
       }
     }
   }

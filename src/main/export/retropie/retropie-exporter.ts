@@ -3,11 +3,12 @@ import path from 'node:path';
 import type { ExportFile, LibraryEntry } from '../../../shared';
 import { childOf } from '../../components/filesystem/paths';
 import { artworkPath, isArtworkId } from '../../metadata/artwork';
-import type { ExportDraft, FileOperation } from '../export-plan';
-import { planCopy, planGenerated } from '../export-planner';
+import type { FileOperation } from '../../components/file-operations/file-operation';
+import { FileOperationPlanner } from '../../components/file-operations/file-operation-planner';
+import type { ExportDraft } from '../prepared-export';
 import type { Exporter, ExportTargetOptions } from '../exporter';
-import { prepareGameList, type RetroPieGame } from './gamelist';
-import { resolveRomLayout } from './rom-layout';
+import { RetroPieGameList, type RetroPieGame } from './retropie-gamelist';
+import { RetroPieLayout } from './retropie-layout';
 
 const MAX_XML_BYTES = 32 * 1024 * 1024;
 const MAX_ART_BYTES = 5 * 1024 * 1024;
@@ -17,10 +18,12 @@ export class RetroPieExporter implements Exporter {
   constructor(private readonly artworkFolder: string) { }
 
   async prepare(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
-    const { files, warnings, bySystem } = await this.collectFiles(entries, options);
+    const layout = new RetroPieLayout(options.overrides);
+    const planner = new FileOperationPlanner(options.destination);
+    const { files, warnings, bySystem } = await this.collectFiles(entries, options.includeArtwork, layout);
     // Artwork operations precede gamelists so new image references are published last.
-    const artwork = await this.planArtwork(options.destination, files);
-    const gamelists = await this.planGameLists(options.destination, bySystem);
+    const artwork = await this.planArtwork(planner, files);
+    const gamelists = await this.planGameLists(planner, layout, bySystem);
     return {
       plan: {
         files: [...files, ...gamelists.files],
@@ -34,18 +37,18 @@ export class RetroPieExporter implements Exporter {
     };
   }
 
-  private async collectFiles(entries: readonly LibraryEntry[], options: ExportTargetOptions) {
+  private async collectFiles(entries: readonly LibraryEntry[], includeArtwork: boolean, layout: RetroPieLayout) {
     const files: ExportFile[] = [];
     const warnings: string[] = [];
     const seen = new Set<string>();
     const bySystem = new Map<string, RetroPieGame[]>();
     for (const entry of entries) {
-      const layout = resolveRomLayout(entry, options.overrides);
-      if ('warning' in layout) {
-        warnings.push(layout.warning);
+      const rom = layout.resolveRom(entry);
+      if ('warning' in rom) {
+        warnings.push(rom.warning);
         continue;
       }
-      const { system: mapped, filename: fileName, relativeDestination: dstRelative } = layout;
+      const { system: mapped, filename: fileName, relativeDestination: dstRelative } = rom;
       const src = path.resolve(entry.source, entry.relativePath);
       if (!childOf(path.resolve(entry.source), src)) {
         warnings.push(`Unsafe source: ${entry.relativePath}`);
@@ -78,8 +81,8 @@ export class RetroPieExporter implements Exporter {
       files.push(file);
       let image: string | null = null;
       const id = entry.metadata?.artworkId;
-      if (options.includeArtwork && isArtworkId(id)) {
-        const imageDest = `roms/${mapped}/images/${id}`;
+      if (includeArtwork && isArtworkId(id)) {
+        const imageDest = layout.artworkPath(mapped, id);
         const imageKey = imageDest.toLowerCase();
         const cached = artworkPath(this.artworkFolder, id);
         const artInfo = await lstat(cached).catch(() => null);
@@ -105,7 +108,7 @@ export class RetroPieExporter implements Exporter {
     return { files, warnings, bySystem };
   }
 
-  private async planArtwork(destination: string, files: readonly ExportFile[]) {
+  private async planArtwork(planner: FileOperationPlanner, files: readonly ExportFile[]) {
     const operations: FileOperation[] = [];
     const conflicts: string[] = [];
     // Existing artwork can be reused only when it is byte-identical. Never
@@ -116,7 +119,7 @@ export class RetroPieExporter implements Exporter {
         continue;
       }
       try {
-        const operation = await planCopy(destination, item.relativeDestination, item.source, item.size, MAX_ART_BYTES, 'artwork');
+        const operation = await planner.planCopy(item.relativeDestination, item.source, item.size, MAX_ART_BYTES, 'artwork');
         operations.push(operation);
         if (operation.action === 'create') {
           bytes += operation.size;
@@ -128,16 +131,17 @@ export class RetroPieExporter implements Exporter {
     return { operations, conflicts, bytes };
   }
 
-  private async planGameLists(destination: string, bySystem: ReadonlyMap<string, RetroPieGame[]>) {
+  private async planGameLists(planner: FileOperationPlanner, layout: RetroPieLayout, bySystem: ReadonlyMap<string, RetroPieGame[]>) {
     const files: ExportFile[] = [];
     const operations: FileOperation[] = [];
     const conflicts: string[] = [];
     for (const [system, group] of bySystem) {
-      const relativeDestination = `roms/${system}/gamelist.xml`;
+      const relativeDestination = layout.gamelistPath(system);
       files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
       try {
-        const operation = await planGenerated(destination, relativeDestination, MAX_XML_BYTES,
-          prior => prepareGameList(group, system, prior));
+        const gamelist = new RetroPieGameList(layout, system);
+        const operation = await planner.planGenerated(relativeDestination, MAX_XML_BYTES,
+          prior => gamelist.prepare(group, prior));
         operations.push(operation);
       } catch (error) {
         conflicts.push(`${relativeDestination}: ${String(error)}`);

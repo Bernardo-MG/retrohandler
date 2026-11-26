@@ -6,7 +6,10 @@ import { test } from 'node:test';
 import type { ExportOptions, LibraryEntry } from '../src/shared';
 import { ExportService, type ExportLibrary } from '../src/main/export';
 import { RetroPieExporter } from '../src/main/export/retropie/retropie-exporter';
-import { gameListXml } from '../src/main/export/retropie/gamelist';
+import { RetroPieGameList } from '../src/main/export/retropie/retropie-gamelist';
+import { RetroPieLayout } from '../src/main/export/retropie/retropie-layout';
+
+const gamelist = new RetroPieGameList(new RetroPieLayout({}), 'nes');
 
 const entry = (source: string, relativePath: string, system = 'Nintendo Entertainment System'): LibraryEntry => ({
   id: relativePath, name: 'A & B <Game>', system, source, relativePath, extension: '.zip', bytes: 4,
@@ -28,7 +31,7 @@ async function fixture(fn: (root: string, source: string, destination: string) =
 }
 
 test('gamelist contains escaped metadata and relative image paths', () => {
-  const xml = gameListXml([{entry: entry('/roms', 'foo.zip'), filename: 'foo.zip', image: 'a.png'}]);
+  const xml = gamelist.prepare([{entry: entry('/roms', 'foo.zip'), filename: 'foo.zip', image: 'a.png'}], null).toString('utf8');
   assert.match(xml, /<name>Hello &amp; &lt;World&gt;<\/name>/);
   assert.match(xml, /<desc>Line &lt;1&gt; &amp; next<\/desc>/);
   assert.match(xml, /<releasedate>19920304T000000<\/releasedate>/);
@@ -39,7 +42,7 @@ test('release year and year-month are exported as valid EmulationStation dates',
   const game = entry('/roms', 'Game.zip');
   const render = (released: string) => {
     game.metadata = { ...game.metadata!, released };
-    return gameListXml([{ entry: game, filename: 'Game.zip', image: null }]);
+    return gamelist.prepare([{ entry: game, filename: 'Game.zip', image: null }], null).toString('utf8');
   };
   assert.match(render('1992'), /<releasedate>19920101T000000<\/releasedate>/);
   assert.match(render('1992-03'), /<releasedate>19920301T000000<\/releasedate>/);
@@ -53,7 +56,7 @@ test('invalid or impossible release dates are omitted', () => {
   for (const released of ['', '0000', '1992-00', '1992-13', '1992-02-30',
     '1900-02-29', '1992-04-31', '1992-1', '1992/03', 'about 1992']) {
     game.metadata = { ...game.metadata!, released };
-    const xml = gameListXml([{ entry: game, filename: 'Game.zip', image: null }]);
+    const xml = gamelist.prepare([{ entry: game, filename: 'Game.zip', image: null }], null).toString('utf8');
     assert.doesNotMatch(xml, /<releasedate>/, `invalid date: ${released}`);
   }
 });

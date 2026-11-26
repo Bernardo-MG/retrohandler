@@ -1,69 +1,88 @@
 import path from 'node:path';
 import { applyXmlEdits, type XmlEdit } from '../xml/xml-editor';
-import { invalidGameList, parseGameList, type RecordNode } from './gamelist-parser';
+import type { GameListDocument, GameListRecord } from './gamelist-document';
 
-const gamePath = (record: RecordNode) => record.fields.find(f => f.name === 'path')!.value;
+type PathMatch = { key: string; record: GameListRecord };
 
-/** Nonempty exported metadata wins for matching ROM paths. Keep the existing
- * path, user statistics, favorites, unexported fields, folders and unrelated
- * games. Unsupported or ambiguous input fails closed instead of losing data. */
-export function mergeGameLists(
-  existing: string,
-  generated: string,
-  resolvePath: (value: string) => string | null,
-  fallbackNames: ReadonlySet<string> = new Set()
-): string {
-  const old = parseGameList(existing);
-  const fresh = parseGameList(generated);
-  const byPath = new Map<string, Array<{
-    key: string;
-    record: RecordNode
-  }>>();
-  const unknownBasenames = new Set<string>();
-  for (const record of old.records) {
-    const key = resolvePath(gamePath(record));
-    if (key === null) {
-      // A nonstandard absolute/escaping path cannot be safely mapped to the
-      // chosen system. Block a possible duplicate rather than guessing.
-      unknownBasenames.add(path.posix.basename(gamePath(record).trim().replace(/\\/g, '/')).toLowerCase());
-      continue;
-    }
-    const matches = byPath.get(key.toLowerCase()) ?? [];
-    matches.push({ key, record });
-    byPath.set(key.toLowerCase(), matches);
-  }
-  const edits: XmlEdit[] = [];
-  const additions: string[] = [];
-  for (const record of fresh.records) {
-    const key = resolvePath(gamePath(record)) ?? invalidGameList();
-    const matches = byPath.get(key.toLowerCase()) ?? [];
-    if (unknownBasenames.has(path.posix.basename(key).toLowerCase())) {
-      throw new Error(`Unmapped existing ROM path may conflict: ${key}`);
-    }
-    if (!matches.length) {
-      additions.push('  ' + generated.slice(record.start, record.end));
-      continue;
-    }
-    if (matches.length !== 1 || matches[0].key !== key || matches[0].record.name !== 'game') {
-      throw new Error(`Ambiguous existing ROM path: ${key}`);
-    }
-    const previous = matches[0].record;
-    const newFields: string[] = [];
-    for (const f of record.fields) {
-      if (f.name === 'path') {
+/** Merge nonempty exported metadata without rewriting unrelated source text. */
+export class GameListMerger {
+  constructor(private readonly resolvePath: (value: string) => string | null) {}
+
+  merge(
+    existing: GameListDocument,
+    generated: GameListDocument,
+    fallbackNames: ReadonlySet<string> = new Set()
+  ): string {
+    const { byPath, unknownBasenames } = this.indexRecords(existing.records);
+    const edits: XmlEdit[] = [];
+    const additions: string[] = [];
+    for (const record of generated.records) {
+      const key = this.resolvePath(record.path);
+      if (key === null) {
+        throw new Error('Malformed or unsupported gamelist XML.');
+      }
+      const matches = byPath.get(key.toLowerCase()) ?? [];
+      if (unknownBasenames.has(path.posix.basename(key).toLowerCase())) {
+        throw new Error(`Unmapped existing ROM path may conflict: ${key}`);
+      }
+      if (!matches.length) {
+        additions.push('  ' + generated.slice(record));
         continue;
       }
-      const same = previous.fields.filter(p => p.name === f.name);
+      if (matches.length !== 1 || matches[0].key !== key || matches[0].record.name !== 'game') {
+        throw new Error(`Ambiguous existing ROM path: ${key}`);
+      }
+      for (const edit of this.mergeRecord(matches[0].record, record, generated, key, fallbackNames.has(key))) {
+        edits.push(edit);
+      }
+    }
+    if (additions.length) {
+      edits.push(this.appendRecords(existing, additions));
+    }
+    return applyXmlEdits(existing.toXml(), edits);
+  }
+
+  private indexRecords(records: readonly GameListRecord[]) {
+    const byPath = new Map<string, PathMatch[]>();
+    const unknownBasenames = new Set<string>();
+    for (const record of records) {
+      const key = this.resolvePath(record.path);
+      if (key === null) {
+        // Block a possible duplicate rather than guessing a nonstandard path.
+        unknownBasenames.add(path.posix.basename(record.path.trim().replace(/\\/g, '/')).toLowerCase());
+        continue;
+      }
+      const matches = byPath.get(key.toLowerCase()) ?? [];
+      matches.push({ key, record });
+      byPath.set(key.toLowerCase(), matches);
+    }
+    return { byPath, unknownBasenames };
+  }
+
+  private mergeRecord(
+    previous: GameListRecord,
+    record: GameListRecord,
+    generated: GameListDocument,
+    key: string,
+    preserveName: boolean
+  ): XmlEdit[] {
+    const edits: XmlEdit[] = [];
+    const newFields: string[] = [];
+    for (const field of record.fields) {
+      if (field.name === 'path') {
+        continue;
+      }
+      const same = previous.fields.filter(old => old.name === field.name);
       // A filename-derived fallback should not erase an existing scraped title.
-      if (f.name === 'name' && fallbackNames.has(key) && same.some(p => p.value.trim())) {
+      if (field.name === 'name' && preserveName && same.some(old => old.value.trim())) {
         continue;
       }
       if (same.length > 1) {
-        throw new Error(`Ambiguous metadata field ${f.name} for ${key}`);
+        throw new Error(`Ambiguous metadata field ${field.name} for ${key}`);
       }
-      const raw = generated.slice(f.start, f.end);
+      const raw = generated.slice(field);
       if (same.length) {
-        if (same[0].value !== f.value) {
+        if (same[0].value !== field.value) {
           edits.push({ start: same[0].start, end: same[0].end, text: raw });
         }
       } else {
@@ -73,15 +92,13 @@ export function mergeGameLists(
     if (newFields.length) {
       edits.push({ start: previous.close, end: previous.close, text: '\n' + newFields.join('\n') + '\n  ' });
     }
+    return edits;
   }
-  if (additions.length) {
+
+  private appendRecords(existing: GameListDocument, additions: readonly string[]): XmlEdit {
     const text = '\n' + additions.join('\n') + '\n';
-    if (old.empty) {
-      edits.push({ start: old.rootEnd - 2, end: old.rootEnd, text: '>' + text + '</gameList>' });
-    }
-    else {
-      edits.push({ start: old.close, end: old.close, text });
-    }
+    return existing.empty
+      ? { start: existing.rootEnd - 2, end: existing.rootEnd, text: '>' + text + '</gameList>' }
+      : { start: existing.close, end: existing.close, text };
   }
-  return applyXmlEdits(existing, edits);
 }

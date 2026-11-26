@@ -5,7 +5,9 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { ExportService, type ExportLibrary } from '../src/main/export';
 import { RetroPieExporter } from '../src/main/export/retropie/retropie-exporter';
-import { mergeGameLists } from '../src/main/export/retropie/gamelist';
+import { GameListDocument } from '../src/main/components/emulationstation/gamelist-document';
+import { GameListMerger } from '../src/main/components/emulationstation/gamelist-merger';
+import { RetroPieLayout } from '../src/main/export/retropie/retropie-layout';
 import { cacheArtworkBytes } from '../src/main/metadata/artwork';
 import type { ExportOptions, LibraryEntry } from '../src/shared';
 
@@ -36,6 +38,8 @@ const library = (items: LibraryEntry[]): ExportLibrary => ({
   queryLibrary: async q => ({ items: items.slice(q.offset, q.offset + q.limit), total: items.length })
 });
 const doc = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>\n<gameList>${body}</gameList>\n`;
+const layout = new RetroPieLayout({});
+const merger = new GameListMerger(value => layout.resolveGamePath(value, 'nes'));
 const oldGame = (rom = './Game.zip') => `<game id="42"><path>${rom}</path><name>Old name</name><favorite>true</favorite><playcount>8</playcount><lastplayed>20260101T000000</lastplayed><genre>Old genre</genre><image>./images/old.png</image></game>`;
 const unrelated = '<game><path>./Other.zip</path><name>Other &amp; game</name><desc><![CDATA[Unrelated <game> & text]]></desc></game>';
 const folder = '<folder><path>./extras</path><name>Extras</name></folder>';
@@ -144,7 +148,7 @@ test(
   () => {
     const existing = doc(oldGame('/home/pi/RetroPie/roms/nes/A&#38;B.zip'));
     const fresh = doc('<game><path>./A&amp;B.zip</path><name>New name</name></game>');
-    const merged = mergeGameLists(existing, fresh, 'nes');
+    const merged = merger.merge(GameListDocument.parse(existing), GameListDocument.parse(fresh));
     assert.match(merged, /<path>\/home\/pi\/RetroPie\/roms\/nes\/A&#38;B.zip<\/path><name>New name<\/name>/);
     assert.equal((merged.match(/<game\b/g) ?? []).length, 1);
   }
@@ -154,10 +158,10 @@ test(
   'supports a self-closing empty gamelist, comments and empty metadata elements',
   () => {
     const fresh = doc('<game><path>./Game.zip</path><name>New</name></game>');
-    const filled = mergeGameLists('<?xml version="1.0"?><gameList />\n', fresh, 'nes');
+    const filled = merger.merge(GameListDocument.parse('<?xml version="1.0"?><gameList />\n'), GameListDocument.parse(fresh));
     assert.match(filled, /<gameList >[\s\S]*<path>\.\/Game.zip<\/path>[\s\S]*<\/gameList>/);
     const existing = doc('<!----><game><path>Game.zip</path><name /></game>');
-    const merged = mergeGameLists(existing, fresh, 'nes');
+    const merged = merger.merge(GameListDocument.parse(existing), GameListDocument.parse(fresh));
     assert.ok(merged.includes('<!---->'));
     assert.match(merged, /<name>New<\/name>/);
   }

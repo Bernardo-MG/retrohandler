@@ -4,8 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { readRegular, statIfExists } from '../src/main/components/filesystem/file-reader';
-import { replaceWithBackup, writeExclusive } from '../src/main/components/filesystem/file-writer';
+import { FileWriter } from '../src/main/components/filesystem/file-writer';
 import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../src/main/components/filesystem/paths';
+
+const writer = new FileWriter('test');
 
 async function fixture(run: (root: string) => Promise<void>): Promise<void> {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'rh-filesystem-')));
@@ -64,8 +66,8 @@ test('linked files and redirected directories are refused', { skip: process.plat
 
 test('exclusive writes never overwrite or delete existing files', async () => fixture(async root => {
   const file = path.join(root, 'file');
-  await writeExclusive(file, Buffer.from('original'));
-  await assert.rejects(writeExclusive(file, Buffer.from('replacement')), /EEXIST/);
+  await writer.create(file, Buffer.from('original'));
+  await assert.rejects(writer.create(file, Buffer.from('replacement')), /EEXIST/);
   assert.equal(await readFile(file, 'utf8'), 'original');
 }));
 
@@ -75,7 +77,7 @@ test('replacement preserves the exact previous bytes in a reported backup', asyn
   const after = Buffer.from('new');
   await writeFile(file, before);
   const backups: string[] = [];
-  await replaceWithBackup(file, after, before, 100, 'test', backup => backups.push(backup));
+  await writer.replaceWithBackup(file, after, before, 100, backup => backups.push(backup));
   assert.equal(backups.length, 1);
   assert.match(path.basename(backups[0]), /^file\.test-[a-f0-9-]+\.bak$/);
   assert.deepEqual(await readFile(backups[0]), before);
@@ -88,7 +90,7 @@ test('replacement rechecks the destination after backup and reports partial prog
   const approved = Buffer.from('old');
   await writeFile(file, 'new'); // Same length but different content.
   const backups: string[] = [];
-  await assert.rejects(replaceWithBackup(file, Buffer.from('replacement'), approved, 100, 'test', backup => backups.push(backup)), /changed/);
+  await assert.rejects(writer.replaceWithBackup(file, Buffer.from('replacement'), approved, 100, backup => backups.push(backup)), /changed/);
   assert.equal(await readFile(file, 'utf8'), 'new');
   assert.equal(backups.length, 1);
   assert.deepEqual(await readFile(backups[0]), approved);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { checkXmlChars, decodeXmlText, hasInvalidXmlChars, xmlEscape } from '../src/main/components/xml/xml-text';
-import { createXmlCursor } from '../src/main/components/xml/xml-parser';
+import { XmlCursor } from '../src/main/components/xml/xml-cursor';
 import { applyXmlEdits } from '../src/main/components/xml/xml-editor';
 
 test('XML text escapes reserved characters and removes invalid characters', () => {
@@ -20,7 +20,7 @@ test('XML entities decode once and reject unsupported entities and invalid chara
 
 test('XML cursor reads generic tags, text, comments and CDATA with original spans', () => {
   const xml = '\ufeff<?xml version="1.0"?>\n<root><!-- keep --><value id="a&amp;b">A&amp;<![CDATA[<B>]]></value><empty/></root>\n';
-  const cursor = createXmlCursor(xml);
+  const cursor = new XmlCursor(xml);
   cursor.trivia();
   assert.equal(cursor.openTag().name, 'root');
   cursor.trivia();
@@ -36,10 +36,10 @@ test('XML cursor reads generic tags, text, comments and CDATA with original span
 
 test('XML cursor rejects DTDs, duplicate attributes and nested text elements', () => {
   for (const xml of ['<!DOCTYPE root><root/>', '<root a="1" a="2"/>', '<root xmlns="urn:x"/>']) {
-    assert.throws(() => createXmlCursor(xml).openTag(), /XML/);
+    assert.throws(() => new XmlCursor(xml).openTag(), /XML/);
   }
   for (const xml of ['<value><nested/></value>', '<value>abc</wrong>', '<value><![CDATA[abc</value>']) {
-    assert.throws(() => createXmlCursor(xml).readTextElement(), /XML/);
+    assert.throws(() => new XmlCursor(xml).readTextElement(), /XML/);
   }
 });
 
@@ -50,4 +50,19 @@ test('XML edits preserve all untouched source text and reject overlapping spans'
   assert.equal(edits[0].start, 9);
   assert.throws(() => applyXmlEdits(source, [{ start: 0, end: 5, text: '' }, { start: 3, end: 6, text: '' }]), /overlapping/);
   assert.throws(() => applyXmlEdits(source, [{ start: -1, end: 0, text: '' }]), /Invalid/);
+});
+
+test('XML cursors own independent positions and keep caller-provided validation errors', () => {
+  const first = new XmlCursor('<one><value>A</value></one>');
+  const second = new XmlCursor('<two/>');
+  assert.equal(first.openTag().name, 'one');
+  assert.equal(second.position, 0);
+  assert.equal(second.openTag().name, 'two');
+  assert.equal(second.atEnd, true);
+  assert.equal(first.readTextElement().value, 'A');
+  first.closeTag('one');
+  assert.equal(first.atEnd, true);
+  const invalid = (): never => { throw new Error('Custom parse error'); };
+  assert.throws(() => new XmlCursor('\u0000', invalid), /Custom parse error/);
+  assert.throws(() => new XmlCursor('<root duplicate="1" duplicate="2"/>', invalid).openTag(), /Custom parse error/);
 });
