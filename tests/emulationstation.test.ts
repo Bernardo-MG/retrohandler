@@ -67,3 +67,16 @@ test('document and merger instances preserve independent source spans across rep
   assert.equal(GameListDocument.parse(result).records.length, 2);
   assert.match(first.toXml(), /Old A/);
 });
+
+test('gamelist serialization preserves field order, whitespace and empty-field omission', () => {
+  const generated = GameListDocument.fromEntries([{
+    path: './A.zip', name: ' A & B ', description: ' ', image: null,
+    released: '1992', developer: 'Studio', publisher: '', genre: 'Action'
+  }]);
+  assert.equal(generated.toXml(), [
+    '<?xml version="1.0" encoding="UTF-8"?>', '<gameList>', '  <game>',
+    '    <path>./A.zip</path>', '    <name> A &amp; B </name>',
+    '    <releasedate>19920101T000000</releasedate>', '    <developer>Studio</developer>',
+    '    <genre>Action</genre>', '  </game>', '</gameList>', ''
+  ].join('\n'));
+});

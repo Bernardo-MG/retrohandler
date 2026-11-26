@@ -62,9 +62,16 @@ export class FileOperationPlanner {
       content: { bytes },
       maxBytes,
       size: bytes.length,
-      action: previousContent === null ? 'create' : previousHash === outputHash ? 'reuse' : 'update',
+      action: this.determineGeneratedAction(previousHash, outputHash),
       previousHash,
       outputHash
     };
+  }
+
+  private determineGeneratedAction(previousHash: string | null, outputHash: string): FileOperation['action'] {
+    if (previousHash === null) {
+      return 'create';
+    }
+    return previousHash === outputHash ? 'reuse' : 'update';
   }
 }

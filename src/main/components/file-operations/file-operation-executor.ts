@@ -40,23 +40,32 @@ export class FileOperationExecutor {
       throw new Error(`Destination changed; preview again: ${relativeDestination}`);
     }
     const newContent = await this.readApprovedContent(operation);
-    if (action === 'reuse' && previousContent !== null && previousHash === outputHash) {
-      return false;
+    switch (action) {
+      case 'reuse':
+        if (previousContent !== null && previousHash === outputHash) {
+          return false;
+        }
+        break;
+      case 'create':
+        if (previousContent === null) {
+          await this.writer.createExclusive(targetPath, newContent);
+          return true;
+        }
+        break;
+      case 'update':
+        if (previousContent !== null) {
+          await this.writer.replaceWithBackup({
+            targetPath,
+            newContent,
+            approvedContent: previousContent,
+            maxBytes,
+            onBackup
+          });
+          return true;
+        }
+        break;
     }
-    if (action === 'create' && previousContent === null) {
-      await this.writer.createExclusive(targetPath, newContent);
-    } else if (action === 'update' && previousContent !== null) {
-      await this.writer.replaceWithBackup({
-        targetPath,
-        newContent,
-        approvedContent: previousContent,
-        maxBytes,
-        onBackup
-      });
-    } else {
-      throw new Error('Invalid export job.');
-    }
-    return true;
+    throw new Error('Invalid export job.');
   }
 
   private async readApprovedContent(operation: FileOperation): Promise<Buffer> {

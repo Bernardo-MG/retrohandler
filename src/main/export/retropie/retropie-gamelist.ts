@@ -43,8 +43,16 @@ export class RetroPieGameList {
   }
 
   private pathsWithFallbackTitles(games: readonly RetroPieGame[]): ReadonlySet<string> {
-    return new Set(games.filter(game =>
-      !game.entry.metadata?.title?.trim() && !game.entry.identifiedTitle?.trim()
-    ).map(game => game.filename));
+    const paths = new Set<string>();
+    for (const game of games) {
+      if (this.usesFallbackTitle(game)) {
+        paths.add(game.filename);
+      }
+    }
+    return paths;
+  }
+
+  private usesFallbackTitle(game: RetroPieGame): boolean {
+    return !game.entry.metadata?.title?.trim() && !game.entry.identifiedTitle?.trim();
   }
 }

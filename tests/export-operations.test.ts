@@ -173,3 +173,19 @@ test('a reused destination rechecks parent directories after planning', { skip: 
   await assert.rejects(executor.execute([operation]), /redirected/);
   assert.deepEqual(await readdir(outside), []);
 }));
+
+test('execution rejects operations whose action contradicts the approved file state', async () => fixture(async (_, destination, planner, executor) => {
+  const relativeDestination = 'config.txt';
+  const generate = () => Buffer.from('new');
+  const create = await planner.planGeneratedFile({ relativeDestination, maxBytes: 100, generate });
+  await assert.rejects(executor.execute([{ ...create, action: 'reuse' }]), /Invalid export job/);
+  await assert.rejects(executor.execute([{ ...create, action: 'update' }]), /Invalid export job/);
+  await assert.rejects(readFile(path.join(destination, relativeDestination)));
+  await executor.execute([create]);
+  const reuse = await planner.planGeneratedFile({ relativeDestination, maxBytes: 100, generate });
+  await assert.rejects(executor.execute([{ ...reuse, action: 'create' }]), /Invalid export job/);
+  const update = await planner.planGeneratedFile({ relativeDestination, maxBytes: 100, generate: () => Buffer.from('different') });
+  await assert.rejects(executor.execute([{ ...update, action: 'reuse' }]), /Invalid export job/);
+  assert.equal(await readFile(path.join(destination, relativeDestination), 'utf8'), 'new');
+  assert.deepEqual(await readdir(destination), [relativeDestination]);
+}));

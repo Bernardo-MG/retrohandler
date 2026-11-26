@@ -1,5 +1,5 @@
-import { constants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
+import { constants, type Stats } from 'node:fs';
+import { lstat, open, type FileHandle } from 'node:fs/promises';
 
 // Only a missing file counts as absent. Permission errors, links and other
 // file types must never be mistaken for a free destination path.
@@ -25,28 +25,44 @@ export async function readRegular(file: string, maxBytes: number): Promise<Buffe
   }
   const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
-    const st = await handle.stat();
-    if (!st.isFile() || st.dev !== before.dev || st.ino !== before.ino || st.size > maxBytes) {
+    const opened = await handle.stat();
+    if (!opened.isFile() || !sameFile(opened, before) || opened.size > maxBytes) {
       throw new Error(`File changed: ${file}`);
     }
-    // Read at most the approved file size plus one byte, even if it grows.
-    const buffer = Buffer.alloc(st.size + 1);
-    let count = 0;
-    while (count < buffer.length) {
-      const { bytesRead } = await handle.read(buffer, count, buffer.length - count, count);
-      if (!bytesRead) {
-        break;
-      }
-      count += bytesRead;
-    }
+    const bytes = await readObservedBytes(handle, opened.size);
     const after = await handle.stat();
     const named = await statIfExists(file);
-    if (count !== st.size || after.size !== st.size || after.mtimeMs !== st.mtimeMs ||
-      !named?.isFile() || named.dev !== st.dev || named.ino !== st.ino || named.mtimeMs !== st.mtimeMs || named.size !== st.size) {
+    if (bytes.length !== opened.size || !sameVersion(after, opened) || !matchesNamedFile(named, opened)) {
       throw new Error(`File changed: ${file}`);
     }
-    return buffer.subarray(0, count);
+    return bytes;
   } finally {
     await handle.close();
   }
+}
+
+function sameFile(first: Stats, second: Stats): boolean {
+  return first.dev === second.dev && first.ino === second.ino;
+}
+
+function sameVersion(first: Stats, second: Stats): boolean {
+  return first.size === second.size && first.mtimeMs === second.mtimeMs;
+}
+
+function matchesNamedFile(named: Stats | null, opened: Stats): boolean {
+  return named !== null && named.isFile() && sameFile(named, opened) && sameVersion(named, opened);
+}
+
+async function readObservedBytes(handle: FileHandle, observedSize: number): Promise<Buffer> {
+  // Read at most the approved file size plus one byte, even if it grows.
+  const buffer = Buffer.alloc(observedSize + 1);
+  let count = 0;
+  while (count < buffer.length) {
+    const { bytesRead } = await handle.read(buffer, count, buffer.length - count, count);
+    if (!bytesRead) {
+      break;
+    }
+    count += bytesRead;
+  }
+  return buffer.subarray(0, count);
 }

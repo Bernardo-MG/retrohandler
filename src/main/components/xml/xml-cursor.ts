@@ -53,14 +53,18 @@ export class XmlCursor {
       if (!whitespace) {
         this.failInvalidXml();
       }
-      const attributePattern = /([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"<]*)"|'([^'<]*)')/y;
-      const attribute = this.matchAtPosition(attributePattern) ?? this.failInvalidXml();
-      if (attributes.has(attribute[1]) || attribute[1] === 'xmlns') {
-        this.failInvalidXml();
-      }
-      attributes.add(attribute[1]);
-      decodeXmlText(attribute[2] ?? attribute[3], this.failInvalidXml);
+      this.readAttribute(attributes);
     }
+  }
+
+  private readAttribute(attributes: Set<string>): void {
+    const attributePattern = /([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"<]*)"|'([^'<]*)')/y;
+    const attribute = this.matchAtPosition(attributePattern) ?? this.failInvalidXml();
+    if (attributes.has(attribute[1]) || attribute[1] === 'xmlns') {
+      this.failInvalidXml();
+    }
+    attributes.add(attribute[1]);
+    decodeXmlText(attribute[2] ?? attribute[3], this.failInvalidXml);
   }
 
   readClosingTag(name: string): number {
@@ -73,35 +77,44 @@ export class XmlCursor {
 
   readTextElement(): XmlTextElement {
     const tag = this.readOpeningTag();
-    let value = '';
-    if (!tag.selfClosing) {
-      while (true) {
-        if (this.atClosingTag) {
-          this.readClosingTag(tag.name);
-          break;
-        }
-        if (this.skipComment()) {
-          continue;
-        }
-        if (this.xml.startsWith('<![CDATA[', this.offset)) {
-          const end = this.xml.indexOf(']]>', this.offset + 9);
-          if (end < 0) {
-            this.failInvalidXml();
-          }
-          value += this.xml.slice(this.offset + 9, end);
-          this.offset = end + 3;
-          continue;
-        }
-        const text = this.matchAtPosition(/[^<]+/y)?.[0] ?? this.failInvalidXml();
-        value += decodeXmlText(text, this.failInvalidXml);
-      }
-    }
+    const value = tag.selfClosing ? '' : this.readElementContent(tag.name);
     return {
       name: tag.name,
       start: tag.start,
       end: this.offset,
       value
     };
+  }
+
+  private readElementContent(name: string): string {
+    let value = '';
+    while (!this.atClosingTag) {
+      value += this.readContentFragment();
+    }
+    this.readClosingTag(name);
+    return value;
+  }
+
+  private readContentFragment(): string {
+    if (this.skipComment()) {
+      return '';
+    }
+    if (this.xml.startsWith('<![CDATA[', this.offset)) {
+      return this.readCdata();
+    }
+    const text = this.matchAtPosition(/[^<]+/y)?.[0] ?? this.failInvalidXml();
+    return decodeXmlText(text, this.failInvalidXml);
+  }
+
+  private readCdata(): string {
+    const contentStart = this.offset + 9;
+    const end = this.xml.indexOf(']]>', contentStart);
+    if (end < 0) {
+      this.failInvalidXml();
+    }
+    const value = this.xml.slice(contentStart, end);
+    this.offset = end + 3;
+    return value;
   }
 
   private readDeclaration(): void {

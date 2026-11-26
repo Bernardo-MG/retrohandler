@@ -48,7 +48,9 @@ export class ExportService {
     const destination = new FileDestination(options.destination);
     const protectedRoots = entries.map(entry => entry.source);
     // Protect the selected collection even when it contains no indexed files.
-    if (options.source) protectedRoots.push(options.source);
+    if (options.source) {
+      protectedRoots.push(options.source);
+    }
     await destination.validateAgainst(protectedRoots, 'Export destination overlaps a ROM collection.');
     const draft = await this.exporter.prepareDraft(entries, {
       destination,
@@ -65,9 +67,13 @@ export class ExportService {
     if (options.source !== null && (!path.isAbsolute(options.source) || options.source.length > 4096)) {
       throw new Error('Invalid collection.');
     }
-    if (typeof options.includeArtwork !== 'boolean' || !options.overrides || Array.isArray(options.overrides) || typeof options.overrides !== 'object') {
+    if (typeof options.includeArtwork !== 'boolean' || !this.hasValidOverrides(options.overrides)) {
       throw new Error('Invalid export options.');
     }
+  }
+
+  private hasValidOverrides(overrides: ExportOptions['overrides']): boolean {
+    return !!overrides && typeof overrides === 'object' && !Array.isArray(overrides);
   }
 
   private async readSelectedEntries(source: string | null): Promise<LibraryEntry[]> {

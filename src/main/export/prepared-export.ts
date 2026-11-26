@@ -41,41 +41,59 @@ export class PreparedExport {
   }
 
   private static synchronizePreviewFiles(draft: ExportDraft, destination: FileDestination): ExportFile[] {
-    const unmatchedOperations = new Map<string, FileOperation>();
-    for (const operation of draft.operations) {
-      if (unmatchedOperations.has(operation.relativeDestination)) {
-        throw new Error(`Duplicate export operation: ${operation.relativeDestination}`);
-      }
-      unmatchedOperations.set(operation.relativeDestination, operation);
-    }
+    const unmatchedOperations = this.indexOperations(draft.operations);
     const seenDestinations = new Set<string>();
-    const files = draft.plan.files.map(file => {
-      const key = destination.resolvePath(file.relativeDestination).toLowerCase();
-      if (seenDestinations.has(key)) {
+    const files: ExportFile[] = [];
+    const hasConflicts = draft.plan.conflicts.length > 0;
+    for (const file of draft.plan.files) {
+      const destinationKey = destination.resolvePath(file.relativeDestination).toLowerCase();
+      if (seenDestinations.has(destinationKey)) {
         throw new Error(`Duplicate export destination: ${file.relativeDestination}`);
       }
-      seenDestinations.add(key);
+      seenDestinations.add(destinationKey);
       const operation = unmatchedOperations.get(file.relativeDestination);
-      if (file.kind === 'rom') {
-        if (operation) {
-          throw new Error(`ROM reference cannot be an export operation: ${file.relativeDestination}`);
-        }
-        return file;
+      files.push(this.synchronizeFile(file, operation, hasConflicts));
+      if (operation) {
+        unmatchedOperations.delete(file.relativeDestination);
       }
-      if (!operation) {
-        if (!draft.plan.conflicts.length) {
-          throw new Error(`Export operation missing: ${file.relativeDestination}`);
-        }
-        // Conflicted destinations have a preview entry but no approved operation.
-        return file;
-      }
-      unmatchedOperations.delete(file.relativeDestination);
-      return { ...file, size: operation.size, action: operation.action };
-    });
+    }
     if (unmatchedOperations.size) {
       throw new Error('Export operation missing from preview.');
     }
     return files;
+  }
+
+  private static indexOperations(operations: readonly FileOperation[]): Map<string, FileOperation> {
+    const indexed = new Map<string, FileOperation>();
+    for (const operation of operations) {
+      const { relativeDestination } = operation;
+      if (indexed.has(relativeDestination)) {
+        throw new Error(`Duplicate export operation: ${relativeDestination}`);
+      }
+      indexed.set(relativeDestination, operation);
+    }
+    return indexed;
+  }
+
+  private static synchronizeFile(file: ExportFile, operation: FileOperation | undefined, hasConflicts: boolean): ExportFile {
+    if (file.kind === 'rom') {
+      if (operation) {
+        throw new Error(`ROM reference cannot be an export operation: ${file.relativeDestination}`);
+      }
+      return file;
+    }
+    if (operation) {
+      return { ...file, size: operation.size, action: operation.action };
+    }
+    if (!hasConflicts) {
+      throw new Error(`Export operation missing: ${file.relativeDestination}`);
+    }
+    // Conflicted destinations have a preview entry but no approved operation.
+    return file;
+  }
+
+  private static operationVersion(operation: FileOperation): [string, string | null, string] {
+    return [operation.relativeDestination, operation.previousHash, operation.outputHash];
   }
 
   /** Retain the existing preview fingerprint format and operation order. */
@@ -85,7 +103,7 @@ export class PreparedExport {
     operations: readonly FileOperation[]
   ): string {
     const { destination, files, warnings, conflicts } = plan;
-    const versions = operations.map(operation => [operation.relativeDestination, operation.previousHash, operation.outputHash]);
+    const versions = operations.map(this.operationVersion);
     return sha256(Buffer.from(JSON.stringify({
       destination, files, warnings, conflicts, options, versions
     }), 'utf8'));

@@ -74,14 +74,12 @@ export class GameListDocument {
     const records: GameListRecord[] = [];
     let closingTagStart = cursor.position - 2;
     if (!root.selfClosing) {
-      while (true) {
-        cursor.skipWhitespaceAndComments();
-        if (cursor.atClosingTag) {
-          closingTagStart = cursor.readClosingTag(root.name);
-          break;
-        }
+      cursor.skipWhitespaceAndComments();
+      while (!cursor.atClosingTag) {
         records.push(this.readRecord(cursor));
+        cursor.skipWhitespaceAndComments();
       }
+      closingTagStart = cursor.readClosingTag(root.name);
     }
     cursor.skipWhitespaceAndComments();
     if (!cursor.atEnd) {
@@ -101,12 +99,10 @@ export class GameListDocument {
       this.failInvalidDocument();
     }
     const fields: XmlTextElement[] = [];
-    while (true) {
-      cursor.skipWhitespaceAndComments();
-      if (cursor.atClosingTag) {
-        break;
-      }
+    cursor.skipWhitespaceAndComments();
+    while (!cursor.atClosingTag) {
       fields.push(cursor.readTextElement());
+      cursor.skipWhitespaceAndComments();
     }
     const closingTagStart = cursor.readClosingTag(tag.name);
     const paths = fields.filter(f => f.name === 'path');
@@ -145,19 +141,31 @@ export class GameListDocument {
   }
 
   private static serializeEntries(games: readonly GameListEntry[]): string {
-    const elements = games.map(game => {
-      const fields = [
-        ['path', game.path],
-        ['name', game.name],
-        ['desc', game.description],
-        ['image', game.image],
-        ['releasedate', this.formatReleaseDate(game.released || '')],
-        ['developer', game.developer],
-        ['publisher', game.publisher],
-        ['genre', game.genre]
-      ].filter((pair): pair is [string, string] => !!pair[1]?.trim());
-      return '  <game>\n' + fields.map(([name, value]) => `    <${name}>${xmlEscape(value)}</${name}>`).join('\n') + '\n  </game>';
-    });
+    const elements = games.map(game => this.serializeGame(game));
     return '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n' + elements.join('\n') + '\n</gameList>\n';
+  }
+
+  private static serializeGame(game: GameListEntry): string {
+    const fields: Array<[string, string | null | undefined]> = [
+      ['path', game.path],
+      ['name', game.name],
+      ['desc', game.description],
+      ['image', game.image],
+      ['releasedate', this.formatReleaseDate(game.released || '')],
+      ['developer', game.developer],
+      ['publisher', game.publisher],
+      ['genre', game.genre]
+    ];
+    const elements: string[] = [];
+    for (const [name, value] of fields) {
+      if (value?.trim()) {
+        elements.push(this.serializeField(name, value));
+      }
+    }
+    return '  <game>\n' + elements.join('\n') + '\n  </game>';
+  }
+
+  private static serializeField(name: string, value: string): string {
+    return `    <${name}>${xmlEscape(value)}</${name}>`;
   }
 }

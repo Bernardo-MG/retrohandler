@@ -131,38 +131,46 @@ class RetroPieDraftBuilder {
       if (file.kind !== 'artwork') {
         continue;
       }
-      try {
-        const operation = await this.planner.planFileCopy({
-          relativeDestination: file.relativeDestination,
-          sourcePath: file.source,
-          expectedSize: file.size,
-          maxBytes: MAX_ART_BYTES,
-          fileLabel: 'artwork'
-        });
-        this.operations.push(operation);
-        if (operation.action === 'create') {
-          this.artworkBytes += operation.size;
-        }
-      } catch (error) {
-        this.conflicts.push(`${file.relativeDestination}: ${String(error)}`);
+      await this.planArtworkCopy(file);
+    }
+  }
+
+  private async planArtworkCopy(file: ExportFile): Promise<void> {
+    try {
+      const operation = await this.planner.planFileCopy({
+        relativeDestination: file.relativeDestination,
+        sourcePath: file.source,
+        expectedSize: file.size,
+        maxBytes: MAX_ART_BYTES,
+        fileLabel: 'artwork'
+      });
+      this.operations.push(operation);
+      if (operation.action === 'create') {
+        this.artworkBytes += operation.size;
       }
+    } catch (error) {
+      this.conflicts.push(`${file.relativeDestination}: ${String(error)}`);
     }
   }
 
   private async planGameListWrites(): Promise<void> {
     for (const [system, games] of this.gamesBySystem) {
-      const relativeDestination = this.layout.gameListDestination(system);
-      this.files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
-      try {
-        const gameList = new RetroPieGameList(this.layout, system);
-        this.operations.push(await this.planner.planGeneratedFile({
-          relativeDestination,
-          maxBytes: MAX_XML_BYTES,
-          generate: previousContent => gameList.generateOrMerge(games, previousContent)
-        }));
-      } catch (error) {
-        this.conflicts.push(`${relativeDestination}: ${String(error)}`);
-      }
+      await this.planGameListWrite(system, games);
+    }
+  }
+
+  private async planGameListWrite(system: string, games: readonly RetroPieGame[]): Promise<void> {
+    const relativeDestination = this.layout.gameListDestination(system);
+    this.files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
+    try {
+      const gameList = new RetroPieGameList(this.layout, system);
+      this.operations.push(await this.planner.planGeneratedFile({
+        relativeDestination,
+        maxBytes: MAX_XML_BYTES,
+        generate: previousContent => gameList.generateOrMerge(games, previousContent)
+      }));
+    } catch (error) {
+      this.conflicts.push(`${relativeDestination}: ${String(error)}`);
     }
   }
 }

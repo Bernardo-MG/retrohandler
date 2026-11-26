@@ -19,10 +19,7 @@ export class RetroPieLayout {
       return { warning: `Unmapped system: ${entry.system}` };
     }
     const filename = path.win32.basename(entry.relativePath.replace(/\//g, '\\'));
-    const invalidFilename = !filename || filename === '.' || filename === '..' ||
-      /[<>:"/\\|?*\x00-\x1f]/.test(filename) || /[. ]$/.test(filename) ||
-      hasInvalidXmlChars(filename);
-    if (invalidFilename) {
+    if (!this.isSupportedFilename(filename)) {
       return { warning: `Unsupported filename: ${entry.relativePath}` };
     }
     if (['.rar', '.7z'].includes(path.extname(filename).toLowerCase())) {
@@ -65,6 +62,12 @@ export class RetroPieLayout {
     return normalizedPath === '..' || normalizedPath.startsWith('../') ? null : normalizedPath;
   }
 
+  private isSupportedFilename(filename: string): boolean {
+    const reservedName = !filename || filename === '.' || filename === '..';
+    const invalidCharacters = /[<>:"/\\|?*\x00-\x1f]/.test(filename) || hasInvalidXmlChars(filename);
+    return !reservedName && !invalidCharacters && !/[. ]$/.test(filename);
+  }
+
   private systemDirectory(system: string): string {
     return `roms/${system}`;
   }
@@ -75,13 +78,21 @@ export class RetroPieLayout {
 
   /** Unknown platforms require an explicit override. */
   private mapPlatform(system: string): string | null {
-    const mappedSystem = Object.hasOwn(this.overrides, system)
-      ? this.overrides[system]
-      : Object.hasOwn(RETROPIE_SYSTEM_MAP, system) ? RETROPIE_SYSTEM_MAP[system] : undefined;
+    const mappedSystem = this.lookupPlatform(system);
     if (!mappedSystem || !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(mappedSystem) ||
       ['con', 'prn', 'nul', 'aux'].includes(mappedSystem)) {
       return null;
     }
     return mappedSystem;
+  }
+
+  private lookupPlatform(system: string): string | undefined {
+    if (Object.hasOwn(this.overrides, system)) {
+      return this.overrides[system];
+    }
+    if (Object.hasOwn(RETROPIE_SYSTEM_MAP, system)) {
+      return RETROPIE_SYSTEM_MAP[system];
+    }
+    return undefined;
   }
 }

@@ -66,3 +66,15 @@ test('XML cursors own independent positions and keep caller-provided validation 
   assert.throws(() => new XmlCursor('\u0000', invalid), /Custom parse error/);
   assert.throws(() => new XmlCursor('<root duplicate="1" duplicate="2"/>', invalid).readOpeningTag(), /Custom parse error/);
 });
+
+test('XML text elements combine fragments while retaining the complete original span', () => {
+  const xml = '<value title="A&amp;B">A<!--ignore--><![CDATA[<B>]]>&#67;<!--end--></value>';
+  const cursor = new XmlCursor(xml);
+  const field = cursor.readTextElement();
+  assert.equal(field.value, 'A<B>C');
+  assert.equal(xml.slice(field.start, field.end), xml);
+  assert.equal(cursor.atEnd, true);
+  for (const malformed of ['<value>unfinished', '<value><!--unfinished', '<value><![CDATA[unfinished']) {
+    assert.throws(() => new XmlCursor(malformed).readTextElement(), /XML/);
+  }
+});
