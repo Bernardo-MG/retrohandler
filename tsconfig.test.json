@@ -23,6 +23,6 @@
     "src/main/metadata/launchbox-download.ts",
     "src/main/metadata/libretro.ts",
     "src/main/metadata/artwork.ts",
-    "src/main/export/export.ts"
+    "src/main/export/**/*.ts"
   ]
 }

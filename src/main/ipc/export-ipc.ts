@@ -1,8 +1,7 @@
 import { dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import type { ExportOptions } from '../../shared';
-import type { LibraryService } from '../services/library/library-service';
-import { executeExport, previewExport } from './export';
+import type { ExportService } from '../export';
 
 function parse(value: unknown): ExportOptions {
   if (!value || typeof value !== 'object') throw new Error('Invalid export request.');
@@ -20,14 +19,14 @@ function parse(value: unknown): ExportOptions {
   return { source: o.source as string | null, destination: o.destination, includeArtwork: o.includeArtwork, overrides };
 }
 
-export function registerExportIpc(library: LibraryService, artworkFolder: string): void {
+export function registerExportIpc(service: ExportService): void {
   ipcMain.handle('export:choose', async () => {
     const chosen = await dialog.showOpenDialog({ title: 'Choose RetroPie export folder', properties: ['openDirectory', 'createDirectory'] });
     return chosen.canceled ? null : chosen.filePaths[0] ?? null;
   });
-  ipcMain.handle('export:preview', (_event, raw: unknown) => previewExport(library, parse(raw), artworkFolder));
+  ipcMain.handle('export:preview', (_event, raw: unknown) => service.preview(parse(raw)));
   ipcMain.handle('export:run', (_event, raw: unknown, fingerprint: unknown) => {
     if (typeof fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('Invalid preview confirmation.');
-    return executeExport(library, parse(raw), artworkFolder, fingerprint);
+    return service.execute(parse(raw), fingerprint);
   });
 }

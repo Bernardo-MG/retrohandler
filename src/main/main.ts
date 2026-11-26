@@ -14,7 +14,9 @@ import {
 } from './database';
 import { registerMetadataIpc } from './metadata/metadata-ipc';
 import { getArtwork, isArtworkId } from './metadata/artwork';
-import { registerExportIpc } from './export/export-ipc';
+import { registerExportIpc } from './ipc/export-ipc';
+import { ExportService } from './export';
+import { RetroPieExporter } from './export/retropie/retropie-exporter';
 import { SettingsStore } from './settings/settings-store';
 import { registerSettingsIpc } from './settings/settings-ipc';
 import { restoreWindowBounds } from './settings/window-bounds';
@@ -168,7 +170,8 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     const artworkFolder = path.join(app.getPath('userData'), 'artwork');
     registerMetadataIpc(metadata, createLaunchBoxRepository(database), artworkFolder);
     registerSettingsIpc(settings, databasePath, artworkFolder, metadata);
-    registerExportIpc(library, artworkFolder);
+    const exportService = new ExportService(library, new RetroPieExporter(artworkFolder));
+    registerExportIpc(exportService);
     protocol.handle(
       'retro-art',
       async request => {
