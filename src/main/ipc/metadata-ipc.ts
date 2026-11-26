@@ -1,27 +1,24 @@
-import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
-import type { ArtworkProvider, CoverLookup, CoverSearch, MetadataSearch, MetadataService } from '../metadata';
-import type { LaunchBoxCatalogueUpdater, LaunchBoxUpdate } from '../metadata/launchbox/launchbox-catalogue-updater';
+import type { ArtworkProvider, CoverLookup, CoverSearch, LaunchBoxCatalogueUpdater, MetadataSearch, MetadataService } from '../metadata';
+import { RendererJobs, sendProgress } from './renderer-jobs';
+import { isRecord, isText } from './validation';
 
 type MetadataIpcDependencies = {
-  metadata: MetadataService;
+  metadata: Pick<MetadataService, 'search' | 'applyCandidate' | 'save'>;
   artwork: ArtworkProvider;
-  launchBox: LaunchBoxCatalogueUpdater;
+  launchBox: Pick<LaunchBoxCatalogueUpdater, 'download' | 'importFile' | 'isUpdating'>;
 };
 
-function isText(value: unknown, limit: number): value is string {
-  return typeof value === 'string' && value.length <= limit;
-}
-
 function isPathText(value: unknown): value is string {
-  return isText(value, 4096) && value.length > 0;
+  return isText(value, 4096) && value.length > 0 && !value.includes('\0');
 }
 
 function parseTarget(value: unknown): MetadataTarget {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)) {
     throw new Error('Invalid metadata target.');
   }
-  const entry = value as Record<string, unknown>;
+  const entry = value;
   if (!isPathText(entry.source) || !isPathText(entry.relativePath)) {
     throw new Error('Invalid metadata target.');
   }
@@ -29,10 +26,10 @@ function parseTarget(value: unknown): MetadataTarget {
 }
 
 function parseFields(value: unknown): GameMetadataInput {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)) {
     throw new Error('Invalid metadata fields.');
   }
-  const input = value as Record<string, unknown>;
+  const input = value;
   assertMetadataText(input);
   assertMetadataProvider(input);
   assertSystemOverride(input.systemOverride);
@@ -101,9 +98,12 @@ function parseCoverSearch(system: unknown, query: unknown, regionHint: unknown, 
 
 /** Electron sender ownership and dialog/progress adaptation only. */
 class LaunchBoxIpc {
-  private readonly updates = new Map<number, AbortController>();
+  private readonly updates = new RendererJobs({
+    busy: 'A LaunchBox import is already running.',
+    destroyed: 'LaunchBox sender is no longer available.'
+  });
 
-  constructor(private readonly updater: LaunchBoxCatalogueUpdater) {}
+  constructor(private readonly updater: MetadataIpcDependencies['launchBox']) {}
 
   register(): void {
     ipcMain.handle('launchbox:download', event => this.download(event));
@@ -114,30 +114,15 @@ class LaunchBoxIpc {
   private async download(event: IpcMainInvokeEvent): Promise<{ count: number }> {
     this.assertIdle();
     const sender = event.sender;
-    const senderId = sender.id;
-    const controller = new AbortController();
-    const onDestroyed = () => controller.abort();
-    this.updates.set(senderId, controller);
-    sender.once('destroyed', onDestroyed);
-    try {
-      const count = await this.updater.download({
-        signal: controller.signal,
-        onProgress: update => this.sendProgress(sender, update)
-      });
-      return { count };
-    } finally {
-      sender.removeListener('destroyed', onDestroyed);
-      this.updates.delete(senderId);
-    }
+    const count = await this.updates.run(sender, 'download', signal => this.updater.download({
+      signal,
+      onProgress: update => sendProgress(sender, 'launchbox:progress', update)
+    }));
+    return { count };
   }
 
   private cancel(senderId: number): boolean {
-    const controller = this.updates.get(senderId);
-    if (!controller) {
-      return false;
-    }
-    controller.abort();
-    return true;
+    return this.updates.cancel(senderId, 'download');
   }
 
   private async importFile(): Promise<{ count: number } | null> {
@@ -156,12 +141,6 @@ class LaunchBoxIpc {
   private assertIdle(): void {
     if (this.updater.isUpdating) {
       throw new Error('A LaunchBox import is already running.');
-    }
-  }
-
-  private sendProgress(sender: WebContents, update: LaunchBoxUpdate): void {
-    if (!sender.isDestroyed()) {
-      sender.send('launchbox:progress', update);
     }
   }
 }

@@ -1,6 +1,4 @@
-import type { IdentificationResult } from '../../shared';
-
-export type FingerprintMatch = Pick<IdentificationResult, 'status' | 'title' | 'datName'>;
+import type { FingerprintMatch } from '../contracts/identification';
 
 export interface FingerprintMatchCandidate {
   game: string;

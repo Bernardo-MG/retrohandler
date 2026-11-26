@@ -1,3 +1,5 @@
+import type { IdentificationStatus } from '../../shared';
+
 export interface DatEntry {
   game: string;
   file: string;
@@ -10,4 +12,10 @@ export interface DatEntry {
 export interface ParsedDat {
   name: string;
   entries: DatEntry[];
+}
+
+export interface FingerprintMatch {
+  status: IdentificationStatus;
+  title: string | null;
+  datName: string | null;
 }

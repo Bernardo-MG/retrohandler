@@ -1,5 +1,5 @@
 import { open, type FileHandle } from 'node:fs/promises';
-import type { DatEntry, ParsedDat } from './dat-entry';
+import type { DatEntry, ParsedDat } from '../../contracts/identification';
 
 const MAX_DAT_BYTES = 64 * 1024 * 1024;
 const CHUNK_BYTES = 64 * 1024;

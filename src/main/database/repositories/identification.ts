@@ -1,8 +1,8 @@
 import type { IdentificationResult, LibraryEntry } from '../../../shared';
 import type { IdentificationRepository } from '../../contracts/persistence';
-import type { ParsedDat } from '../../identification/dat/dat-entry';
+import type { ParsedDat, FingerprintMatch } from '../../contracts/identification';
 import type { FileFingerprint } from '../../components/hashing/content-fingerprint';
-import { matchFingerprintCandidates, type FingerprintMatch, type FingerprintMatchCandidate } from '../../identification/fingerprint-matcher';
+import { matchFingerprintCandidates, type FingerprintMatchCandidate } from '../../identification/fingerprint-matcher';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 

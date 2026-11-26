@@ -11,9 +11,8 @@ import type {
   ScanResult,
   SystemCount
 } from '../../shared';
-import type { ParsedDat } from '../identification/dat/dat-entry';
+import type { ParsedDat, FingerprintMatch } from './identification';
 import type { FileFingerprint } from '../components/hashing/content-fingerprint';
-import type { FingerprintMatch } from '../identification/fingerprint-matcher';
 
 export interface ScanRepository {
   saveScan(result: ScanResult): void;

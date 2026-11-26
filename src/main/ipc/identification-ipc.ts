@@ -1,17 +1,18 @@
-import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
-import path from 'node:path';
-import type { IdentificationProgress } from '../../shared';
+import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import type { IdentificationService } from '../identification';
-import type { LibraryService } from '../services/library/library-service';
-
-type ActiveJob = { id: string; controller: AbortController };
+import type { LibraryService } from '../services/library';
+import { RendererJobs, sendProgress } from './renderer-jobs';
+import { isCollectionPath, isJobId } from './validation';
 
 /** Renderer-scoped cancellation and progress; no fingerprint or persistence logic. */
 export function registerIdentificationIpc(
-  identification: IdentificationService,
+  identification: Pick<IdentificationService, 'importDat' | 'identifyCollection'>,
   library: Pick<LibraryService, 'listCollections'>
 ): void {
-  const jobs = new Map<number, ActiveJob>();
+  const jobs = new RendererJobs({
+    busy: 'Identification is already running.',
+    destroyed: 'Identification sender is no longer available.'
+  });
 
   async function importDat() {
     const selection = await dialog.showOpenDialog({
@@ -32,56 +33,18 @@ export function registerIdentificationIpc(
     if (!collections.some(collection => collection.rootPath === source)) {
       throw new Error('Collection not found.');
     }
-    return runForSender(event.sender, source, jobId);
-  }
-
-  async function runForSender(sender: WebContents, source: string, jobId: string) {
-    if (sender.isDestroyed()) {
-      throw new Error('Identification sender is no longer available.');
-    }
-    const senderId = sender.id;
-    if (jobs.has(senderId)) {
-      throw new Error('Identification is already running.');
-    }
-    const controller = new AbortController();
-    jobs.set(senderId, { id: jobId, controller });
-    const onDestroyed = () => controller.abort();
-    sender.once('destroyed', onDestroyed);
-    try {
-      return await identification.identifyCollection(source, {
-        signal: controller.signal,
-        onProgress: progress => sendProgress(sender, jobId, progress)
-      });
-    } finally {
-      sender.removeListener('destroyed', onDestroyed);
-      jobs.delete(senderId);
-    }
+    const sender = event.sender;
+    return jobs.run(sender, jobId, signal => identification.identifyCollection(source, {
+      signal,
+      onProgress: progress => sendProgress(sender, 'identity:progress', { jobId, progress })
+    }));
   }
 
   function cancel(event: IpcMainInvokeEvent, jobId: unknown): boolean {
-    const active = jobs.get(event.sender.id);
-    if (!active || active.id !== jobId) {
-      return false;
-    }
-    active.controller.abort();
-    return true;
+    return jobs.cancel(event.sender.id, jobId);
   }
 
   ipcMain.handle('dat:import', importDat);
   ipcMain.handle('identity:run', run);
   ipcMain.handle('identity:cancel', cancel);
-}
-
-function isCollectionPath(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= 4096 && path.isAbsolute(value);
-}
-
-function isJobId(value: unknown): value is string {
-  return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(value);
-}
-
-function sendProgress(sender: WebContents, jobId: string, progress: IdentificationProgress): void {
-  if (!sender.isDestroyed()) {
-    sender.send('identity:progress', { jobId, progress });
-  }
 }
