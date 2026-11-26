@@ -1,6 +1,5 @@
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import {
   RETROPIE_SYSTEM_MAP,
   type ExportOptions,
@@ -14,9 +13,10 @@ import {
 import { artworkPath, isArtworkId } from '../metadata/artwork';
 import { hasInvalidXmlChars } from '../components/xml/xml-text';
 import { gameListXml, mergeGameLists, type RetroPieGame } from './retropie/gamelist';
-import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../components/filesystem/paths';
-import { readRegular } from '../components/filesystem/file-reader';
-import { replaceWithBackup, writeExclusive } from '../components/filesystem/file-writer';
+import { assertSafeDirectory, childOf, overlaps } from '../components/filesystem/paths';
+import { fingerprint, type FileOperation, type PreparedExport } from './export-plan';
+import { planCopy, planGenerated } from './export-planner';
+import { executeOperations } from './export-executor';
 
 // RetroPie ROM directory names; unknown platforms require an explicit override.
 const SYSTEM_MAP = RETROPIE_SYSTEM_MAP;
@@ -51,19 +51,8 @@ async function collect(library: ExportLibrary, source: string | null): Promise<L
 
 const MAX_XML_BYTES = 32 * 1024 * 1024;
 const MAX_ART_BYTES = 5 * 1024 * 1024;
-const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-const hashOrNull = (bytes: Buffer | null) => bytes === null ? null : hash(bytes);
-const targetPath = (root: string, relative: string) => path.join(root, ...relative.split('/'));
 
-type ExportJob = {
-  previous: string | null;
-  output: string;
-  xml?: Buffer
-};
-async function prepareExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string): Promise<{
-  plan: ExportPlan;
-  jobs: Map<string, ExportJob>
-}> {
+async function prepareExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string): Promise<PreparedExport> {
   if (!path.isAbsolute(options.destination) || !options.destination.trim()) {
     throw new Error('Choose an absolute destination folder.');
   }
@@ -168,7 +157,7 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
     group.push({ entry, filename: fileName, image });
     bySystem.set(mapped, group);
   }
-  const jobs = new Map<string, ExportJob>();
+  const operations: FileOperation[] = [];
   const conflicts: string[] = [];
   // Existing artwork can be reused only when it is byte-identical. Never
   // overwrite a different image, even if its filename looks content-addressed.
@@ -177,24 +166,10 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
     if (item.kind !== 'artwork') {
       continue;
     }
-    const target = targetPath(dest, item.relativeDestination);
     try {
-      if (!childOf(dest, target)) {
-        throw new Error('Invalid export destination path.');
-      }
-      await assertSafeDirectory(path.dirname(target));
-      const source = await readRegular(item.source, MAX_ART_BYTES);
-      if (!source || source.length !== item.size) {
-        throw new Error('Cached artwork changed; preview again.');
-      }
-      const prior = await readRegular(target, MAX_ART_BYTES);
-      const output = hash(source);
-      const previous = hashOrNull(prior);
-      if (previous !== null && previous !== output) {
-        throw new Error('Existing artwork differs from cached artwork.');
-      }
-      item.action = prior === null ? 'create' : 'reuse';
-      jobs.set(item.relativeDestination, { previous, output });
+      const operation = await planCopy(dest, item.relativeDestination, item.source, item.size, MAX_ART_BYTES, 'artwork');
+      item.action = operation.action;
+      operations.push(operation);
       if (item.action === 'create') {
         bytes += item.size;
       }
@@ -212,60 +187,40 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
     };
     files.push(item);
     try {
-      const target = targetPath(dest, relativeDestination);
-      if (!childOf(dest, target)) {
-        throw new Error('Invalid export destination path.');
-      }
-      await assertSafeDirectory(path.dirname(target));
-      const prior = await readRegular(target, MAX_XML_BYTES);
-      const generated = gameListXml(group);
-      const fallbackNames = new Set(group.filter(g => !g.entry.metadata?.title?.trim() && !g.entry.identifiedTitle?.trim()).map(g => g.filename));
-      const xml = Buffer.from(
-        prior === null ? generated : mergeGameLists(
-          new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(prior),
-          generated,
-          system,
-          fallbackNames
-        ),
-        'utf8'
-      );
-      if (xml.length > MAX_XML_BYTES) {
-        throw new Error('Merged gamelist exceeds 32 MiB.');
-      }
-      const previous = hashOrNull(prior);
-      const output = hash(xml);
-      item.size = xml.length;
-      item.action = prior === null ? 'create' : previous === output ? 'reuse' : 'update';
-      jobs.set(relativeDestination, { previous, output, xml });
+      const operation = await planGenerated(dest, relativeDestination, MAX_XML_BYTES, prior => {
+        const generated = gameListXml(group);
+        const fallbackNames = new Set(group.filter(g => !g.entry.metadata?.title?.trim() && !g.entry.identifiedTitle?.trim()).map(g => g.filename));
+        const xml = Buffer.from(
+          prior === null ? generated : mergeGameLists(
+            new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(prior),
+            generated,
+            system,
+            fallbackNames
+          ),
+          'utf8'
+        );
+        if (xml.length > MAX_XML_BYTES) {
+          throw new Error('Merged gamelist exceeds 32 MiB.');
+        }
+        return xml;
+      });
+      item.size = operation.size;
+      item.action = operation.action;
+      operations.push(operation);
     } catch (error) {
       conflicts.push(`${relativeDestination}: ${String(error)}`);
     }
   }
-  // Hash actual generated metadata, source images and destination contents, not
-  // just sizes. A same-length edit must invalidate an approved preview too.
-  const versions = [...jobs].map(([relative, job]) => [relative, job.previous, job.output]);
-  const fingerprint = createHash('sha256').update(JSON.stringify({
+  const plan: Omit<ExportPlan, 'fingerprint'> = {
     destination: dest,
     files,
+    systems: [...bySystem.keys()].sort(),
     warnings,
     conflicts,
-    options,
-    versions
-  })).digest('hex');
-  const skippedRoms = entries.length - files.filter(file => file.kind === 'rom').length;
-  return {
-    plan: {
-      destination: dest,
-      files,
-      systems: [...bySystem.keys()].sort(),
-      warnings,
-      conflicts,
-      bytes,
-      fingerprint,
-      skippedRoms
-    },
-    jobs
+    bytes,
+    skippedRoms: entries.length - files.filter(file => file.kind === 'rom').length
   };
+  return { plan: { ...plan, fingerprint: fingerprint(plan, options, operations) }, operations };
 }
 
 export async function previewExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string): Promise<ExportPlan> {
@@ -284,7 +239,7 @@ export async function executeExport(
   }
   exporting = true;
   try {
-    const { plan, jobs } = await prepareExport(library, options, artworkFolder);
+    const { plan, operations } = await prepareExport(library, options, artworkFolder);
     if (plan.fingerprint !== approvedFingerprint) {
       throw new Error('Export preview changed; preview again.');
     }
@@ -294,51 +249,8 @@ export async function executeExport(
     if (!plan.files.some(file => file.kind === 'rom')) {
       throw new Error('No exportable ROMs in preview.');
     }
-    let copied = 0;
-    const backups: string[] = [];
-    // Artwork jobs precede XML jobs so we never publish a new image reference
-    // before the corresponding artwork has been written or verified.
-    try {
-      for (const item of plan.files) {
-        if (item.kind === 'rom') {
-          continue;
-        } // ROMs are references only.
-        const job = jobs.get(item.relativeDestination);
-        if (!job) {
-          throw new Error('Export job missing; preview again.');
-        }
-        const target = targetPath(plan.destination, item.relativeDestination);
-        await ensureSafeDirectory(path.dirname(target));
-        const max = item.kind === 'gamelist' ? MAX_XML_BYTES : MAX_ART_BYTES;
-        const prior = await readRegular(target, max);
-        if (hashOrNull(prior) !== job.previous) {
-          throw new Error(`Destination changed; preview again: ${item.relativeDestination}`);
-        }
-        const content = item.kind === 'gamelist' ? job.xml : await readRegular(item.source, MAX_ART_BYTES);
-        if (!content || hash(content) !== job.output) {
-          throw new Error(`Source changed; preview again: ${item.relativeDestination}`);
-        }
-        if (item.action === 'reuse') {
-          continue;
-        }
-        if (item.action === 'create') {
-          await writeExclusive(target, content);
-        } else if (item.kind === 'gamelist' && item.action === 'update' && prior !== null) {
-          await replaceWithBackup(target, content, prior, max, 'retrohandler', backup => {
-            backups.push(path.relative(plan.destination, backup).split(path.sep).join('/'));
-          });
-        } else {
-          throw new Error('Invalid export job.');
-        }
-        copied++;
-      }
-    } catch (error) {
-      if (copied || backups.length) {
-        throw new Error(`Export stopped after ${copied} XML/artwork file(s) written. Backups: ${backups.join(', ') || 'none'}. Preview again before retrying. ${String(error)}`);
-      }
-      throw error;
-    }
-    return backups.length ? { copied, backups } : { copied };
+    // Artwork operations precede generated XML so references are published last.
+    return await executeOperations(plan.destination, operations);
   } finally {
     exporting = false;
   }
