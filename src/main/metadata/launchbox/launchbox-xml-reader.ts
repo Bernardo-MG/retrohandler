@@ -100,7 +100,7 @@ class GameRecordBuffer {
   *consume(chunk: string): Generator<LaunchBoxGame> {
     this.rejectEntityDeclarations(chunk);
     this.buffer += chunk;
-    for (;;) {
+    for (; ;) {
       const node = this.takeRecord();
       if (node === null) {
         return;

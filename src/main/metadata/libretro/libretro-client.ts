@@ -12,7 +12,7 @@ type GithubEntry = { path: string; type: string; sha?: unknown };
 
 /** Owns official URLs, timeouts, fallback and response status handling. */
 export class LibretroClient {
-  constructor(private readonly http = new HttpClient()) {}
+  constructor(private readonly http = new HttpClient()) { }
 
   async requestBoxart(platform: string, filename: string): Promise<Response> {
     const suffix = `Named_Boxarts/${encodeURIComponent(filename)}`;

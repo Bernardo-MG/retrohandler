@@ -50,7 +50,7 @@ export function parseLibretroIndex(data: string): string[] {
 export class LibretroCatalogue {
   private readonly cache = new Map<string, CachedIndex>();
 
-  constructor(private readonly client: LibretroClient, private readonly now = Date.now) {}
+  constructor(private readonly client: LibretroClient, private readonly now = Date.now) { }
 
   async getFiles(platform: string, refresh = false): Promise<readonly string[]> {
     const cached = this.cache.get(platform);

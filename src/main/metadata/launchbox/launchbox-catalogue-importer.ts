@@ -11,7 +11,7 @@ export class LaunchBoxCatalogueImporter {
   constructor(
     private readonly repository: LaunchBoxImportRepository,
     private readonly reader = new LaunchBoxXmlReader()
-  ) {}
+  ) { }
 
   async importFile(file: string, options: ImportOptions = {}): Promise<number> {
     this.assertRepositoryAvailable();

@@ -4,7 +4,7 @@ import type { MetadataProvider, MetadataSearch } from './metadata-provider';
 
 /** Application metadata workflow, independent of Electron and concrete providers. */
 export class MetadataService {
-  constructor(private readonly repository: MetadataRepository, private readonly provider: MetadataProvider) {}
+  constructor(private readonly repository: MetadataRepository, private readonly provider: MetadataProvider) { }
 
   search(request: MetadataSearch): MetadataCandidate[] {
     return this.provider.search(request);

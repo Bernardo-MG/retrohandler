@@ -4,7 +4,7 @@ import type { MetadataProvider, MetadataSearch, ProviderMetadata } from '../meta
 
 /** Access the imported offline catalogue without depending on SQLite. */
 export class LaunchBoxProvider implements MetadataProvider {
-  constructor(private readonly catalogue: Pick<LaunchBoxRepository, 'searchLaunchBox' | 'getLaunchBoxGame'>) {}
+  constructor(private readonly catalogue: Pick<LaunchBoxRepository, 'searchLaunchBox' | 'getLaunchBoxGame'>) { }
 
   search(request: MetadataSearch): MetadataCandidate[] {
     return this.catalogue.searchLaunchBox(request.query, request.system);

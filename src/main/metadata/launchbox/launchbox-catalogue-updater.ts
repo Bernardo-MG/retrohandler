@@ -30,7 +30,7 @@ function assertNotCancelled(signal?: AbortSignal): void {
 export class LaunchBoxCatalogueUpdater {
   private updating = false;
 
-  constructor(private readonly importer: LaunchBoxCatalogueImporter, private readonly http = new HttpClient()) {}
+  constructor(private readonly importer: LaunchBoxCatalogueImporter, private readonly http = new HttpClient()) { }
 
   get isUpdating(): boolean {
     return this.updating;
