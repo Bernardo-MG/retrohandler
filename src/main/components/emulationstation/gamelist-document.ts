@@ -1,28 +1,28 @@
 import { XmlCursor, type XmlTextElement } from '../xml/xml-cursor';
-import type { Span } from '../xml/xml-editor';
+import type { Span, XmlEdit } from '../xml/xml-editor';
 import { xmlEscape } from '../xml/xml-text';
 import type { GameListEntry } from './gamelist-entry';
 
 // Source positions are preserved so changes need not reserialize existing XML.
 export type GameListRecord = Span & {
-  readonly name: string;
+  readonly kind: 'game' | 'folder';
   readonly path: string;
   readonly fields: readonly XmlTextElement[];
-  readonly close: number;
+  readonly closingTagStart: number;
 };
 
 type DocumentNode = {
   records: GameListRecord[];
-  close: number;
-  empty: boolean;
-  rootEnd: number;
+  closingTagStart: number;
+  selfClosing: boolean;
+  openingTagEnd: number;
 };
 
 /** An EmulationStation document with its original XML and parsed record spans. */
 export class GameListDocument {
   private constructor(
     private readonly source: string,
-    private parsed?: DocumentNode
+    private parsedStructure?: DocumentNode
   ) {}
 
   static parse(xml: string): GameListDocument {
@@ -30,85 +30,103 @@ export class GameListDocument {
   }
 
   static fromEntries(entries: readonly GameListEntry[]): GameListDocument {
-    return new GameListDocument(this.write(entries));
+    return new GameListDocument(this.serializeEntries(entries));
   }
 
-  toXml(): string { return this.source; }
-  slice(span: Span): string { return this.source.slice(span.start, span.end); }
-  get records(): readonly GameListRecord[] { return this.structure.records; }
-  get close(): number { return this.structure.close; }
-  get empty(): boolean { return this.structure.empty; }
-  get rootEnd(): number { return this.structure.rootEnd; }
+  toXml(): string {
+    return this.source;
+  }
+
+  sourceTextFor(span: Span): string {
+    return this.source.slice(span.start, span.end);
+  }
+
+  get records(): readonly GameListRecord[] {
+    return this.structure.records;
+  }
+
+  /** Create an insertion edit without exposing the document's root offsets. */
+  createAppendEdit(records: readonly string[]): XmlEdit {
+    const { selfClosing, openingTagEnd, closingTagStart } = this.structure;
+    const text = '\n' + records.map(record => '  ' + record).join('\n') + '\n';
+    return selfClosing
+      ? { start: openingTagEnd - 2, end: openingTagEnd, text: '>' + text + '</gameList>' }
+      : { start: closingTagStart, end: closingTagStart, text };
+  }
 
   private get structure(): DocumentNode {
     // New files do not need a parse pass until a consumer asks for their spans.
-    return this.parsed ??= GameListDocument.parseStructure(this.source);
+    return this.parsedStructure ??= GameListDocument.parseStructure(this.source);
   }
 
-  private static invalid(): never {
+  private static failInvalidDocument(): never {
     throw new Error('Malformed or unsupported gamelist XML.');
   }
 
   private static parseStructure(xml: string): DocumentNode {
-    const cursor = new XmlCursor(xml, GameListDocument.invalid);
-    cursor.trivia();
-    const root = cursor.openTag();
+    const cursor = new XmlCursor(xml, GameListDocument.failInvalidDocument);
+    cursor.skipWhitespaceAndComments();
+    const root = cursor.readOpeningTag();
     if (root.name !== 'gameList') {
-      this.invalid();
+      this.failInvalidDocument();
     }
-    const rootEnd = cursor.position;
+    const openingTagEnd = cursor.position;
     const records: GameListRecord[] = [];
-    let close = cursor.position - 2;
-    if (!root.empty) {
-      for (; ;) {
-        cursor.trivia();
+    let closingTagStart = cursor.position - 2;
+    if (!root.selfClosing) {
+      while (true) {
+        cursor.skipWhitespaceAndComments();
         if (cursor.atClosingTag) {
-          close = cursor.closeTag(root.name);
+          closingTagStart = cursor.readClosingTag(root.name);
           break;
         }
-        const tag = cursor.openTag();
-        if (tag.empty || (tag.name !== 'game' && tag.name !== 'folder')) {
-          this.invalid();
-        }
-        const fields: XmlTextElement[] = [];
-        for (; ;) {
-          cursor.trivia();
-          if (cursor.atClosingTag) {
-            break;
-          }
-          fields.push(cursor.readTextElement());
-        }
-        const recordClose = cursor.closeTag(tag.name);
-        const paths = fields.filter(f => f.name === 'path');
-        if (paths.length !== 1 || !paths[0].value.trim()) {
-          this.invalid();
-        }
-        records.push({
-          name: tag.name,
-          path: paths[0].value,
-          start: tag.start,
-          end: cursor.position,
-          close: recordClose,
-          fields
-        });
+        records.push(this.readRecord(cursor));
       }
     }
-    cursor.trivia();
+    cursor.skipWhitespaceAndComments();
     if (!cursor.atEnd) {
-      this.invalid();
+      this.failInvalidDocument();
     }
     return {
       records,
-      close,
-      empty: root.empty,
-      rootEnd
+      closingTagStart,
+      selfClosing: root.selfClosing,
+      openingTagEnd
     };
   }
 
-  private static formatDate(s: string): string | null {
+  private static readRecord(cursor: XmlCursor): GameListRecord {
+    const tag = cursor.readOpeningTag();
+    if (tag.selfClosing || (tag.name !== 'game' && tag.name !== 'folder')) {
+      this.failInvalidDocument();
+    }
+    const fields: XmlTextElement[] = [];
+    while (true) {
+      cursor.skipWhitespaceAndComments();
+      if (cursor.atClosingTag) {
+        break;
+      }
+      fields.push(cursor.readTextElement());
+    }
+    const closingTagStart = cursor.readClosingTag(tag.name);
+    const paths = fields.filter(f => f.name === 'path');
+    if (paths.length !== 1 || !paths[0].value.trim()) {
+      this.failInvalidDocument();
+    }
+    return {
+      kind: tag.name,
+      path: paths[0].value,
+      start: tag.start,
+      end: cursor.position,
+      closingTagStart,
+      fields
+    };
+  }
+
+  private static formatReleaseDate(releaseDate: string): string | null {
     // EmulationStation requires a full timestamp, but metadata can contain a
     // year or a year-month when the exact release day is unknown.
-    const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(s.trim());
+    const match = /^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(releaseDate.trim());
     if (!match) {
       return null;
     }
@@ -126,19 +144,19 @@ export class GameListDocument {
     return `${match[1]}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}T000000`;
   }
 
-  private static write(games: readonly GameListEntry[]): string {
+  private static serializeEntries(games: readonly GameListEntry[]): string {
     const elements = games.map(game => {
-      const props = [
+      const fields = [
         ['path', game.path],
         ['name', game.name],
         ['desc', game.description],
         ['image', game.image],
-        ['releasedate', this.formatDate(game.released || '')],
+        ['releasedate', this.formatReleaseDate(game.released || '')],
         ['developer', game.developer],
         ['publisher', game.publisher],
         ['genre', game.genre]
       ].filter((pair): pair is [string, string] => !!pair[1]?.trim());
-      return '  <game>\n' + props.map(([k, v]) => `    <${k}>${xmlEscape(v)}</${k}>`).join('\n') + '\n  </game>';
+      return '  <game>\n' + fields.map(([name, value]) => `    <${name}>${xmlEscape(value)}</${name}>`).join('\n') + '\n  </game>';
     });
     return '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n' + elements.join('\n') + '\n</gameList>\n';
   }

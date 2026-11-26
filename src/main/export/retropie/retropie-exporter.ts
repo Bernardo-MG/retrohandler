@@ -17,136 +17,152 @@ const MAX_ART_BYTES = 5 * 1024 * 1024;
 export class RetroPieExporter implements Exporter {
   constructor(private readonly artworkFolder: string) { }
 
-  async prepare(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
-    const layout = new RetroPieLayout(options.overrides);
-    const planner = new FileOperationPlanner(options.destination);
-    const { files, warnings, bySystem } = await this.collectFiles(entries, options.includeArtwork, layout);
+  prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
+    return new RetroPieDraftBuilder(this.artworkFolder, options).build(entries);
+  }
+}
+
+/** Per-preview state. Separate previews never share collected files or operations. */
+class RetroPieDraftBuilder {
+  private readonly layout: RetroPieLayout;
+  private readonly planner: FileOperationPlanner;
+  private readonly includeArtwork: boolean;
+  private readonly files: ExportFile[] = [];
+  private readonly warnings: string[] = [];
+  private readonly conflicts: string[] = [];
+  private readonly operations: FileOperation[] = [];
+  private readonly seenDestinations = new Set<string>();
+  private readonly gamesBySystem = new Map<string, RetroPieGame[]>();
+  private artworkBytes = 0;
+
+  constructor(private readonly artworkFolder: string, options: ExportTargetOptions) {
+    this.layout = new RetroPieLayout(options.overrides);
+    this.planner = new FileOperationPlanner(options.destination);
+    this.includeArtwork = options.includeArtwork;
+  }
+
+  async build(entries: readonly LibraryEntry[]): Promise<ExportDraft> {
+    for (const entry of entries) {
+      await this.collectGame(entry);
+    }
     // Artwork operations precede gamelists so new image references are published last.
-    const artwork = await this.planArtwork(planner, files);
-    const gamelists = await this.planGameLists(planner, layout, bySystem);
+    await this.planArtworkCopies();
+    await this.planGameListWrites();
     return {
       plan: {
-        files: [...files, ...gamelists.files],
-        systems: [...bySystem.keys()].sort(),
-        warnings,
-        conflicts: [...artwork.conflicts, ...gamelists.conflicts],
-        bytes: artwork.bytes,
-        skippedRoms: entries.length - files.filter(file => file.kind === 'rom').length
+        files: this.files,
+        systems: [...this.gamesBySystem.keys()].sort(),
+        warnings: this.warnings,
+        conflicts: this.conflicts,
+        bytes: this.artworkBytes,
+        skippedRoms: entries.length - this.files.filter(file => file.kind === 'rom').length
       },
-      operations: [...artwork.operations, ...gamelists.operations]
+      operations: this.operations
     };
   }
 
-  private async collectFiles(entries: readonly LibraryEntry[], includeArtwork: boolean, layout: RetroPieLayout) {
-    const files: ExportFile[] = [];
-    const warnings: string[] = [];
-    const seen = new Set<string>();
-    const bySystem = new Map<string, RetroPieGame[]>();
-    for (const entry of entries) {
-      const rom = layout.resolveRom(entry);
-      if ('warning' in rom) {
-        warnings.push(rom.warning);
-        continue;
-      }
-      const { system: mapped, filename: fileName, relativeDestination: dstRelative } = rom;
-      const src = path.resolve(entry.source, entry.relativePath);
-      if (!childOf(path.resolve(entry.source), src)) {
-        warnings.push(`Unsafe source: ${entry.relativePath}`);
-        continue;
-      }
-      const key = dstRelative.toLowerCase();
-      if (seen.has(key)) {
-        warnings.push(`Filename collision: ${dstRelative}`);
-        continue;
-      }
-      const st = await lstat(src).catch(() => null);
-      if (!st?.isFile()) {
-        warnings.push(`Unavailable or linked source: ${entry.relativePath}`);
-        continue;
-      }
-      const realSource = await realpath(src).catch(() => '');
-      const realRoot = await realpath(entry.source).catch(() => '');
-      if (!realRoot || !realSource || !childOf(realRoot, realSource)) {
-        warnings.push(`Source escapes collection: ${entry.relativePath}`);
-        continue;
-      }
-      seen.add(key);
-      const file: ExportFile = {
-        source: src,
-        relativeDestination: dstRelative,
-        size: st.size,
-        kind: 'rom'
-      };
-      // A ROM entry is a gamelist reference only: it is never copied to the destination.
-      files.push(file);
-      let image: string | null = null;
-      const id = entry.metadata?.artworkId;
-      if (includeArtwork && isArtworkId(id)) {
-        const imageDest = layout.artworkPath(mapped, id);
-        const imageKey = imageDest.toLowerCase();
-        const cached = artworkPath(this.artworkFolder, id);
-        const artInfo = await lstat(cached).catch(() => null);
-        if (artInfo?.isFile() && artInfo.size <= MAX_ART_BYTES) {
-          image = id;
-          if (!seen.has(imageKey)) {
-            files.push({
-              source: cached,
-              relativeDestination: imageDest,
-              size: artInfo.size,
-              kind: 'artwork'
-            });
-            seen.add(imageKey);
-          }
-        } else {
-          warnings.push(`Cached artwork unavailable: ${id}`);
-        }
-      }
-      const group = bySystem.get(mapped) ?? [];
-      group.push({ entry, filename: fileName, image });
-      bySystem.set(mapped, group);
+  private async collectGame(entry: LibraryEntry): Promise<void> {
+    const rom = this.layout.resolveRomDestination(entry);
+    if ('warning' in rom) {
+      this.warnings.push(rom.warning);
+      return;
     }
-    return { files, warnings, bySystem };
+    if (!(await this.collectRomReference(entry, rom.relativeDestination))) {
+      return;
+    }
+    const image = await this.collectArtwork(entry, rom.system);
+    const games = this.gamesBySystem.get(rom.system) ?? [];
+    games.push({ entry, filename: rom.filename, image });
+    this.gamesBySystem.set(rom.system, games);
   }
 
-  private async planArtwork(planner: FileOperationPlanner, files: readonly ExportFile[]) {
-    const operations: FileOperation[] = [];
-    const conflicts: string[] = [];
-    // Existing artwork can be reused only when it is byte-identical. Never
-    // overwrite a different image, even if its filename looks content-addressed.
-    let bytes = 0;
-    for (const item of files) {
-      if (item.kind !== 'artwork') {
+  /** ROMs are references only: validate their sources, but never plan a copy. */
+  private async collectRomReference(entry: LibraryEntry, relativeDestination: string): Promise<boolean> {
+    const sourceRoot = path.resolve(entry.source);
+    const sourcePath = path.resolve(sourceRoot, entry.relativePath);
+    if (!childOf(sourceRoot, sourcePath)) {
+      this.warnings.push(`Unsafe source: ${entry.relativePath}`);
+      return false;
+    }
+    const destinationKey = relativeDestination.toLowerCase();
+    if (this.seenDestinations.has(destinationKey)) {
+      this.warnings.push(`Filename collision: ${relativeDestination}`);
+      return false;
+    }
+    const info = await lstat(sourcePath).catch(() => null);
+    if (!info?.isFile()) {
+      this.warnings.push(`Unavailable or linked source: ${entry.relativePath}`);
+      return false;
+    }
+    const realSource = await realpath(sourcePath).catch(() => '');
+    const realRoot = await realpath(entry.source).catch(() => '');
+    if (!realRoot || !realSource || !childOf(realRoot, realSource)) {
+      this.warnings.push(`Source escapes collection: ${entry.relativePath}`);
+      return false;
+    }
+    this.seenDestinations.add(destinationKey);
+    this.files.push({ source: sourcePath, relativeDestination, size: info.size, kind: 'rom' });
+    return true;
+  }
+
+  private async collectArtwork(entry: LibraryEntry, system: string): Promise<string | null> {
+    const artworkId = entry.metadata?.artworkId;
+    if (!this.includeArtwork || !isArtworkId(artworkId)) {
+      return null;
+    }
+    const relativeDestination = this.layout.artworkDestination(system, artworkId);
+    const destinationKey = relativeDestination.toLowerCase();
+    const sourcePath = artworkPath(this.artworkFolder, artworkId);
+    const info = await lstat(sourcePath).catch(() => null);
+    if (!info?.isFile() || info.size > MAX_ART_BYTES) {
+      this.warnings.push(`Cached artwork unavailable: ${artworkId}`);
+      return null;
+    }
+    if (!this.seenDestinations.has(destinationKey)) {
+      this.files.push({ source: sourcePath, relativeDestination, size: info.size, kind: 'artwork' });
+      this.seenDestinations.add(destinationKey);
+    }
+    return artworkId;
+  }
+
+  private async planArtworkCopies(): Promise<void> {
+    // Existing artwork can be reused only when it is byte-identical.
+    for (const file of this.files) {
+      if (file.kind !== 'artwork') {
         continue;
       }
       try {
-        const operation = await planner.planCopy(item.relativeDestination, item.source, item.size, MAX_ART_BYTES, 'artwork');
-        operations.push(operation);
+        const operation = await this.planner.planFileCopy({
+          relativeDestination: file.relativeDestination,
+          sourcePath: file.source,
+          expectedSize: file.size,
+          maxBytes: MAX_ART_BYTES,
+          fileLabel: 'artwork'
+        });
+        this.operations.push(operation);
         if (operation.action === 'create') {
-          bytes += operation.size;
+          this.artworkBytes += operation.size;
         }
       } catch (error) {
-        conflicts.push(`${item.relativeDestination}: ${String(error)}`);
+        this.conflicts.push(`${file.relativeDestination}: ${String(error)}`);
       }
     }
-    return { operations, conflicts, bytes };
   }
 
-  private async planGameLists(planner: FileOperationPlanner, layout: RetroPieLayout, bySystem: ReadonlyMap<string, RetroPieGame[]>) {
-    const files: ExportFile[] = [];
-    const operations: FileOperation[] = [];
-    const conflicts: string[] = [];
-    for (const [system, group] of bySystem) {
-      const relativeDestination = layout.gamelistPath(system);
-      files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
+  private async planGameListWrites(): Promise<void> {
+    for (const [system, games] of this.gamesBySystem) {
+      const relativeDestination = this.layout.gameListDestination(system);
+      this.files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
       try {
-        const gamelist = new RetroPieGameList(layout, system);
-        const operation = await planner.planGenerated(relativeDestination, MAX_XML_BYTES,
-          prior => gamelist.prepare(group, prior));
-        operations.push(operation);
+        const gameList = new RetroPieGameList(this.layout, system);
+        this.operations.push(await this.planner.planGeneratedFile({
+          relativeDestination,
+          maxBytes: MAX_XML_BYTES,
+          generate: previousContent => gameList.generateOrMerge(games, previousContent)
+        }));
       } catch (error) {
-        conflicts.push(`${relativeDestination}: ${String(error)}`);
+        this.conflicts.push(`${relativeDestination}: ${String(error)}`);
       }
     }
-    return { files, operations, conflicts };
   }
 }

@@ -21,22 +21,22 @@ test('XML entities decode once and reject unsupported entities and invalid chara
 test('XML cursor reads generic tags, text, comments and CDATA with original spans', () => {
   const xml = '\ufeff<?xml version="1.0"?>\n<root><!-- keep --><value id="a&amp;b">A&amp;<![CDATA[<B>]]></value><empty/></root>\n';
   const cursor = new XmlCursor(xml);
-  cursor.trivia();
-  assert.equal(cursor.openTag().name, 'root');
-  cursor.trivia();
+  cursor.skipWhitespaceAndComments();
+  assert.equal(cursor.readOpeningTag().name, 'root');
+  cursor.skipWhitespaceAndComments();
   const field = cursor.readTextElement();
   assert.equal(field.value, 'A&<B>');
   assert.equal(xml.slice(field.start, field.end), '<value id="a&amp;b">A&amp;<![CDATA[<B>]]></value>');
   assert.equal(cursor.readTextElement().value, '');
   assert.equal(cursor.atClosingTag, true);
-  cursor.closeTag('root');
-  cursor.trivia();
+  cursor.readClosingTag('root');
+  cursor.skipWhitespaceAndComments();
   assert.equal(cursor.atEnd, true);
 });
 
 test('XML cursor rejects DTDs, duplicate attributes and nested text elements', () => {
   for (const xml of ['<!DOCTYPE root><root/>', '<root a="1" a="2"/>', '<root xmlns="urn:x"/>']) {
-    assert.throws(() => new XmlCursor(xml).openTag(), /XML/);
+    assert.throws(() => new XmlCursor(xml).readOpeningTag(), /XML/);
   }
   for (const xml of ['<value><nested/></value>', '<value>abc</wrong>', '<value><![CDATA[abc</value>']) {
     assert.throws(() => new XmlCursor(xml).readTextElement(), /XML/);
@@ -55,14 +55,14 @@ test('XML edits preserve all untouched source text and reject overlapping spans'
 test('XML cursors own independent positions and keep caller-provided validation errors', () => {
   const first = new XmlCursor('<one><value>A</value></one>');
   const second = new XmlCursor('<two/>');
-  assert.equal(first.openTag().name, 'one');
+  assert.equal(first.readOpeningTag().name, 'one');
   assert.equal(second.position, 0);
-  assert.equal(second.openTag().name, 'two');
+  assert.equal(second.readOpeningTag().name, 'two');
   assert.equal(second.atEnd, true);
   assert.equal(first.readTextElement().value, 'A');
-  first.closeTag('one');
+  first.readClosingTag('one');
   assert.equal(first.atEnd, true);
   const invalid = (): never => { throw new Error('Custom parse error'); };
   assert.throws(() => new XmlCursor('\u0000', invalid), /Custom parse error/);
-  assert.throws(() => new XmlCursor('<root duplicate="1" duplicate="2"/>', invalid).openTag(), /Custom parse error/);
+  assert.throws(() => new XmlCursor('<root duplicate="1" duplicate="2"/>', invalid).readOpeningTag(), /Custom parse error/);
 });

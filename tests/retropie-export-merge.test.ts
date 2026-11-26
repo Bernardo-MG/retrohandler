@@ -39,7 +39,7 @@ const library = (items: LibraryEntry[]): ExportLibrary => ({
 });
 const doc = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>\n<gameList>${body}</gameList>\n`;
 const layout = new RetroPieLayout({});
-const merger = new GameListMerger(value => layout.resolveGamePath(value, 'nes'));
+const merger = new GameListMerger(value => layout.normalizeGameReference(value, 'nes'));
 const oldGame = (rom = './Game.zip') => `<game id="42"><path>${rom}</path><name>Old name</name><favorite>true</favorite><playcount>8</playcount><lastplayed>20260101T000000</lastplayed><genre>Old genre</genre><image>./images/old.png</image></game>`;
 const unrelated = '<game><path>./Other.zip</path><name>Other &amp; game</name><desc><![CDATA[Unrelated <game> & text]]></desc></game>';
 const folder = '<folder><path>./extras</path><name>Extras</name></folder>';

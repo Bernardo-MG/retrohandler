@@ -7,5 +7,5 @@ export type ExportTargetOptions = Readonly<Pick<ExportOptions, 'includeArtwork' 
 
 /** Prepare a read-only draft and write operations for a validated destination. */
 export interface Exporter {
-  prepare(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft>;
+  prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft>;
 }

@@ -1,63 +1,70 @@
 import { readRegular } from '../filesystem/file-reader';
-import { hash, hashOrNull } from './content-hash';
+import { sha256, sha256OrNull } from './content-hash';
 import type { FileDestination } from './file-destination';
 import type { FileOperation } from './file-operation';
+
+type FileTarget = {
+  relativeDestination: string;
+  maxBytes: number;
+};
+
+type FileCopyRequest = FileTarget & {
+  sourcePath: string;
+  expectedSize: number;
+  fileLabel: string;
+};
+
+type GeneratedFileRequest = FileTarget & {
+  generate: (previousContent: Buffer | null) => Buffer;
+};
 
 /** Plans read-only operations within a configured destination. */
 export class FileOperationPlanner {
   constructor(private readonly destination: FileDestination) {}
 
   /** Inspect a source file without retaining its bytes in the prepared export. */
-  async planCopy(
-    relative: string,
-    file: string,
-    expectedSize: number,
-    maxBytes: number,
-    label: string
-  ): Promise<FileOperation> {
-    await this.destination.checkParent(relative);
-    const source = await readRegular(file, maxBytes);
-    if (!source || source.length !== expectedSize) {
-      throw new Error(`Cached ${label} changed; preview again.`);
+  async planFileCopy(request: FileCopyRequest): Promise<FileOperation> {
+    const { relativeDestination, sourcePath, expectedSize, maxBytes, fileLabel } = request;
+    await this.destination.assertSafeParent(relativeDestination);
+    const sourceContent = await readRegular(sourcePath, maxBytes);
+    if (!sourceContent || sourceContent.length !== expectedSize) {
+      throw new Error(`Cached ${fileLabel} changed; preview again.`);
     }
-    const prior = await this.destination.read(relative, maxBytes);
-    const output = hash(source);
-    const previous = hashOrNull(prior);
-    if (previous !== null && previous !== output) {
-      throw new Error(`Existing ${label} differs from cached ${label}.`);
+    const previousContent = await this.destination.readFile(relativeDestination, maxBytes);
+    const outputHash = sha256(sourceContent);
+    const previousHash = sha256OrNull(previousContent);
+    if (previousHash !== null && previousHash !== outputHash) {
+      throw new Error(`Existing ${fileLabel} differs from cached ${fileLabel}.`);
     }
     return {
-      relativeDestination: relative,
-      content: { file },
+      relativeDestination,
+      content: { sourcePath },
       maxBytes,
-      size: source.length,
-      action: prior === null ? 'create' : 'reuse',
-      previous,
-      output
+      size: sourceContent.length,
+      action: previousContent === null ? 'create' : 'reuse',
+      previousHash,
+      outputHash
     };
   }
 
   /** The consumer supplies the format-specific generation or merge policy. */
-  async planGenerated(
-    relative: string,
-    maxBytes: number,
-    generate: (previous: Buffer | null) => Buffer
-  ): Promise<FileOperation> {
-    const prior = await this.destination.read(relative, maxBytes);
-    const bytes = generate(prior);
+  async planGeneratedFile(request: GeneratedFileRequest): Promise<FileOperation> {
+    const { relativeDestination, maxBytes, generate } = request;
+    const previousContent = await this.destination.readFile(relativeDestination, maxBytes);
+    const bytes = generate(previousContent);
     if (bytes.length > maxBytes) {
       throw new Error('Generated file exceeds size limit.');
     }
-    const previous = hashOrNull(prior);
-    const output = hash(bytes);
+    const previousHash = sha256OrNull(previousContent);
+    const outputHash = sha256(bytes);
     return {
-      relativeDestination: relative,
+      relativeDestination,
       content: { bytes },
       maxBytes,
       size: bytes.length,
-      action: prior === null ? 'create' : previous === output ? 'reuse' : 'update',
-      previous,
-      output
+      action: previousContent === null ? 'create' : previousHash === outputHash ? 'reuse' : 'update',
+      previousHash,
+      outputHash
     };
   }
 }

@@ -17,18 +17,18 @@ export class RetroPieGameList {
     private readonly system: string
   ) { }
 
-  prepare(games: readonly RetroPieGame[], previous: Buffer | null): Buffer {
-    const generated = GameListDocument.fromEntries(games.map(game => this.toEntry(game)));
-    if (previous === null) {
+  generateOrMerge(games: readonly RetroPieGame[], previousContent: Buffer | null): Buffer {
+    const generated = GameListDocument.fromEntries(games.map(game => this.toGameListEntry(game)));
+    if (previousContent === null) {
       return Buffer.from(generated.toXml(), 'utf8');
     }
-    const xml = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(previous);
+    const xml = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(previousContent);
     const existing = GameListDocument.parse(xml);
-    const merger = new GameListMerger(value => this.layout.resolveGamePath(value, this.system));
-    return Buffer.from(merger.merge(existing, generated, this.fallbackNames(games)), 'utf8');
+    const merger = new GameListMerger(value => this.layout.normalizeGameReference(value, this.system));
+    return Buffer.from(merger.merge(existing, generated, this.pathsWithFallbackTitles(games)), 'utf8');
   }
 
-  private toEntry({ entry, filename, image }: RetroPieGame): GameListEntry {
+  private toGameListEntry({ entry, filename, image }: RetroPieGame): GameListEntry {
     const metadata = entry.metadata;
     return {
       path: this.layout.romReference(filename),
@@ -42,7 +42,7 @@ export class RetroPieGameList {
     };
   }
 
-  private fallbackNames(games: readonly RetroPieGame[]): ReadonlySet<string> {
+  private pathsWithFallbackTitles(games: readonly RetroPieGame[]): ReadonlySet<string> {
     return new Set(games.filter(game =>
       !game.entry.metadata?.title?.trim() && !game.entry.identifiedTitle?.trim()
     ).map(game => game.filename));

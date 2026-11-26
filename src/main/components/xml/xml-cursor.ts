@@ -9,114 +9,129 @@ export type XmlTextElement = Span & {
 // Restricted XML 1.0 cursor: no DTDs, namespaces or arbitrary processing instructions.
 // The caller owns document structure; offsets are JavaScript string indices.
 export class XmlCursor {
-  private pos: number;
+  private offset: number;
 
   constructor(
     private readonly xml: string,
-    private readonly invalid: () => never = invalidXml
+    private readonly failInvalidXml: () => never = invalidXml
   ) {
-    checkXmlChars(xml, invalid);
-    this.pos = xml.charCodeAt(0) === 0xfeff ? 1 : 0;
-    if (this.xml.startsWith('<?xml', this.pos)) {
-      if (!this.take(/<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.0"|'1\.0')(?:[ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(?:"[Uu][Tt][Ff]-8"|'[Uu][Tt][Ff]-8'))?(?:[ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\r\n]*\?>/y)) {
-        this.invalid();
-      }
-    }
+    checkXmlChars(xml, failInvalidXml);
+    this.offset = xml.charCodeAt(0) === 0xfeff ? 1 : 0;
+    this.readDeclaration();
   }
 
-  get position(): number { return this.pos; }
-  get atClosingTag(): boolean { return this.xml.startsWith('</', this.pos); }
-  get atEnd(): boolean { return this.pos === this.xml.length; }
+  get position(): number {
+    return this.offset;
+  }
 
-  trivia(): void {
+  get atClosingTag(): boolean {
+    return this.xml.startsWith('</', this.offset);
+  }
+
+  get atEnd(): boolean {
+    return this.offset === this.xml.length;
+  }
+
+  skipWhitespaceAndComments(): void {
     do {
-      this.take(/[ \t\r\n]*/y);
-    } while (this.comment());
+      this.matchAtPosition(/[ \t\r\n]*/y);
+    } while (this.skipComment());
   }
 
-  openTag() {
-    const start = this.pos;
-    const name = this.take(/<([A-Za-z_][A-Za-z0-9_.-]*)/y)?.[1] ?? this.invalid();
-    const attrs = new Set<string>();
-    for (; ;) {
-      const whitespace = this.take(/[ \t\r\n]*/y)![0];
-      if (this.take(/\/>/y)) {
-        return { start, name, empty: true };
+  readOpeningTag() {
+    const start = this.offset;
+    const name = this.matchAtPosition(/<([A-Za-z_][A-Za-z0-9_.-]*)/y)?.[1] ?? this.failInvalidXml();
+    const attributes = new Set<string>();
+    while (true) {
+      const whitespace = this.matchAtPosition(/[ \t\r\n]*/y)![0];
+      if (this.matchAtPosition(/\/>/y)) {
+        return { start, name, selfClosing: true };
       }
-      if (this.take(/>/y)) {
-        return { start, name, empty: false };
+      if (this.matchAtPosition(/>/y)) {
+        return { start, name, selfClosing: false };
       }
       if (!whitespace) {
-        this.invalid();
+        this.failInvalidXml();
       }
-      const a = this.take(/([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"<]*)"|'([^'<]*)')/y) ?? this.invalid();
-      if (attrs.has(a[1]) || a[1] === 'xmlns') {
-        this.invalid();
+      const attributePattern = /([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"<]*)"|'([^'<]*)')/y;
+      const attribute = this.matchAtPosition(attributePattern) ?? this.failInvalidXml();
+      if (attributes.has(attribute[1]) || attribute[1] === 'xmlns') {
+        this.failInvalidXml();
       }
-      attrs.add(a[1]);
-      decodeXmlText(a[2] ?? a[3], this.invalid);
+      attributes.add(attribute[1]);
+      decodeXmlText(attribute[2] ?? attribute[3], this.failInvalidXml);
     }
   }
 
-  closeTag(name: string): number {
-    const close = this.pos;
-    if (this.take(/<\/([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*>/y)?.[1] !== name) {
-      this.invalid();
+  readClosingTag(name: string): number {
+    const closingTagStart = this.offset;
+    if (this.matchAtPosition(/<\/([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*>/y)?.[1] !== name) {
+      this.failInvalidXml();
     }
-    return close;
+    return closingTagStart;
   }
 
   readTextElement(): XmlTextElement {
-    const tag = this.openTag();
+    const tag = this.readOpeningTag();
     let value = '';
-    if (!tag.empty) {
-      for (; ;) {
-        if (this.xml.startsWith('</', this.pos)) {
-          this.closeTag(tag.name);
+    if (!tag.selfClosing) {
+      while (true) {
+        if (this.atClosingTag) {
+          this.readClosingTag(tag.name);
           break;
         }
-        if (this.comment()) {
+        if (this.skipComment()) {
           continue;
         }
-        if (this.xml.startsWith('<![CDATA[', this.pos)) {
-          const end = this.xml.indexOf(']]>', this.pos + 9);
+        if (this.xml.startsWith('<![CDATA[', this.offset)) {
+          const end = this.xml.indexOf(']]>', this.offset + 9);
           if (end < 0) {
-            this.invalid();
+            this.failInvalidXml();
           }
-          value += this.xml.slice(this.pos + 9, end);
-          this.pos = end + 3;
+          value += this.xml.slice(this.offset + 9, end);
+          this.offset = end + 3;
           continue;
         }
-        const text = this.take(/[^<]+/y)?.[0] ?? this.invalid();
-        value += decodeXmlText(text, this.invalid);
+        const text = this.matchAtPosition(/[^<]+/y)?.[0] ?? this.failInvalidXml();
+        value += decodeXmlText(text, this.failInvalidXml);
       }
     }
     return {
       name: tag.name,
       start: tag.start,
-      end: this.pos,
+      end: this.offset,
       value
     };
   }
 
-  private take(re: RegExp): RegExpExecArray | null {
-    re.lastIndex = this.pos;
-    const result = re.exec(this.xml);
+  private readDeclaration(): void {
+    if (!this.xml.startsWith('<?xml', this.offset)) {
+      return;
+    }
+    const declarationPattern = /<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.0"|'1\.0')(?:[ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(?:"[Uu][Tt][Ff]-8"|'[Uu][Tt][Ff]-8'))?(?:[ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\r\n]*\?>/y;
+    if (!this.matchAtPosition(declarationPattern)) {
+      this.failInvalidXml();
+    }
+  }
+
+  private matchAtPosition(expression: RegExp): RegExpExecArray | null {
+    expression.lastIndex = this.offset;
+    const result = expression.exec(this.xml);
     if (result) {
-      this.pos = re.lastIndex;
+      this.offset = expression.lastIndex;
     }
     return result;
   }
 
-  private comment(): boolean {
-    if (!this.xml.startsWith('<!--', this.pos)) {
+  private skipComment(): boolean {
+    if (!this.xml.startsWith('<!--', this.offset)) {
       return false;
     }
-    const end = this.xml.indexOf('-->', this.pos + 4);
-    if (end < 0 || this.xml.slice(this.pos + 4, end).includes('--') || (end > this.pos + 4 && this.xml[end - 1] === '-')) {
-      this.invalid();
+    const end = this.xml.indexOf('-->', this.offset + 4);
+    if (end < 0 || this.xml.slice(this.offset + 4, end).includes('--') || (end > this.offset + 4 && this.xml[end - 1] === '-')) {
+      this.failInvalidXml();
     }
-    this.pos = end + 3;
+    this.offset = end + 3;
     return true;
   }
 }

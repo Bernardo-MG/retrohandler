@@ -21,13 +21,13 @@ test('gamelist writer accepts caller-supplied paths and escapes metadata', () =>
     ['path', './nested/A&B.zip'], ['name', 'A < B'], ['image', '../covers/A&B.png'],
     ['releasedate', '20000229T000000']
   ]);
-  assert.equal(record.name, 'game');
+  assert.equal(record.kind, 'game');
 });
 
 test('gamelist parser exposes source spans and preserves decoded text', () => {
   const xml = doc('<!--keep--><folder><path>./extras</path><name><![CDATA[A & B]]></name></folder>');
   const [record] = GameListDocument.parse(xml).records;
-  assert.equal(record.name, 'folder');
+  assert.equal(record.kind, 'folder');
   assert.equal(xml.slice(record.start, record.end), '<folder><path>./extras</path><name><![CDATA[A & B]]></name></folder>');
   assert.equal(record.fields[1].value, 'A & B');
   assert.equal(xml.slice(record.fields[1].start, record.fields[1].end), '<name><![CDATA[A & B]]></name>');
@@ -59,7 +59,7 @@ test('document and merger instances preserve independent source spans across rep
   const second = GameListDocument.parse(doc('<game><path>./B.zip</path><name>Old B</name></game>'));
   const generated = GameListDocument.fromEntries([{ path: './A.zip', name: 'New A' }]);
   assert.equal(first.records[0].path, './A.zip');
-  assert.equal(first.slice(first.records[0].fields[1]), '<name>Old A</name>');
+  assert.equal(first.sourceTextFor(first.records[0].fields[1]), '<name>Old A</name>');
   assert.equal(merger.merge(first, generated), first.toXml().replace('Old A', 'New A'));
   const result = merger.merge(second, generated);
   assert.match(result, /Old B/);

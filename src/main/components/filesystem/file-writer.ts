@@ -4,6 +4,14 @@ import { randomUUID } from 'node:crypto';
 import { readRegular } from './file-reader';
 import { assertSafeDirectory } from './paths';
 
+type FileReplacement = {
+  targetPath: string;
+  newContent: Buffer;
+  approvedContent: Buffer;
+  maxBytes: number;
+  onBackup: (file: string) => void;
+};
+
 /** Exclusive creation and backed-up replacement with one naming policy. */
 export class FileWriter {
   constructor(private readonly backupTag: string) {
@@ -14,7 +22,7 @@ export class FileWriter {
 
   // Open exclusively so even a name collision cannot overwrite another file.
   // Flush the contents before considering a backup or replacement ready.
-  async create(file: string, content: Buffer): Promise<void> {
+  async createExclusive(file: string, content: Buffer): Promise<void> {
     const handle = await open(file, 'wx');
     try {
       try {
@@ -31,28 +39,23 @@ export class FileWriter {
   }
 
   /** Back up the approved bytes before replacing a file. Report the backup even if replacement fails. */
-  async replaceWithBackup(
-    file: string,
-    content: Buffer,
-    previous: Buffer,
-    maxBytes: number,
-    onBackup: (file: string) => void
-  ): Promise<void> {
-    const folder = path.dirname(file);
+  async replaceWithBackup(replacement: FileReplacement): Promise<void> {
+    const { targetPath, newContent, approvedContent, maxBytes, onBackup } = replacement;
+    const folder = path.dirname(targetPath);
     await assertSafeDirectory(folder);
     const suffix = randomUUID();
-    const backup = `${file}.${this.backupTag}-${suffix}.bak`;
+    const backup = `${targetPath}.${this.backupTag}-${suffix}.bak`;
     const temp = path.join(folder, `.replacement-${suffix}.tmp`);
-    await this.create(temp, content);
+    await this.createExclusive(temp, newContent);
     try {
-      await this.create(backup, previous);
+      await this.createExclusive(backup, approvedContent);
       onBackup(backup);
       await assertSafeDirectory(folder);
-      const current = await readRegular(file, maxBytes);
-      if (current === null || !current.equals(previous)) {
-        throw new Error(`File changed before replacement: ${file}`);
+      const current = await readRegular(targetPath, maxBytes);
+      if (current === null || !current.equals(approvedContent)) {
+        throw new Error(`File changed before replacement: ${targetPath}`);
       }
-      await rename(temp, file);
+      await rename(temp, targetPath);
     } finally {
       await rm(temp, { force: true });
     }

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { applyXmlEdits, type XmlEdit } from '../xml/xml-editor';
 import type { GameListDocument, GameListRecord } from './gamelist-document';
 
-type PathMatch = { key: string; record: GameListRecord };
+type PathMatch = { normalizedPath: string; record: GameListRecord };
 
 /** Merge nonempty exported metadata without rewriting unrelated source text. */
 export class GameListMerger {
@@ -11,94 +11,89 @@ export class GameListMerger {
   merge(
     existing: GameListDocument,
     generated: GameListDocument,
-    fallbackNames: ReadonlySet<string> = new Set()
+    pathsWithFallbackTitles: ReadonlySet<string> = new Set()
   ): string {
-    const { byPath, unknownBasenames } = this.indexRecords(existing.records);
+    const { recordsByPath, unresolvedBasenames } = this.indexRecords(existing.records);
     const edits: XmlEdit[] = [];
     const additions: string[] = [];
     for (const record of generated.records) {
-      const key = this.resolvePath(record.path);
-      if (key === null) {
+      const normalizedPath = this.resolvePath(record.path);
+      if (normalizedPath === null) {
         throw new Error('Malformed or unsupported gamelist XML.');
       }
-      const matches = byPath.get(key.toLowerCase()) ?? [];
-      if (unknownBasenames.has(path.posix.basename(key).toLowerCase())) {
-        throw new Error(`Unmapped existing ROM path may conflict: ${key}`);
+      const matches = recordsByPath.get(normalizedPath.toLowerCase()) ?? [];
+      if (unresolvedBasenames.has(path.posix.basename(normalizedPath).toLowerCase())) {
+        throw new Error(`Unmapped existing ROM path may conflict: ${normalizedPath}`);
       }
       if (!matches.length) {
-        additions.push('  ' + generated.slice(record));
+        additions.push(generated.sourceTextFor(record));
         continue;
       }
-      if (matches.length !== 1 || matches[0].key !== key || matches[0].record.name !== 'game') {
-        throw new Error(`Ambiguous existing ROM path: ${key}`);
+      if (matches.length !== 1 || matches[0].normalizedPath !== normalizedPath || matches[0].record.kind !== 'game') {
+        throw new Error(`Ambiguous existing ROM path: ${normalizedPath}`);
       }
-      for (const edit of this.mergeRecord(matches[0].record, record, generated, key, fallbackNames.has(key))) {
+      const preserveExistingName = pathsWithFallbackTitles.has(normalizedPath);
+      const recordEdits = this.createRecordEdits(matches[0], record, generated, preserveExistingName);
+      for (const edit of recordEdits) {
         edits.push(edit);
       }
     }
     if (additions.length) {
-      edits.push(this.appendRecords(existing, additions));
+      edits.push(existing.createAppendEdit(additions));
     }
     return applyXmlEdits(existing.toXml(), edits);
   }
 
   private indexRecords(records: readonly GameListRecord[]) {
-    const byPath = new Map<string, PathMatch[]>();
-    const unknownBasenames = new Set<string>();
+    const recordsByPath = new Map<string, PathMatch[]>();
+    const unresolvedBasenames = new Set<string>();
     for (const record of records) {
-      const key = this.resolvePath(record.path);
-      if (key === null) {
+      const normalizedPath = this.resolvePath(record.path);
+      if (normalizedPath === null) {
         // Block a possible duplicate rather than guessing a nonstandard path.
-        unknownBasenames.add(path.posix.basename(record.path.trim().replace(/\\/g, '/')).toLowerCase());
+        unresolvedBasenames.add(path.posix.basename(record.path.trim().replace(/\\/g, '/')).toLowerCase());
         continue;
       }
-      const matches = byPath.get(key.toLowerCase()) ?? [];
-      matches.push({ key, record });
-      byPath.set(key.toLowerCase(), matches);
+      const matches = recordsByPath.get(normalizedPath.toLowerCase()) ?? [];
+      matches.push({ normalizedPath, record });
+      recordsByPath.set(normalizedPath.toLowerCase(), matches);
     }
-    return { byPath, unknownBasenames };
+    return { recordsByPath, unresolvedBasenames };
   }
 
-  private mergeRecord(
-    previous: GameListRecord,
-    record: GameListRecord,
+  private createRecordEdits(
+    match: PathMatch,
+    incomingRecord: GameListRecord,
     generated: GameListDocument,
-    key: string,
-    preserveName: boolean
+    preserveExistingName: boolean
   ): XmlEdit[] {
+    const { normalizedPath, record: previousRecord } = match;
     const edits: XmlEdit[] = [];
     const newFields: string[] = [];
-    for (const field of record.fields) {
+    for (const field of incomingRecord.fields) {
       if (field.name === 'path') {
         continue;
       }
-      const same = previous.fields.filter(old => old.name === field.name);
+      const existingFields = previousRecord.fields.filter(old => old.name === field.name);
       // A filename-derived fallback should not erase an existing scraped title.
-      if (field.name === 'name' && preserveName && same.some(old => old.value.trim())) {
+      if (field.name === 'name' && preserveExistingName && existingFields.some(old => old.value.trim())) {
         continue;
       }
-      if (same.length > 1) {
-        throw new Error(`Ambiguous metadata field ${field.name} for ${key}`);
+      if (existingFields.length > 1) {
+        throw new Error(`Ambiguous metadata field ${field.name} for ${normalizedPath}`);
       }
-      const raw = generated.slice(field);
-      if (same.length) {
-        if (same[0].value !== field.value) {
-          edits.push({ start: same[0].start, end: same[0].end, text: raw });
+      const replacementXml = generated.sourceTextFor(field);
+      if (existingFields.length) {
+        if (existingFields[0].value !== field.value) {
+          edits.push({ start: existingFields[0].start, end: existingFields[0].end, text: replacementXml });
         }
       } else {
-        newFields.push('    ' + raw);
+        newFields.push('    ' + replacementXml);
       }
     }
     if (newFields.length) {
-      edits.push({ start: previous.close, end: previous.close, text: '\n' + newFields.join('\n') + '\n  ' });
+      edits.push({ start: previousRecord.closingTagStart, end: previousRecord.closingTagStart, text: '\n' + newFields.join('\n') + '\n  ' });
     }
     return edits;
-  }
-
-  private appendRecords(existing: GameListDocument, additions: readonly string[]): XmlEdit {
-    const text = '\n' + additions.join('\n') + '\n';
-    return existing.empty
-      ? { start: existing.rootEnd - 2, end: existing.rootEnd, text: '>' + text + '</gameList>' }
-      : { start: existing.close, end: existing.close, text };
   }
 }

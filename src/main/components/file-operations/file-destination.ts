@@ -14,7 +14,7 @@ export class FileDestination {
     this.root = path.resolve(root);
   }
 
-  async validate(protectedRoots: readonly string[], overlapMessage = 'Destination overlaps a protected directory.'): Promise<void> {
+  async validateAgainst(protectedRoots: readonly string[], overlapMessage = 'Destination overlaps a protected directory.'): Promise<void> {
     await assertSafeDirectory(this.root);
     const destinationKey = this.root.toLowerCase();
     const roots = new Set(protectedRoots.map(root => path.resolve(root)));
@@ -32,31 +32,31 @@ export class FileDestination {
     }
   }
 
-  resolve(relative: string): string {
-    const target = path.join(this.root, ...relative.split('/'));
+  resolvePath(relativePath: string): string {
+    const target = path.join(this.root, ...relativePath.split('/'));
     if (!childOf(this.root, target)) {
       throw new Error('Invalid export destination path.');
     }
     return target;
   }
 
-  async checkParent(relative: string): Promise<string> {
-    const target = this.resolve(relative);
+  async assertSafeParent(relativePath: string): Promise<string> {
+    const target = this.resolvePath(relativePath);
     await assertSafeDirectory(path.dirname(target));
     return target;
   }
 
-  async read(relative: string, maxBytes: number): Promise<Buffer | null> {
-    return readRegular(await this.checkParent(relative), maxBytes);
+  async readFile(relativePath: string, maxBytes: number): Promise<Buffer | null> {
+    return readRegular(await this.assertSafeParent(relativePath), maxBytes);
   }
 
-  async ensureParent(relative: string): Promise<string> {
-    const target = this.resolve(relative);
+  async ensureParentDirectory(relativePath: string): Promise<string> {
+    const target = this.resolvePath(relativePath);
     await ensureSafeDirectory(path.dirname(target));
     return target;
   }
 
-  relative(file: string): string {
+  relativePathOf(file: string): string {
     if (!childOf(this.root, file)) {
       throw new Error('Invalid export destination path.');
     }

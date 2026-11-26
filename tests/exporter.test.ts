@@ -34,16 +34,16 @@ async function fixture(run: (root: string, source: string, destination: string) 
 
 test('RetroPie system mapping respects own overrides and rejects invalid destinations', () => {
   const entry = { system: 'Nintendo Entertainment System', relativePath: 'Game.zip' };
-  assert.deepEqual(new RetroPieLayout({}).resolveRom(entry), {
+  assert.deepEqual(new RetroPieLayout({}).resolveRomDestination(entry), {
     system: 'nes', filename: 'Game.zip', relativeDestination: 'roms/nes/Game.zip'
   });
-  assert.deepEqual(new RetroPieLayout({ 'Nintendo Entertainment System': 'custom' }).resolveRom(entry), {
+  assert.deepEqual(new RetroPieLayout({ 'Nintendo Entertainment System': 'custom' }).resolveRomDestination(entry), {
     system: 'custom', filename: 'Game.zip', relativeDestination: 'roms/custom/Game.zip'
   });
-  assert.deepEqual(new RetroPieLayout(Object.create({ Unknown: 'nes' })).resolveRom({ ...entry, system: 'Unknown' }), { warning: 'Unmapped system: Unknown' });
-  assert.deepEqual(new RetroPieLayout({}).resolveRom({ ...entry, system: 'constructor' }), { warning: 'Unmapped system: constructor' });
+  assert.deepEqual(new RetroPieLayout(Object.create({ Unknown: 'nes' })).resolveRomDestination({ ...entry, system: 'Unknown' }), { warning: 'Unmapped system: Unknown' });
+  assert.deepEqual(new RetroPieLayout({}).resolveRomDestination({ ...entry, system: 'constructor' }), { warning: 'Unmapped system: constructor' });
   for (const invalid of ['', '../escape', 'NES', 'con', 'aux', 'a'.repeat(51)]) {
-    assert.deepEqual(new RetroPieLayout({ 'Nintendo Entertainment System': invalid }).resolveRom(entry), { warning: 'Unmapped system: Nintendo Entertainment System' });
+    assert.deepEqual(new RetroPieLayout({ 'Nintendo Entertainment System': invalid }).resolveRomDestination(entry), { warning: 'Unmapped system: Nintendo Entertainment System' });
   }
 });
 
@@ -51,11 +51,11 @@ test('RetroPie ROM layout flattens filenames and reports unsupported formats and
   const layout = new RetroPieLayout({});
   const entry = { system: 'Nintendo Entertainment System', relativePath: 'subdir/Game.zip' };
   const expected = { system: 'nes', filename: 'Game.zip', relativeDestination: 'roms/nes/Game.zip' };
-  assert.deepEqual(layout.resolveRom(entry), expected);
-  assert.deepEqual(layout.resolveRom({ ...entry, relativePath: 'subdir\\Game.zip' }), expected);
-  assert.match((layout.resolveRom({ ...entry, system: 'Unknown' }) as { warning: string }).warning, /Unmapped system/);
-  assert.match((layout.resolveRom({ ...entry, relativePath: 'Game.7Z' }) as { warning: string }).warning, /compatibility/);
-  assert.match((layout.resolveRom({ ...entry, relativePath: 'Game?.zip' }) as { warning: string }).warning, /Unsupported filename/);
+  assert.deepEqual(layout.resolveRomDestination(entry), expected);
+  assert.deepEqual(layout.resolveRomDestination({ ...entry, relativePath: 'subdir\\Game.zip' }), expected);
+  assert.match((layout.resolveRomDestination({ ...entry, system: 'Unknown' }) as { warning: string }).warning, /Unmapped system/);
+  assert.match((layout.resolveRomDestination({ ...entry, relativePath: 'Game.7Z' }) as { warning: string }).warning, /compatibility/);
+  assert.match((layout.resolveRomDestination({ ...entry, relativePath: 'Game?.zip' }) as { warning: string }).warning, /Unsupported filename/);
 });
 
 test('the export workflow accepts an independent strategy and owns the validated destination and fingerprint', async () => fixture(async (_, source, destination) => {
@@ -63,11 +63,15 @@ test('the export workflow accepts an independent strategy and owns the validated
   const options = optionsFor(destination);
   let operations: FileOperation[] = [];
   const exporter: Exporter = {
-    async prepare(received, receivedOptions) {
+    async prepareDraft(received, receivedOptions) {
       assert.deepEqual(received, entries);
       assert.equal(receivedOptions.destination.root, destination);
       assert.deepEqual({ includeArtwork: receivedOptions.includeArtwork, overrides: receivedOptions.overrides }, { includeArtwork: false, overrides: {} });
-      const operation = await new FileOperationPlanner(receivedOptions.destination).planGenerated('index.json', 100, () => Buffer.from('{}'));
+      const operation = await new FileOperationPlanner(receivedOptions.destination).planGeneratedFile({
+        relativeDestination: 'index.json',
+        maxBytes: 100,
+        generate: () => Buffer.from('{}')
+      });
       operations = [operation];
       return {
         plan: {
@@ -86,7 +90,7 @@ test('the export workflow accepts an independent strategy and owns the validated
   assert.equal(plan.destination, destination);
   // Check the established fingerprint format independently of PreparedExport.
   const { files, warnings, conflicts } = plan;
-  const versions = operations.map(job => [job.relativeDestination, job.previous, job.output]);
+  const versions = operations.map(job => [job.relativeDestination, job.previousHash, job.outputHash]);
   assert.equal(plan.fingerprint, createHash('sha256').update(JSON.stringify({ destination, files, warnings, conflicts, options, versions })).digest('hex'));
   assert.equal(operations[0].relativeDestination, 'index.json');
   assert.equal(plan.files[1].size, 2);
@@ -99,7 +103,7 @@ test('the export workflow accepts an independent strategy and owns the validated
 
 test('overlapping destinations are rejected before invoking the strategy', async () => fixture(async (_, source) => {
   let called = false;
-  const exporter: Exporter = { async prepare() { called = true; throw new Error('unexpected'); } };
+  const exporter: Exporter = { async prepareDraft() { called = true; throw new Error('unexpected'); } };
   const service = new ExportService(libraryFor([]), exporter);
   await assert.rejects(service.preview({ ...optionsFor(path.join(source, 'export')), source }), /overlaps/);
   assert.equal(called, false);
@@ -109,7 +113,7 @@ test('RetroPie strategy returns references separately from executable operations
   await writeFile(path.join(source, 'Game.zip'), 'data');
   const entries = [game(source, 'Game.zip')];
   const exporter = new RetroPieExporter(path.join(root, 'cache'));
-  const draft = await exporter.prepare(entries, { destination: new FileDestination(destination), includeArtwork: false, overrides: {} });
+  const draft = await exporter.prepareDraft(entries, { destination: new FileDestination(destination), includeArtwork: false, overrides: {} });
   assert.deepEqual(draft.plan.files.map(file => file.kind), ['rom', 'gamelist']);
   assert.deepEqual(draft.operations.map(operation => operation.relativeDestination), ['roms/nes/gamelist.xml']);
   assert.equal(draft.plan.skippedRoms, 0);
@@ -127,12 +131,12 @@ test('one export service rejects concurrent execution and releases its lock afte
   const started = new Promise<void>(resolve => { entered = resolve; });
   const gate = new Promise<void>(resolve => { release = resolve; });
   const exporter: Exporter = {
-    async prepare(items, opts) {
+    async prepareDraft(items, opts) {
       if (block) {
         entered();
         await gate;
       }
-      return target.prepare(items, opts);
+      return target.prepareDraft(items, opts);
     }
   };
   const service = new ExportService(libraryFor(entries), exporter);
@@ -162,9 +166,9 @@ test('the export service releases its execution lock after a preparation failure
   const target = new RetroPieExporter(path.join(root, 'cache'));
   let fail = false;
   const exporter: Exporter = {
-    async prepare(items, options) {
+    async prepareDraft(items, options) {
       if (fail) throw new Error('Preparation failed');
-      return target.prepare(items, options);
+      return target.prepareDraft(items, options);
     }
   };
   const service = new ExportService(libraryFor([game(source, 'Game.zip')]), exporter);
@@ -181,7 +185,11 @@ test('the export service releases its execution lock after a preparation failure
 test('export finalization rejects unlisted, missing, duplicate and ROM write operations', async () => fixture(async (_, source, destination) => {
   const options = optionsFor(destination);
   const scope = new FileDestination(destination);
-  const operation = await new FileOperationPlanner(scope).planGenerated('Game.zip', 100, () => Buffer.from('new'));
+  const operation = await new FileOperationPlanner(scope).planGeneratedFile({
+    relativeDestination: 'Game.zip',
+    maxBytes: 100,
+    generate: () => Buffer.from('new')
+  });
   const draft: ExportDraft = {
     plan: {
       files: [{ source: path.join(source, 'Game.zip'), relativeDestination: 'Game.zip', size: 4, kind: 'rom' }],
@@ -213,7 +221,7 @@ test('library pagination uses actual returned counts and never skips short pages
   };
   let received: readonly LibraryEntry[] = [];
   const exporter: Exporter = {
-    async prepare(items) {
+    async prepareDraft(items) {
       received = items;
       return { plan: { files: [], systems: [], warnings: [], conflicts: [], bytes: 0, skippedRoms: items.length }, operations: [] };
     }
@@ -227,21 +235,53 @@ test('library pagination rejects oversized or stalled results', async () => fixt
   const item = game(source, 'Game.zip');
   const oversized: ExportLibrary = { queryLibrary: async () => ({ items: [item], total: 250001 }) };
   const stalled: ExportLibrary = { queryLibrary: async () => ({ items: [], total: 1 }) };
-  const exporter: Exporter = { async prepare() { throw new Error('Strategy must not run'); } };
+  const exporter: Exporter = { async prepareDraft() { throw new Error('Strategy must not run'); } };
   await assert.rejects(new ExportService(oversized, exporter).preview(optionsFor(destination)), /Library changed during export preview/);
   await assert.rejects(new ExportService(stalled, exporter).preview(optionsFor(destination)), /Library changed during export preview/);
 }));
 
 test('RetroPie layout consistently resolves references and target paths for the same system', () => {
   const layout = new RetroPieLayout({ Custom: 'custom' });
-  assert.deepEqual(layout.resolveRom({ system: 'Custom', relativePath: 'nested/Game.zip' }), {
+  assert.deepEqual(layout.resolveRomDestination({ system: 'Custom', relativePath: 'nested/Game.zip' }), {
     system: 'custom', filename: 'Game.zip', relativeDestination: 'roms/custom/Game.zip'
   });
-  assert.equal(layout.artworkPath('custom', 'cover.png'), 'roms/custom/images/cover.png');
-  assert.equal(layout.gamelistPath('custom'), 'roms/custom/gamelist.xml');
+  assert.equal(layout.artworkDestination('custom', 'cover.png'), 'roms/custom/images/cover.png');
+  assert.equal(layout.gameListDestination('custom'), 'roms/custom/gamelist.xml');
   assert.equal(layout.romReference('Game.zip'), './Game.zip');
   assert.equal(layout.artworkReference('cover.png'), './images/cover.png');
-  assert.equal(layout.resolveGamePath('~/RetroPie/roms/custom/Game.zip', 'custom'), 'Game.zip');
-  assert.equal(layout.resolveGamePath('/home/pi/RetroPie/roms/nes/Game.zip', 'custom'), null);
-  assert.equal(layout.resolveGamePath('../Game.zip', 'custom'), null);
+  assert.equal(layout.normalizeGameReference('~/RetroPie/roms/custom/Game.zip', 'custom'), 'Game.zip');
+  assert.equal(layout.normalizeGameReference('/home/pi/RetroPie/roms/nes/Game.zip', 'custom'), null);
+  assert.equal(layout.normalizeGameReference('../Game.zip', 'custom'), null);
 });
+
+
+test('concurrent drafts from one RetroPie exporter keep their layout and files independent', async () => fixture(async (root, source, destination) => {
+  await writeFile(path.join(source, 'First.zip'), 'data');
+  await writeFile(path.join(source, 'Second.zip'), 'data');
+  const exporter = new RetroPieExporter(path.join(root, 'cache'));
+  const otherDestination = path.join(root, 'other-destination');
+  const [first, second] = await Promise.all([
+    exporter.prepareDraft([game(source, 'First.zip')], {
+      destination: new FileDestination(destination),
+      includeArtwork: false,
+      overrides: { 'Nintendo Entertainment System': 'first' }
+    }),
+    exporter.prepareDraft([game(source, 'Second.zip')], {
+      destination: new FileDestination(otherDestination),
+      includeArtwork: false,
+      overrides: { 'Nintendo Entertainment System': 'second' }
+    })
+  ]);
+  assert.deepEqual(first.plan.files.map(file => file.relativeDestination), [
+    'roms/first/First.zip', 'roms/first/gamelist.xml'
+  ]);
+  assert.deepEqual(second.plan.files.map(file => file.relativeDestination), [
+    'roms/second/Second.zip', 'roms/second/gamelist.xml'
+  ]);
+  assert.deepEqual(first.operations.map(operation => operation.relativeDestination), ['roms/first/gamelist.xml']);
+  assert.deepEqual(second.operations.map(operation => operation.relativeDestination), ['roms/second/gamelist.xml']);
+  assert.deepEqual(first.plan.warnings, []);
+  assert.deepEqual(second.plan.warnings, []);
+  await assert.rejects(readdir(destination));
+  await assert.rejects(readdir(otherDestination));
+}));
