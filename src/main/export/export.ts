@@ -12,6 +12,7 @@ import {
   type LibraryPage
 } from '../../shared';
 import { artworkPath, isArtworkId } from '../metadata/artwork';
+import { hasInvalidXmlChars, xmlEscape } from '../components/xml/xml-text';
 import { mergeGameLists } from './gamelist-merge';
 import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../components/filesystem/paths';
 import { readRegular } from '../components/filesystem/file-reader';
@@ -23,18 +24,6 @@ const SYSTEM_MAP = RETROPIE_SYSTEM_MAP;
 export type ExportLibrary = {
   queryLibrary(query: LibraryQuery): Promise<LibraryPage>
 };
-const invalidXmlChars = /[^\u0009\u000a\u000d\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
-const xmlEscape = (s: string) => s.replace(new RegExp(invalidXmlChars, 'gu'), '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
-  .replace(
-    />/g,
-    '&gt;'
-  ).replace(
-    /"/g,
-    '&quot;'
-  ).replace(
-    /'/g,
-    '&apos;'
-  );
 const validSystem = (s: string) => /^[a-z0-9][a-z0-9_-]{0,49}$/.test(s) && !['con', 'prn', 'nul', 'aux'].includes(s);
 const knownSystem = (name: string) => Object.prototype.hasOwnProperty.call(SYSTEM_MAP, name) ? SYSTEM_MAP[name] : undefined;
 const filenameOf = (relative: string): string => path.win32.basename(relative.replace(/\//g, '\\'));
@@ -161,7 +150,7 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
       continue;
     }
     const fileName = filenameOf(entry.relativePath);
-    if (!fileName || fileName === '.' || fileName === '..' || /[<>:"/\\|?*\x00-\x1f]/.test(fileName) || /[. ]$/.test(fileName) || invalidXmlChars.test(fileName)) {
+    if (!fileName || fileName === '.' || fileName === '..' || /[<>:"/\\|?*\x00-\x1f]/.test(fileName) || /[. ]$/.test(fileName) || hasInvalidXmlChars(fileName)) {
       warnings.push(`Unsupported filename: ${entry.relativePath}`);
       continue;
     }
