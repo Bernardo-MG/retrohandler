@@ -15,7 +15,7 @@ export class PreparedExport {
     readonly destination: FileDestination,
     readonly plan: ExportPlan,
     readonly operations: readonly FileOperation[]
-  ) {}
+  ) { }
 
   /** Keep the preview in sync with the operations that execution will actually use. */
   static fromDraft(draft: ExportDraft, options: ExportOptions, destination: FileDestination): PreparedExport {

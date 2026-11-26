@@ -4,7 +4,7 @@ import { hasInvalidXmlChars } from '../../components/xml/xml-text';
 
 /** Owns all RetroPie-specific directory and reference layout rules for one export. */
 export class RetroPieLayout {
-  constructor(private readonly overrides: Readonly<Record<string, string>>) {}
+  constructor(private readonly overrides: Readonly<Record<string, string>>) { }
 
   /** Determine the RetroPie ROM reference, or explain why it cannot be exported. */
   resolveRom(entry: Pick<LibraryEntry, 'system' | 'relativePath'>): { system: string; filename: string; relativeDestination: string } | { warning: string } {

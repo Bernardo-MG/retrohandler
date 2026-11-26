@@ -15,7 +15,7 @@ export class RetroPieGameList {
   constructor(
     private readonly layout: RetroPieLayout,
     private readonly system: string
-  ) {}
+  ) { }
 
   prepare(games: readonly RetroPieGame[], previous: Buffer | null): Buffer {
     const generated = GameListDocument.fromEntries(games.map(game => this.toEntry(game)));
