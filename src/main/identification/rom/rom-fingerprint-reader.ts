@@ -3,7 +3,8 @@ import { throwIfCancelled } from '../../components/async/cancellation';
 import type { FileFingerprint } from '../../components/hashing/content-fingerprint';
 import { FingerprintReader } from '../../components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../../contracts/persistence';
-import { isDirectRom, isRomArchive, selectRomMember } from './rom-formats';
+import { isDirectRom, isRomArchive } from '../../rom/rom-formats';
+import { selectRomMember } from './archive-rom-selection';
 import { RomSource, type RomTarget } from './rom-source';
 
 export interface RomFingerprintStrategy {

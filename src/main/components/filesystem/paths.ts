@@ -28,3 +28,12 @@ export async function ensureSafeDirectory(folder: string): Promise<void> {
   await mkdir(folder, { recursive: true });
   await assertSafeDirectory(folder);
 }
+
+/** Check a path under an already resolved root without accepting redirected children. */
+export async function assertUnredirectedPath(root: string, filename: string): Promise<void> {
+  const canonical = await realpath(filename);
+  const contained = !path.relative(root, canonical) || childOf(root, canonical);
+  if (!contained || path.relative(filename, canonical)) {
+    throw new Error(`Path redirected or outside root: ${filename}`);
+  }
+}

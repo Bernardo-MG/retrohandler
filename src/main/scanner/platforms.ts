@@ -14,11 +14,6 @@ const aliases: Record<string, string> = {
   atari2600: 'Atari 2600', atari7800: 'Atari 7800',
   ports: 'Ports', dos: 'DOS', scummvm: 'ScummVM',
 };
-const extensions = new Set([
-  '.zip', '.7z', '.rar', '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64',
-  '.nds', '.md', '.gen', '.smd', '.sms', '.gg', '.cue', '.gdi', '.chd', '.iso', '.cso', '.pbp',
-  '.cdi', '.bin', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom', '.wad'
-]);
 const extensionHints: Record<string, string> = {
   '.nes': 'Nintendo Entertainment System', '.fds': 'Nintendo Entertainment System',
   '.sfc': 'Super Nintendo', '.smc': 'Super Nintendo', '.gb': 'Game Boy',
@@ -33,15 +28,22 @@ const extensionHints: Record<string, string> = {
 /** Classify files exactly as the v0.1 scanner does: first matching ancestor alias,
  * then extension hint, finally an explicitly unknown platform. This is an
  * inference, not positive identification of ROM contents. */
-export function isCandidateRom(filename: string): boolean {
-  return extensions.has(path.extname(filename).toLowerCase());
-}
-
 export function inferPlatform(relativePath: string): string {
   const extension = path.extname(relativePath).toLowerCase();
-  const parts = relativePath.split(path.sep);
-  return parts.slice(0, -1).map(p => Object.hasOwn(aliases, normalize(p)) ? aliases[normalize(p)] : undefined).find(Boolean)
-    ?? extensionHints[extension] ?? 'Needs identification';
+  const ancestor = ancestorPlatform(relativePath);
+  return ancestor ?? extensionHints[extension] ?? 'Needs identification';
 }
 
-const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+function ancestorPlatform(relativePath: string): string | undefined {
+  for (const part of relativePath.split(path.sep).slice(0, -1)) {
+    const key = normalize(part);
+    if (Object.hasOwn(aliases, key)) {
+      return aliases[key];
+    }
+  }
+  return undefined;
+}
+
+function normalize(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}

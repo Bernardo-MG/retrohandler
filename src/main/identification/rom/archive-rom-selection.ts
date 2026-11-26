@@ -1,21 +1,9 @@
 import path from 'node:path';
 import { MAX_ARCHIVE_MEMBERS, type ArchiveMember } from '../../components/archives/archive-reader';
 
-// A compressed container or disc image is not the underlying ROM.
-const ARCHIVES = new Set(['.zip', '.rar', '.7z']);
-const DIRECT_ROMS = new Set([
-  '.nes', '.fds', '.sfc', '.smc', '.gb', '.gbc', '.gba', '.n64', '.z64', '.v64', '.nds',
-  '.md', '.gen', '.smd', '.sms', '.gg', '.a26', '.a78', '.pce', '.ngp', '.ngc', '.ws', '.wsc', '.rom'
-]);
+import { isDirectRom } from '../../rom/rom-formats';
+
 const MAX_ROM_BYTES = 1024 * 1024 * 1024;
-
-export function isRomArchive(extension: string): boolean {
-  return ARCHIVES.has(extension.toLowerCase());
-}
-
-export function isDirectRom(extension: string): boolean {
-  return DIRECT_ROMS.has(extension.toLowerCase());
-}
 
 /** A single library row must not be identified as one ROM if it contains several. */
 export function selectRomMember(members: readonly ArchiveMember[]): ArchiveMember | null {

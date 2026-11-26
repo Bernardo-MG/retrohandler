@@ -65,3 +65,17 @@ test('without a store scans remain backward-compatible', async () => {
     assert.equal(await library.loadLastScan(), null);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('library service does not persist a scan cancelled by an injected scanner', async () => {
+  const store = new RecordingStore();
+  const controller = new AbortController();
+  const scanner = {
+    async scan(): Promise<ScanResult> {
+      controller.abort();
+      return { source: '/games', games: [], ignored: 0, scannedAt: new Date().toISOString() };
+    }
+  };
+  const library = new FileSystemLibraryService({ collections: store }, scanner);
+  await assert.rejects(library.scanFolder('/games', { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(store.scans.length, 0);
+});

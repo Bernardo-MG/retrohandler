@@ -1,5 +1,6 @@
-import type { BulkSystemSelection, CollectionInfo, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
-import { scanRoms } from '../../scanner';
+import type { BulkSystemSelection, CollectionInfo, LibraryPage, LibraryQuery, ScanResult, SystemCount } from '../../../shared';
+import { RomScanner, type ScanOptions } from '../../scanner';
+import { throwIfCancelled } from '../../components/async/cancellation';
 import type {
   CollectionRepository,
   RomRepository,
@@ -8,7 +9,7 @@ import type {
 } from '../../contracts/persistence';
 
 export interface LibraryService {
-  scanFolder(folder: string, options?: { signal?: AbortSignal; onProgress?: (progress: ScanProgress) => void }): Promise<ScanResult>;
+  scanFolder(folder: string, options?: ScanOptions): Promise<ScanResult>;
   loadLastScan(): Promise<ScanResult | null>;
   listCollections(): Promise<CollectionInfo[]>;
   queryLibrary(query: LibraryQuery): Promise<LibraryPage>;
@@ -26,15 +27,14 @@ export interface LibraryServiceRepositories {
 
 /** A cancelled or failed scan never changes the persisted library. */
 export class FileSystemLibraryService implements LibraryService {
-  constructor(private readonly repositories: LibraryServiceRepositories = {}) {}
+  constructor(
+    private readonly repositories: LibraryServiceRepositories = {},
+    private readonly scanner: Pick<RomScanner, 'scan'> = new RomScanner()
+  ) {}
 
-  async scanFolder(folder: string, options?: { signal?: AbortSignal; onProgress?: (progress: ScanProgress) => void }): Promise<ScanResult> {
-    const result = await scanRoms(folder, options);
-    if (options?.signal?.aborted) {
-      const error = new Error('Scan cancelled.');
-      error.name = 'AbortError';
-      throw error;
-    }
+  async scanFolder(folder: string, options?: ScanOptions): Promise<ScanResult> {
+    const result = await this.scanner.scan(folder, options);
+    throwIfCancelled(options?.signal, 'Scan cancelled.');
     this.repositories.collections?.saveScan(result);
     return result;
   }

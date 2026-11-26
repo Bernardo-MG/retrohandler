@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { parse7ZipListing } from '../src/main/components/archives/seven-zip-reader';
 import type { ArchiveReader, ArchiveMember } from '../src/main/components/archives/archive-reader';
 import { FingerprintReader } from '../src/main/components/hashing/fingerprint-reader';
-import { selectRomMember } from '../src/main/identification/rom/rom-formats';
+import { selectRomMember } from '../src/main/identification/rom/archive-rom-selection';
 import type { IdentificationRepository } from '../src/main/contracts/persistence';
 import { identificationService } from './helpers/identification';
 import type { IdentificationResult, LibraryEntry } from '../src/shared';
