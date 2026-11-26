@@ -6,40 +6,6 @@ import type { LibraryService } from '../services/library/library-service';
 /** Only one active scan per renderer. Cancellation is scoped to its sender. */
 export function registerLibraryIpc(library: LibraryService): void {
   const jobs = new Map<number, { id: string; controller: AbortController }>();
-  const identificationJobs = new Map<number, { id: string; controller: AbortController }>();
-  ipcMain.handle('dat:import', async () => {
-    const selection = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Logiqx DAT XML', extensions: ['dat', 'xml'] }] });
-    if (selection.canceled || !selection.filePaths[0]) return null;
-    return library.importDat(selection.filePaths[0]);
-  });
-  ipcMain.handle('identity:run', async (event, source: unknown, jobId: unknown) => {
-    if (typeof source !== 'string' || source.length > 4096 || !path.isAbsolute(source) ||
-        typeof jobId !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(jobId)) throw new Error('Invalid identification request.');
-    if (!(await library.listCollections()).some(collection => collection.rootPath === source)) throw new Error('Collection not found.');
-    const sender = event.sender;
-    if (identificationJobs.has(sender.id)) throw new Error('Identification is already running.');
-    const controller = new AbortController();
-    identificationJobs.set(sender.id, { id: jobId, controller });
-    const onDestroyed = () => controller.abort();
-    sender.once('destroyed', onDestroyed);
-    try {
-      return await library.identifyCollection(source, {
-        signal: controller.signal,
-        onProgress: progress => {
-          if (!sender.isDestroyed()) sender.send('identity:progress', { jobId, progress });
-        }
-      });
-    } finally {
-      sender.removeListener('destroyed', onDestroyed);
-      identificationJobs.delete(sender.id);
-    }
-  });
-  ipcMain.handle('identity:cancel', (event, jobId: unknown) => {
-    const active = identificationJobs.get(event.sender.id);
-    if (!active || active.id !== jobId) return false;
-    active.controller.abort();
-    return true;
-  });
   ipcMain.handle('roms:choose-folder' , async () => {
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];

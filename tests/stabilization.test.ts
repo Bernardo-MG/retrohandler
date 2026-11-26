@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseDat, readDat } from '../src/main/identification/dat';
+import { DatReader } from '../src/main/identification/dat/dat-reader';
 import { inferPlatform } from '../src/main/scanner/platforms';
-import { parse7ZipListing } from "../src/main/identification/archives";
+import { parse7ZipListing } from '../src/main/components/archives/seven-zip-reader';
 import { ArtworkCache } from '../src/main/components/artwork/artwork-cache';
 
+const datReader = new DatReader();
 const rom = (size = '12', name = 'real.nes') => `<rom name="${name}" size="${size}" crc="12345678"/>`;
 const dat = (body: string) => `<datafile><game name="Game">${body}</game></datafile>`;
 
@@ -18,42 +19,42 @@ test('scanner ignores inherited object keys in ancestor names', () => {
 });
 
 test('DAT ignores commented-out ROM records and CDATA markup', () => {
-  const parsed = parseDat(dat(`<!-- ${rom('12', 'fake.nes')} --><![CDATA[${rom('12', 'fake2.nes')}]]>${rom()}`));
+  const parsed = datReader.parse(dat(`<!-- ${rom('12', 'fake.nes')} --><![CDATA[${rom('12', 'fake2.nes')}]]>${rom()}`));
   assert.deepEqual(parsed.entries.map(entry => entry.file), ['real.nes']);
 });
 
 test('DAT refuses a catalogue containing only commented-out games', () => {
-  assert.throws(() => parseDat(`<datafile><!-- <game name="Fake">${rom()}</game> --></datafile>`), /No supported ROM hashes/);
+  assert.throws(() => datReader.parse(`<datafile><!-- <game name="Fake">${rom()}</game> --></datafile>`), /No supported ROM hashes/);
 });
 
 test('DAT accepts decimal sizes only, including zero', () => {
   const invalid = [' ', '0x10', '1e2', '2.0', '-1', '+1', '9007199254740992'];
-  const parsed = parseDat(dat(invalid.map(size => rom(size, 'invalid.nes')).join('') + rom('0', 'empty.nes') + rom()));
+  const parsed = datReader.parse(dat(invalid.map(size => rom(size, 'invalid.nes')).join('') + rom('0', 'empty.nes') + rom()));
   assert.deepEqual(parsed.entries.map(entry => [entry.file, entry.size]), [['empty.nes', 0], ['real.nes', 12]]);
 });
 
 test('DAT still rejects actual entity and DTD declarations', () => {
-  assert.throws(() => parseDat(`<!DOCTYPE datafile>${dat(rom())}`), /DTD/);
-  assert.throws(() => parseDat(`<!ENTITY example "test">${dat(rom())}`), /DTD/);
+  assert.throws(() => datReader.parse(`<!DOCTYPE datafile>${dat(rom())}`), /DTD/);
+  assert.throws(() => datReader.parse(`<!ENTITY example "test">${dat(rom())}`), /DTD/);
 });
 
 test('DAT file import rejects directories and oversized files and reads normal files', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'rh-stabilization-'));
   try {
-    await assert.rejects(readDat(root));
+    await assert.rejects(datReader.read(root));
     const file = path.join(root, 'test.dat');
     await writeFile(file, dat(rom()));
-    assert.equal((await readDat(file)).entries.length, 1);
+    assert.equal((await datReader.read(file)).entries.length, 1);
     const handle = await open(file, 'r+');
     try { await handle.truncate(64 * 1024 * 1024 + 1); } finally { await handle.close(); }
-    await assert.rejects(readDat(file), /64 MiB/);
+    await assert.rejects(datReader.read(file), /64 MiB/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
 test('DAT refuses incomplete root and unfinished comment or CDATA', () => {
-  assert.throws(() => parseDat(dat(rom()).replace('</datafile>', '')), /Incomplete/);
-  assert.throws(() => parseDat(dat(`<!-- ${rom()}`)), /Incomplete/);
-  assert.throws(() => parseDat(dat(`<![CDATA[${rom()}`)), /Incomplete/);
+  assert.throws(() => datReader.parse(dat(rom()).replace('</datafile>', '')), /Incomplete/);
+  assert.throws(() => datReader.parse(dat(`<!-- ${rom()}`)), /Incomplete/);
+  assert.throws(() => datReader.parse(dat(`<![CDATA[${rom()}`)), /Incomplete/);
 });
 
 test('7-Zip listing uses a separator line, not hyphens in an archive name', () => {

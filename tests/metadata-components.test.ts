@@ -9,7 +9,7 @@ import ts from 'typescript';
 import { ArtworkCache } from '../src/main/components/artwork/artwork-cache';
 import { Crc32 } from '../src/main/components/hashing/crc32';
 import { HttpClient, ResponseBodyError } from '../src/main/components/http/http-client';
-import { hashReadable } from '../src/main/identification/hashes';
+import { FingerprintReader } from '../src/main/components/hashing/fingerprint-reader';
 
 const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x01]);
 
@@ -52,7 +52,7 @@ test('CRC32 is incremental and the ROM hashing workflow uses the same standard r
   checksum.update(Buffer.from('1234'));
   checksum.update(Buffer.from('56789'));
   assert.equal(checksum.hex(), 'cbf43926');
-  const hashes = await hashReadable(Readable.from([Buffer.from('1234'), Buffer.from('56789')]), 9);
+  const hashes = await new FingerprintReader().readStream(Readable.from([Buffer.from('1234'), Buffer.from('56789')]), 9);
   assert.equal(hashes.crc32, checksum.hex());
   assert.equal(hashes.size, 9);
 });

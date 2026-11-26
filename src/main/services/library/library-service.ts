@@ -1,14 +1,11 @@
-import type { BulkSystemSelection, CollectionInfo, IdentificationProgress, IdentificationReceipt, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
+import type { BulkSystemSelection, CollectionInfo, LibraryPage, LibraryQuery, ScanProgress, ScanResult, SystemCount } from '../../../shared';
 import { scanRoms } from '../../scanner';
 import type {
   CollectionRepository,
-  IdentificationRepository,
   RomRepository,
   ScanRepository,
   SystemOverrideRepository
 } from '../../contracts/persistence';
-import { readDat } from '../../identification/dat';
-import { identifyCollection } from '../../identification/identify';
 
 export interface LibraryService {
   scanFolder(folder: string, options?: { signal?: AbortSignal; onProgress?: (progress: ScanProgress) => void }): Promise<ScanResult>;
@@ -19,14 +16,11 @@ export interface LibraryService {
   bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number>;
   renameCollection(source: string, label: string): Promise<void>;
   removeCollection(source: string): Promise<void>;
-  importDat(filePath: string): Promise<{ name: string; count: number }>;
-  identifyCollection(source: string, options?: { signal?: AbortSignal; onProgress?: (progress: IdentificationProgress) => void }): Promise<IdentificationReceipt>;
 }
 
 export interface LibraryServiceRepositories {
   collections?: ScanRepository & Partial<CollectionRepository>;
   roms?: RomRepository;
-  identification?: IdentificationRepository;
   systemOverrides?: SystemOverrideRepository;
 }
 
@@ -65,18 +59,6 @@ export class FileSystemLibraryService implements LibraryService {
   async removeCollection(source: string): Promise<void> {
     if (!this.repositories.collections?.removeCollection) throw new Error('Collection storage unavailable.');
     this.repositories.collections.removeCollection(source);
-  }
-
-  async importDat(filePath: string): Promise<{ name: string; count: number }> {
-    if (!this.repositories.identification) throw new Error('DAT storage unavailable.');
-    return this.repositories.identification.importDat(await readDat(filePath));
-  }
-  async identifyCollection(source: string, options?: { signal?: AbortSignal; onProgress?: (progress: IdentificationProgress) => void }): Promise<IdentificationReceipt> {
-    const repository = this.repositories.identification;
-    if (!repository) {
-      throw new Error('Identification storage unavailable.');
-    }
-    return identifyCollection(source, repository, options);
   }
 
   async loadLastScan(): Promise<ScanResult | null> {

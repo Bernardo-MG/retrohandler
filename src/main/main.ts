@@ -3,6 +3,13 @@ import path from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import { registerLibraryIpc } from './ipc/library-ipc';
+import { registerIdentificationIpc } from './ipc/identification-ipc';
+import { IdentificationService } from './identification';
+import { DatReader } from './identification/dat/dat-reader';
+import { ArchivedRomFingerprint, DirectRomFingerprint, RomFingerprintReader } from './identification/rom/rom-fingerprint-reader';
+import { SevenZipReader } from './components/archives/seven-zip-reader';
+import { FingerprintReader } from './components/hashing/fingerprint-reader';
+import type { IdentificationRepository } from './contracts/persistence';
 import { FileSystemLibraryService } from './services/library/library-service';
 import {
   openDatabase,
@@ -34,6 +41,15 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.retrohandler.desktop');
 }
 protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+
+function createIdentificationService(repository: IdentificationRepository): IdentificationService {
+  const reader = new FingerprintReader();
+  const fingerprints = new RomFingerprintReader([
+    new DirectRomFingerprint(repository, reader),
+    new ArchivedRomFingerprint(new SevenZipReader(), reader)
+  ]);
+  return new IdentificationService(repository, fingerprints, new DatReader());
+}
 
 function createWindow(settings: SettingsStore) {
   const saved = settings.snapshot().settings.window;
@@ -98,12 +114,12 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     const library = new FileSystemLibraryService({
       collections,
       roms: createRomRepository(database),
-      identification: createIdentificationRepository(database),
       systemOverrides: metadata
     });
     const settings = new SettingsStore(path.join(temp, 'settings.json'));
     const artwork = new ArtworkCache(path.join(temp, 'artwork'));
     registerLibraryIpc(library);
+    registerIdentificationIpc(createIdentificationService(createIdentificationRepository(database)), library);
     registerSettingsIpc(settings, databasePath, artwork, metadata);
     collections.listCollections();
     const win = new BrowserWindow({
@@ -169,12 +185,12 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     const library = new FileSystemLibraryService({
       collections,
       roms: createRomRepository(database),
-      identification: createIdentificationRepository(database),
       systemOverrides: metadata
     });
     const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
     nativeTheme.themeSource = settings.snapshot().settings.appearance.theme;
     registerLibraryIpc(library);
+    registerIdentificationIpc(createIdentificationService(createIdentificationRepository(database)), library);
     const artwork = new ArtworkCache(path.join(app.getPath('userData'), 'artwork'));
     const http = new HttpClient();
     const catalogue = createLaunchBoxRepository(database);

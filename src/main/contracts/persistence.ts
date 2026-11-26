@@ -4,7 +4,6 @@ import type {
   GameMetadata,
   GameMetadataInput,
   IdentificationResult,
-  IdentificationStatus,
   LibraryEntry,
   LibraryPage,
   LibraryQuery,
@@ -12,8 +11,9 @@ import type {
   ScanResult,
   SystemCount
 } from '../../shared';
-import type { ParsedDat } from '../identification/dat';
-import type { RomHashes } from '../identification/hashes';
+import type { ParsedDat } from '../identification/dat/dat-entry';
+import type { FileFingerprint } from '../components/hashing/content-fingerprint';
+import type { FingerprintMatch } from '../identification/fingerprint-matcher';
 
 export interface ScanRepository {
   saveScan(result: ScanResult): void;
@@ -34,9 +34,9 @@ export interface RomRepository {
 export interface IdentificationRepository {
   importDat(dat: ParsedDat): { name: string; count: number };
   entriesForIdentification(source: string): LibraryEntry[];
-  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): RomHashes | null;
-  matchFingerprint(hashes: RomHashes): { status: IdentificationStatus; title: string | null; datName: string | null };
-  saveIdentification(source: string, results: IdentificationResult[]): void;
+  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): FileFingerprint | null;
+  matchFingerprint(hashes: FileFingerprint): FingerprintMatch;
+  saveIdentification(source: string, results: readonly IdentificationResult[]): void;
 }
 
 export interface SystemOverrideRepository {

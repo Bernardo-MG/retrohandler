@@ -1,17 +1,12 @@
-import type { IdentificationResult, IdentificationStatus, LibraryEntry } from '../../../shared';
+import type { IdentificationResult, LibraryEntry } from '../../../shared';
 import type { IdentificationRepository } from '../../contracts/persistence';
-import type { ParsedDat } from '../../identification/dat';
-import type { RomHashes } from '../../identification/hashes';
+import type { ParsedDat } from '../../identification/dat/dat-entry';
+import type { FileFingerprint } from '../../components/hashing/content-fingerprint';
+import { matchFingerprintCandidates, type FingerprintMatch, type FingerprintMatchCandidate } from '../../identification/fingerprint-matcher';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 
-type FingerprintMatchRow = {
-  game: string;
-  datName: string;
-  evidence: string
-};
-
-type FingerprintRow = Omit<RomHashes, 'size'> & {
+type FingerprintRow = Omit<FileFingerprint, 'size'> & {
   bytes: number
 };
 
@@ -38,7 +33,7 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
     return this.executor.findAll<LibraryEntry>('identification.entriesForIdentification', source);
   }
 
-  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): RomHashes | null {
+  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): FileFingerprint | null {
     const row = this.executor.findOne<FingerprintRow>('identification.cachedFingerprint', source, relativePath, size, modifiedMs);
     return row ? {
       size: row.bytes,
@@ -49,13 +44,8 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
     } : null;
   }
 
-  matchFingerprint(hashes: RomHashes): {
-    status: IdentificationStatus;
-    title: string | null;
-    datName: string | null
-  } {
-    // SHA1 and MD5 are strong match evidence. CRC32 is weaker and always "probable".
-    const candidates = this.executor.findAll<FingerprintMatchRow>('identification.matchFingerprint',
+  matchFingerprint(hashes: FileFingerprint): FingerprintMatch {
+    const candidates = this.executor.findAll<FingerprintMatchCandidate>('identification.matchFingerprint',
       hashes.sha1,
       hashes.md5,
       hashes.size,
@@ -63,23 +53,10 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
       hashes.md5,
       hashes.crc32
     );
-    if (!candidates.length) {
-      return { status: 'unknown', title: null, datName: null };
-    }
-    const best = candidates.filter(row => row.evidence === 'sha1');
-    const matches = best.length ? best : candidates.filter(row => row.evidence === 'md5');
-    const selected = matches.length ? matches : candidates;
-    if (new Set(selected.map(row => row.game)).size > 1) {
-      return { status: 'ambiguous', title: null, datName: null };
-    }
-    return {
-      status: selected[0].evidence === 'crc' ? 'probable' : 'verified',
-      title: selected[0].game,
-      datName: selected[0].datName
-    };
+    return matchFingerprintCandidates(candidates);
   }
 
-  saveIdentification(source: string, results: IdentificationResult[]): void {
+  saveIdentification(source: string, results: readonly IdentificationResult[]): void {
     this.executor.transaction(() => {
       for (const row of results) {
         const f = row.fingerprint;

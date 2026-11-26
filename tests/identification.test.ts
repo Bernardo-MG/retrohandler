@@ -8,9 +8,9 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import type { DatabaseHandle, Statement } from '../src/main/database/sql/types';
 import { openTestRepositories, type TestRepositories } from './helpers/database';
-import { parseDat } from '../src/main/identification/dat';
-import { hashRom } from '../src/main/identification/hashes';
-import { identifyCollection } from '../src/main/identification/identify';
+import { DatReader } from '../src/main/identification/dat/dat-reader';
+import { FingerprintReader } from '../src/main/components/hashing/fingerprint-reader';
+import { identificationService } from './helpers/identification';
 import type { ScanResult } from '../src/shared';
 
 function adapter(filename: string): DatabaseHandle {
@@ -23,6 +23,8 @@ function adapter(filename: string): DatabaseHandle {
     close: () => db.close()
   };
 }
+const datReader = new DatReader();
+const fingerprintReader = new FingerprintReader();
 const romData = Buffer.from('retrohandler synthetic test ROM');
 const sha1 = createHash('sha1').update(romData).digest('hex');
 const md5 = createHash('md5').update(romData).digest('hex');
@@ -46,13 +48,13 @@ async function fixture(fn: (source: string, store: TestRepositories) => Promise<
 }
 
 test('Logiqx DAT parser handles XML entities, attributes, and machine records', () => {
-  const parsed = parseDat(xml(['A &amp; B']));
+  const parsed = datReader.parse(xml(['A &amp; B']));
   assert.equal(parsed.name, 'Test & DAT');
   assert.equal(parsed.entries[0].game, 'A & B');
   assert.equal(parsed.entries[0].sha1, sha1);
-  assert.equal(parseDat(`<datafile><machine name="Arcade"><rom name="rom.bin" size="1" crc="00000001"/></machine></datafile>`).entries.length, 1);
-  assert.throws(() => parseDat('<!DOCTYPE datafile><datafile/>'), /DTD/);
-  assert.throws(() => parseDat('<datafile><header/></datafile>'), /No supported/);
+  assert.equal(datReader.parse(`<datafile><machine name="Arcade"><rom name="rom.bin" size="1" crc="00000001"/></machine></datafile>`).entries.length, 1);
+  assert.throws(() => datReader.parse('<!DOCTYPE datafile><datafile/>'), /DTD/);
+  assert.throws(() => datReader.parse('<datafile><header/></datafile>'), /No supported/);
 });
 
 test('hashing computes streaming CRC32, MD5 and SHA1, and supports abort', async () => {
@@ -60,21 +62,22 @@ test('hashing computes streaming CRC32, MD5 and SHA1, and supports abort', async
   try {
     const file = path.join(source, 'game.nes');
     await writeFile(file, romData);
-    const hashes = await hashRom(file);
+    const hashes = await fingerprintReader.readFile(file);
     assert.equal(hashes.sha1, sha1);
     assert.equal(hashes.md5, md5);
     assert.equal(hashes.size, romData.length);
     assert.match(hashes.crc32, /^[0-9a-f]{8}$/);
     const controller = new AbortController(); controller.abort();
-    await assert.rejects(hashRom(file, controller.signal), { name: 'AbortError' });
+    await assert.rejects(fingerprintReader.readFile(file, controller.signal), { name: 'AbortError' });
   } finally { await rm(source, { recursive: true, force: true }); }
 });
 
 test('identification persists verified matching, empty ZIP, and a cache usable on rescan', async () => fixture(async (source, store) => {
-  store.identification.importDat(parseDat(xml(['Example Game'])));
+  store.identification.importDat(datReader.parse(xml(['Example Game'])));
   const progress: number[] = [];
   const emptyArchive = { list: async () => [], open: () => Readable.from([]) };
-  const results = await identifyCollection(source, store.identification, { onProgress: p => progress.push(p.processed), archiveReader: emptyArchive });
+  const service = identificationService(store.identification, emptyArchive);
+  const results = await service.identifyCollection(source, { onProgress: p => progress.push(p.processed) });
   assert.equal(results.verified, 1);
   assert.equal(results.unsupported, 1);
   assert.deepEqual(progress, [2]);
@@ -84,23 +87,24 @@ test('identification persists verified matching, empty ZIP, and a cache usable o
   assert.equal(entries.find(e => e.relativePath === 'packed.zip')?.identificationStatus, 'unsupported');
   assert.equal(store.roms.queryLibrary({ source, search: '', system: null, identification: 'verified', sort: 'name', descending: false, offset: 0, limit: 10 }).total, 1);
   assert.equal(store.roms.queryLibrary({ source, search: '', system: null, identification: 'pending', sort: 'name', descending: false, offset: 0, limit: 10 }).total, 0);
-  const hashed = await hashRom(path.join(source, 'test.nes'));
+  const hashed = await fingerprintReader.readFile(path.join(source, 'test.nes'));
   assert.deepEqual(store.identification.cachedFingerprint(source, 'test.nes', hashed.size, hashed.modifiedMs), hashed);
-  assert.equal((await identifyCollection(source, store.identification, { archiveReader: emptyArchive })).verified, 1);
+  assert.equal((await service.identifyCollection(source)).verified, 1);
 }));
 
 test('conflicting DAT games are ambiguous and cancellation never replaces saved matches', async () => fixture(async (source, store) => {
-  store.identification.importDat(parseDat(xml(['One', 'Two'])));
-  assert.equal((await identifyCollection(source, store.identification)).ambiguous, 1);
+  store.identification.importDat(datReader.parse(xml(['One', 'Two'])));
+  const service = identificationService(store.identification);
+  assert.equal((await service.identifyCollection(source)).ambiguous, 1);
   const controller = new AbortController();
-  await assert.rejects(identifyCollection(source, store.identification, { signal: controller.signal, onProgress: () => controller.abort() }), { name: 'AbortError' });
+  await assert.rejects(service.identifyCollection(source, { signal: controller.signal, onProgress: () => controller.abort() }), { name: 'AbortError' });
   const entry = store.roms.queryLibrary({ source, search: '', system: null, sort: 'name', descending: false, offset: 0, limit: 10 }).items.find(e => e.relativePath === 'test.nes');
   assert.equal(entry?.identificationStatus, 'ambiguous');
 }));
 
 test('reimporting same DAT replaces entries atomically', async () => fixture(async (_source, store) => {
-  store.identification.importDat(parseDat(xml(['One'])));
+  store.identification.importDat(datReader.parse(xml(['One'])));
   assert.equal(store.identification.matchFingerprint({ sha1, md5, crc32: '00000000', size: romData.length, modifiedMs: 0 }).title, 'One');
-  store.identification.importDat(parseDat(xml(['Two'])));
+  store.identification.importDat(datReader.parse(xml(['Two'])));
   assert.equal(store.identification.matchFingerprint({ sha1, md5, crc32: '00000000', size: romData.length, modifiedMs: 0 }).title, 'Two');
 }));

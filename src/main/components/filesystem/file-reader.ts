@@ -1,5 +1,6 @@
 import { constants, type Stats } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
+import { sameFile, sameVersion } from './file-version';
 
 // Only a missing file counts as absent. Permission errors, links and other
 // file types must never be mistaken for a free destination path.
@@ -39,14 +40,6 @@ export async function readRegular(file: string, maxBytes: number): Promise<Buffe
   } finally {
     await handle.close();
   }
-}
-
-function sameFile(first: Stats, second: Stats): boolean {
-  return first.dev === second.dev && first.ino === second.ino;
-}
-
-function sameVersion(first: Stats, second: Stats): boolean {
-  return first.size === second.size && first.mtimeMs === second.mtimeMs;
 }
 
 function matchesNamedFile(named: Stats | null, opened: Stats): boolean {
