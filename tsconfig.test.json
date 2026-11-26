@@ -19,10 +19,8 @@
     "src/shared.ts",
     "src/main/services/library/**/*.ts",
     "src/main/database/**/*.ts",
-    "src/main/metadata/launchbox.ts",
-    "src/main/metadata/launchbox-download.ts",
-    "src/main/metadata/libretro.ts",
-    "src/main/metadata/artwork.ts",
+    "src/main/components/**/*.ts",
+    "src/main/metadata/**/*.ts",
     "src/main/export/**/*.ts"
   ]
 }

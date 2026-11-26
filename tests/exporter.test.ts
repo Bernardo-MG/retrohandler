@@ -12,6 +12,7 @@ import { FileOperationPlanner } from '../src/main/components/file-operations/fil
 import { PreparedExport, type ExportDraft } from '../src/main/export/prepared-export';
 import { RetroPieLayout } from '../src/main/export/retropie/retropie-layout';
 import { RetroPieExporter } from '../src/main/export/retropie/retropie-exporter';
+import { ArtworkCache } from '../src/main/components/artwork/artwork-cache';
 
 const optionsFor = (destination: string): ExportOptions => ({ source: null, destination, includeArtwork: false, overrides: {} });
 const libraryFor = (entries: LibraryEntry[]): ExportLibrary => ({
@@ -112,7 +113,7 @@ test('overlapping destinations are rejected before invoking the strategy', async
 test('RetroPie strategy returns references separately from executable operations', async () => fixture(async (root, source, destination) => {
   await writeFile(path.join(source, 'Game.zip'), 'data');
   const entries = [game(source, 'Game.zip')];
-  const exporter = new RetroPieExporter(path.join(root, 'cache'));
+  const exporter = new RetroPieExporter(new ArtworkCache(path.join(root, 'cache')));
   const draft = await exporter.prepareDraft(entries, { destination: new FileDestination(destination), includeArtwork: false, overrides: {} });
   assert.deepEqual(draft.plan.files.map(file => file.kind), ['rom', 'gamelist']);
   assert.deepEqual(draft.operations.map(operation => operation.relativeDestination), ['roms/nes/gamelist.xml']);
@@ -124,7 +125,7 @@ test('one export service rejects concurrent execution and releases its lock afte
   await writeFile(path.join(source, 'Game.zip'), 'data');
   const entries = [game(source, 'Game.zip')];
   const options = optionsFor(destination);
-  const target = new RetroPieExporter(path.join(root, 'cache'));
+  const target = new RetroPieExporter(new ArtworkCache(path.join(root, 'cache')));
   let block = false;
   let entered!: () => void;
   let release!: () => void;
@@ -163,7 +164,7 @@ test('one export service rejects concurrent execution and releases its lock afte
 
 test('the export service releases its execution lock after a preparation failure', async () => fixture(async (root, source, destination) => {
   await writeFile(path.join(source, 'Game.zip'), 'data');
-  const target = new RetroPieExporter(path.join(root, 'cache'));
+  const target = new RetroPieExporter(new ArtworkCache(path.join(root, 'cache')));
   let fail = false;
   const exporter: Exporter = {
     async prepareDraft(items, options) {
@@ -258,7 +259,7 @@ test('RetroPie layout consistently resolves references and target paths for the 
 test('concurrent drafts from one RetroPie exporter keep their layout and files independent', async () => fixture(async (root, source, destination) => {
   await writeFile(path.join(source, 'First.zip'), 'data');
   await writeFile(path.join(source, 'Second.zip'), 'data');
-  const exporter = new RetroPieExporter(path.join(root, 'cache'));
+  const exporter = new RetroPieExporter(new ArtworkCache(path.join(root, 'cache')));
   const otherDestination = path.join(root, 'other-destination');
   const [first, second] = await Promise.all([
     exporter.prepareDraft([game(source, 'First.zip')], {

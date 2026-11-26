@@ -16,7 +16,7 @@ import { test } from 'node:test';
 import { defaultSettings } from '../src/shared';
 import { SettingsStore, validateSettings, validateSettingsPatch } from '../src/main/settings/settings-store';
 import { restoreWindowBounds } from '../src/main/settings/window-bounds';
-import { cleanupArtworkCache, inspectArtworkCache } from '../src/main/settings/artwork-cache';
+import { ArtworkCache } from '../src/main/components/artwork/artwork-cache';
 
 function fixture(run: (root: string, file: string) => void) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'retrohandler-settings-'));
@@ -358,21 +358,21 @@ test(
     const freshDownload = agedFile(cache, '.download-12345678-1234-1234-1234-123456789def', 0, 'new');
     const unrelated = agedFile(cache, 'notes.txt', 100, 'notes');
     const refs = new Set([asset('a')]);
-    const info = inspectArtworkCache(cache, refs, NOW);
+    const info = new ArtworkCache(cache).inspect(refs, NOW);
     assert.deepEqual(info, {
       artworkFiles: 5,
       artworkBytes: 26,
       reclaimableFiles: 2,
       reclaimableBytes: 13
     });
-    assert.deepEqual(cleanupArtworkCache(cache, refs, NOW), { removedFiles: 2, removedBytes: 13, failedFiles: 0 });
+    assert.deepEqual(new ArtworkCache(cache).cleanup(refs, NOW), { removedFiles: 2, removedBytes: 13, failedFiles: 0 });
     for (const file of [referenced, recent, freshDownload, unrelated]) {
       assert.ok(existsSync(file));
     }
     for (const file of [unused, staleDownload]) {
       assert.equal(existsSync(file), false);
     }
-    assert.equal(inspectArtworkCache(cache, refs, NOW).reclaimableFiles, 0);
+    assert.equal(new ArtworkCache(cache).inspect(refs, NOW).reclaimableFiles, 0);
   })
 );
 
@@ -382,8 +382,8 @@ test(
     const cache = path.join(root, 'artwork');
     mkdirSync(cache);
     const file = agedFile(cache, asset('d'), 10, 'newly referenced');
-    assert.equal(inspectArtworkCache(cache, new Set(), NOW).reclaimableFiles, 1);
-    assert.equal(cleanupArtworkCache(cache, new Set([asset('d')]), NOW).removedFiles, 0);
+    assert.equal(new ArtworkCache(cache).inspect(new Set(), NOW).reclaimableFiles, 1);
+    assert.equal(new ArtworkCache(cache).cleanup(new Set([asset('d')]), NOW).removedFiles, 0);
     assert.ok(existsSync(file));
   })
 );
@@ -393,7 +393,7 @@ test(
   () => fixture(root => {
     const cache = path.join(root, 'missing');
     assert.deepEqual(
-      inspectArtworkCache(cache, new Set(), NOW),
+      new ArtworkCache(cache).inspect(new Set(), NOW),
       {
         artworkFiles: 0,
         artworkBytes: 0,
@@ -401,12 +401,12 @@ test(
         reclaimableBytes: 0
       }
     );
-    assert.equal(cleanupArtworkCache(cache, new Set(), NOW).removedFiles, 0);
+    assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
     assert.equal(existsSync(cache), false);
     mkdirSync(cache);
     mkdirSync(path.join(cache, asset('a')));
     const nested = agedFile(path.join(cache, asset('a')), asset('b'), 100, 'retain');
-    assert.equal(cleanupArtworkCache(cache, new Set(), NOW).removedFiles, 0);
+    assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
     assert.ok(existsSync(nested));
   })
 );
@@ -420,11 +420,11 @@ test(
     const file = agedFile(outside, asset('e'), 100, 'retain');
     const link = path.join(root, 'link');
     symlinkSync(outside, link, 'dir');
-    assert.throws(() => cleanupArtworkCache(link, new Set(), NOW), /regular directory/);
+    assert.throws(() => new ArtworkCache(link).cleanup(new Set(), NOW), /regular directory/);
     const cache = path.join(root, 'artwork');
     mkdirSync(cache);
     symlinkSync(file, path.join(cache, asset('e')));
-    assert.equal(cleanupArtworkCache(cache, new Set(), NOW).removedFiles, 0);
+    assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
     assert.equal(readFileSync(file, 'utf8'), 'retain');
   })
 );

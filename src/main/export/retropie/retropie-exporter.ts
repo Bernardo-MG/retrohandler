@@ -4,21 +4,21 @@ import type { ExportFile, LibraryEntry } from '../../../shared';
 import type { FileOperation } from '../../components/file-operations/file-operation';
 import { FileOperationPlanner } from '../../components/file-operations/file-operation-planner';
 import { childOf } from '../../components/filesystem/paths';
-import { artworkPath, isArtworkId } from '../../metadata/artwork';
+import type { ArtworkCache } from '../../components/artwork/artwork-cache';
+import { isArtworkId, MAX_ARTWORK_BYTES } from '../../components/artwork/artwork-image';
 import type { Exporter, ExportTargetOptions } from '../exporter';
 import type { ExportDraft } from '../prepared-export';
 import { RetroPieGameList, type RetroPieGame } from './retropie-gamelist';
 import { RetroPieLayout } from './retropie-layout';
 
 const MAX_XML_BYTES = 32 * 1024 * 1024;
-const MAX_ART_BYTES = 5 * 1024 * 1024;
 
 /** Prepares RetroPie configuration files; ROMs remain references only. */
 export class RetroPieExporter implements Exporter {
-  constructor(private readonly artworkFolder: string) { }
+  constructor(private readonly artwork: ArtworkCache) { }
 
   prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
-    return new RetroPieDraftBuilder(this.artworkFolder, options).build(entries);
+    return new RetroPieDraftBuilder(this.artwork, options).build(entries);
   }
 }
 
@@ -35,7 +35,7 @@ class RetroPieDraftBuilder {
   private readonly gamesBySystem = new Map<string, RetroPieGame[]>();
   private artworkBytes = 0;
 
-  constructor(private readonly artworkFolder: string, options: ExportTargetOptions) {
+  constructor(private readonly artwork: ArtworkCache, options: ExportTargetOptions) {
     this.layout = new RetroPieLayout(options.overrides);
     this.planner = new FileOperationPlanner(options.destination);
     this.includeArtwork = options.includeArtwork;
@@ -112,14 +112,13 @@ class RetroPieDraftBuilder {
     }
     const relativeDestination = this.layout.artworkDestination(system, artworkId);
     const destinationKey = relativeDestination.toLowerCase();
-    const sourcePath = artworkPath(this.artworkFolder, artworkId);
-    const info = await lstat(sourcePath).catch(() => null);
-    if (!info?.isFile() || info.size > MAX_ART_BYTES) {
+    const cached = await this.artwork.find(artworkId);
+    if (!cached) {
       this.warnings.push(`Cached artwork unavailable: ${artworkId}`);
       return null;
     }
     if (!this.seenDestinations.has(destinationKey)) {
-      this.files.push({ source: sourcePath, relativeDestination, size: info.size, kind: 'artwork' });
+      this.files.push({ source: cached.path, relativeDestination, size: cached.size, kind: 'artwork' });
       this.seenDestinations.add(destinationKey);
     }
     return artworkId;
@@ -141,7 +140,7 @@ class RetroPieDraftBuilder {
         relativeDestination: file.relativeDestination,
         sourcePath: file.source,
         expectedSize: file.size,
-        maxBytes: MAX_ART_BYTES,
+        maxBytes: MAX_ARTWORK_BYTES,
         fileLabel: 'artwork'
       });
       this.operations.push(operation);

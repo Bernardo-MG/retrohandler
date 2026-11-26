@@ -1,5 +1,5 @@
 import type { ExportFile, ExportOptions, ExportPlan } from '../../shared';
-import { sha256 } from '../components/file-operations/content-hash';
+import { sha256 } from '../components/hashing/content-hash';
 import type { FileDestination } from '../components/file-operations/file-destination';
 import type { FileOperation } from '../components/file-operations/file-operation';
 

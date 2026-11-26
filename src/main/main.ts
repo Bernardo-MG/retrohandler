@@ -12,8 +12,16 @@ import {
   createMetadataRepository,
   createLaunchBoxRepository
 } from './database';
-import { registerMetadataIpc } from './metadata/metadata-ipc';
-import { getArtwork, isArtworkId } from './metadata/artwork';
+import { registerMetadataIpc } from './ipc/metadata-ipc';
+import { ArtworkCache } from './components/artwork/artwork-cache';
+import { isArtworkId } from './components/artwork/artwork-image';
+import { HttpClient } from './components/http/http-client';
+import { MetadataService } from './metadata';
+import { LaunchBoxCatalogueImporter } from './metadata/launchbox/launchbox-catalogue-importer';
+import { LaunchBoxCatalogueUpdater } from './metadata/launchbox/launchbox-catalogue-updater';
+import { LaunchBoxProvider } from './metadata/launchbox/launchbox-provider';
+import { LibretroClient } from './metadata/libretro/libretro-client';
+import { LibretroProvider } from './metadata/libretro/libretro-provider';
 import { registerExportIpc } from './ipc/export-ipc';
 import { ExportService } from './export';
 import { RetroPieExporter } from './export/retropie/retropie-exporter';
@@ -94,9 +102,9 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
       systemOverrides: metadata
     });
     const settings = new SettingsStore(path.join(temp, 'settings.json'));
-    const artworkFolder = path.join(temp, 'artwork');
+    const artwork = new ArtworkCache(path.join(temp, 'artwork'));
     registerLibraryIpc(library);
-    registerSettingsIpc(settings, databasePath, artworkFolder, metadata);
+    registerSettingsIpc(settings, databasePath, artwork, metadata);
     collections.listCollections();
     const win = new BrowserWindow({
       show: false,
@@ -167,10 +175,15 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
     const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
     nativeTheme.themeSource = settings.snapshot().settings.appearance.theme;
     registerLibraryIpc(library);
-    const artworkFolder = path.join(app.getPath('userData'), 'artwork');
-    registerMetadataIpc(metadata, createLaunchBoxRepository(database), artworkFolder);
-    registerSettingsIpc(settings, databasePath, artworkFolder, metadata);
-    const exportService = new ExportService(library, new RetroPieExporter(artworkFolder));
+    const artwork = new ArtworkCache(path.join(app.getPath('userData'), 'artwork'));
+    const http = new HttpClient();
+    const catalogue = createLaunchBoxRepository(database);
+    const metadataService = new MetadataService(metadata, new LaunchBoxProvider(catalogue));
+    const launchBox = new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(catalogue), http);
+    const libretro = new LibretroProvider(artwork, new LibretroClient(http));
+    registerMetadataIpc({ metadata: metadataService, artwork: libretro, launchBox });
+    registerSettingsIpc(settings, databasePath, artwork, metadata);
+    const exportService = new ExportService(library, new RetroPieExporter(artwork));
     registerExportIpc(exportService);
     protocol.handle(
       'retro-art',
@@ -181,7 +194,7 @@ if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {
           if (url.hostname !== 'cover' || !isArtworkId(id) || url.search || url.hash) {
             return new Response('Not found', { status: 404 });
           }
-          const art = await getArtwork(artworkFolder, id);
+          const art = await artwork.read(id);
           return new Response(
             new Uint8Array(art.body),
             { headers: { 'Content-Type': art.mime, 'Cache-Control': 'private, max-age=86400' } }

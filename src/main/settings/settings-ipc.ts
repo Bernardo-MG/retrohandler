@@ -1,21 +1,21 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electron';
 import type { CacheCleanupReceipt, StorageInfo } from '../../shared';
 import type { ArtworkReferences } from '../contracts/persistence';
-import { cleanupArtworkCache, inspectArtworkCache } from './artwork-cache';
+import type { ArtworkCache } from '../components/artwork/artwork-cache';
 import { SettingsStore } from './settings-store';
 import { restoreWindowBounds } from './window-bounds';
 
 export function registerSettingsIpc(
   store: SettingsStore,
   databasePath: string,
-  artworkPath: string,
+  artwork: ArtworkCache,
   artworkReferences: ArtworkReferences
 ): void {
   const storageInfo = (): StorageInfo => ({
     databasePath,
     settingsPath: store.filePath,
-    artworkPath,
-    ...inspectArtworkCache(artworkPath, artworkReferences.getReferencedArtworkIds())
+    artworkPath: artwork.root,
+    ...artwork.inspect(artworkReferences.getReferencedArtworkIds())
   });
   ipcMain.handle('settings:get', () => store.snapshot());
   ipcMain.handle(
@@ -73,7 +73,7 @@ export function registerSettingsIpc(
           return { removedFiles: 0, removedBytes: 0, failedFiles: 0 };
         }
         // Refresh artwork references after confirmation, and do not yield between reference check and deletion.
-        return cleanupArtworkCache(artworkPath, artworkReferences.getReferencedArtworkIds());
+        return artwork.cleanup(artworkReferences.getReferencedArtworkIds());
       } finally {
         cleaning = false;
       }

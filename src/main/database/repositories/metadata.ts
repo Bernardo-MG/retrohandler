@@ -1,5 +1,6 @@
 import type { BulkSystemSelection, GameMetadata, GameMetadataInput } from '../../../shared';
 import type { ArtworkReferences, MetadataRepository, SystemOverrideRepository } from '../../contracts/persistence';
+import { isArtworkId } from '../../components/artwork/artwork-image';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 import { buildFilter, type LibraryFilter } from './library-filter';
@@ -28,7 +29,7 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
       !['manual', 'launchbox'].includes(metadata.provider) ||
       (metadata.providerId !== null && metadata.providerId.length > 80) ||
       (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
-      (metadata.artworkId !== null && !/^[a-f0-9]{64}\.(jpg|png|webp)$/.test(metadata.artworkId)) ||
+      (metadata.artworkId !== null && !isArtworkId(metadata.artworkId)) ||
       (metadata.systemOverride !== undefined && metadata.systemOverride !== null &&
         (typeof metadata.systemOverride !== 'string' || !metadata.systemOverride.trim() ||
           metadata.systemOverride.length > 120 || /[\x00-\x1f]/.test(metadata.systemOverride)))) {
