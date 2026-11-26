@@ -1,32 +1,15 @@
-import { lstat, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import {
-  RETROPIE_SYSTEM_MAP,
-  type ExportOptions,
-  type ExportPlan,
-  type ExportFile,
-  type ExportReceipt,
-  type LibraryEntry,
-  type LibraryQuery,
-  type LibraryPage
-} from '../../shared';
-import { artworkPath, isArtworkId } from '../metadata/artwork';
-import { hasInvalidXmlChars } from '../components/xml/xml-text';
-import { gameListXml, mergeGameLists, type RetroPieGame } from './retropie/gamelist';
-import { assertSafeDirectory, childOf, overlaps } from '../components/filesystem/paths';
-import { fingerprint, type FileOperation, type PreparedExport } from './export-plan';
-import { planCopy, planGenerated } from './export-planner';
+import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry, LibraryQuery, LibraryPage } from '../../shared';
+import { assertSafeDirectory, overlaps } from '../components/filesystem/paths';
+import { fingerprint, type PreparedExport } from './export-plan';
 import { executeOperations } from './export-executor';
-
-// RetroPie ROM directory names; unknown platforms require an explicit override.
-const SYSTEM_MAP = RETROPIE_SYSTEM_MAP;
+import type { Exporter } from './exporter';
+import { RetroPieExporter } from './retropie/retropie-exporter';
 
 export type ExportLibrary = {
   queryLibrary(query: LibraryQuery): Promise<LibraryPage>
 };
-const validSystem = (s: string) => /^[a-z0-9][a-z0-9_-]{0,49}$/.test(s) && !['con', 'prn', 'nul', 'aux'].includes(s);
-const knownSystem = (name: string) => Object.prototype.hasOwnProperty.call(SYSTEM_MAP, name) ? SYSTEM_MAP[name] : undefined;
-const filenameOf = (relative: string): string => path.win32.basename(relative.replace(/\//g, '\\'));
 async function collect(library: ExportLibrary, source: string | null): Promise<LibraryEntry[]> {
   const all: LibraryEntry[] = [];
   for (let offset = 0; ; offset += 200) {
@@ -49,10 +32,8 @@ async function collect(library: ExportLibrary, source: string | null): Promise<L
   }
 }
 
-const MAX_XML_BYTES = 32 * 1024 * 1024;
-const MAX_ART_BYTES = 5 * 1024 * 1024;
-
-async function prepareExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string): Promise<PreparedExport> {
+/** Validate shared inputs and destination before invoking a target-specific strategy. */
+export async function prepareExport(library: ExportLibrary, options: ExportOptions, exporter: Exporter): Promise<PreparedExport> {
   if (!path.isAbsolute(options.destination) || !options.destination.trim()) {
     throw new Error('Choose an absolute destination folder.');
   }
@@ -81,150 +62,13 @@ async function prepareExport(library: ExportLibrary, options: ExportOptions, art
       throw new Error('Export destination overlaps a ROM collection.');
     }
   }
-  const files: ExportFile[] = [];
-  const warnings: string[] = [];
-  const seen = new Set<string>();
-  const bySystem = new Map<string, RetroPieGame[]>();
-  for (const entry of entries) {
-    const mapped = Object.prototype.hasOwnProperty.call(options.overrides, entry.system) ? options.overrides[entry.system] : knownSystem(entry.system);
-    if (!mapped || !validSystem(mapped)) {
-      warnings.push(`Unmapped system: ${entry.system}`);
-      continue;
-    }
-    const fileName = filenameOf(entry.relativePath);
-    if (!fileName || fileName === '.' || fileName === '..' || /[<>:"/\\|?*\x00-\x1f]/.test(fileName) || /[. ]$/.test(fileName) || hasInvalidXmlChars(fileName)) {
-      warnings.push(`Unsupported filename: ${entry.relativePath}`);
-      continue;
-    }
-    if (['.rar', '.7z'].includes(path.extname(fileName).toLowerCase())) {
-      warnings.push(`RetroPie emulator compatibility not established for ${entry.relativePath}; convert to a supported format first.`);
-      continue;
-    }
-    const src = path.resolve(entry.source, entry.relativePath);
-    if (!childOf(path.resolve(entry.source), src)) {
-      warnings.push(`Unsafe source: ${entry.relativePath}`);
-      continue;
-    }
-    const dstRelative = `roms/${mapped}/${fileName}`;
-    const key = dstRelative.toLowerCase();
-    if (seen.has(key)) {
-      warnings.push(`Filename collision: ${dstRelative}`);
-      continue;
-    }
-    const st = await lstat(src).catch(() => null);
-    if (!st?.isFile()) {
-      warnings.push(`Unavailable or linked source: ${entry.relativePath}`);
-      continue;
-    }
-    const realSource = await realpath(src).catch(() => '');
-    const realRoot = await realpath(entry.source).catch(() => '');
-    if (!realRoot || !realSource || !childOf(realRoot, realSource)) {
-      warnings.push(`Source escapes collection: ${entry.relativePath}`);
-      continue;
-    }
-    seen.add(key);
-    const file: ExportFile = {
-      source: src,
-      relativeDestination: dstRelative,
-      size: st.size,
-      kind: 'rom'
-    };
-    // A ROM entry is a gamelist reference only: it is never copied to the destination.
-    files.push(file);
-    let image: string | null = null;
-    const id = entry.metadata?.artworkId;
-    if (options.includeArtwork && isArtworkId(id)) {
-      const imageDest = `roms/${mapped}/images/${id}`;
-      const imageKey = imageDest.toLowerCase();
-      const cached = artworkPath(artworkFolder, id);
-      const artInfo = await lstat(cached).catch(() => null);
-      if (artInfo?.isFile() && artInfo.size <= 5 * 1024 * 1024) {
-        image = id;
-        if (!seen.has(imageKey)) {
-          files.push({
-            source: cached,
-            relativeDestination: imageDest,
-            size: artInfo.size,
-            kind: 'artwork'
-          });
-          seen.add(imageKey);
-        }
-      } else {
-        warnings.push(`Cached artwork unavailable: ${id}`);
-      }
-    }
-    const group = bySystem.get(mapped) ?? [];
-    group.push({ entry, filename: fileName, image });
-    bySystem.set(mapped, group);
-  }
-  const operations: FileOperation[] = [];
-  const conflicts: string[] = [];
-  // Existing artwork can be reused only when it is byte-identical. Never
-  // overwrite a different image, even if its filename looks content-addressed.
-  let bytes = 0;
-  for (const item of files) {
-    if (item.kind !== 'artwork') {
-      continue;
-    }
-    try {
-      const operation = await planCopy(dest, item.relativeDestination, item.source, item.size, MAX_ART_BYTES, 'artwork');
-      item.action = operation.action;
-      operations.push(operation);
-      if (item.action === 'create') {
-        bytes += item.size;
-      }
-    } catch (error) {
-      conflicts.push(`${item.relativeDestination}: ${String(error)}`);
-    }
-  }
-  for (const [system, group] of bySystem) {
-    const relativeDestination = `roms/${system}/gamelist.xml`;
-    const item: ExportFile = {
-      source: '',
-      relativeDestination,
-      size: 0,
-      kind: 'gamelist'
-    };
-    files.push(item);
-    try {
-      const operation = await planGenerated(dest, relativeDestination, MAX_XML_BYTES, prior => {
-        const generated = gameListXml(group);
-        const fallbackNames = new Set(group.filter(g => !g.entry.metadata?.title?.trim() && !g.entry.identifiedTitle?.trim()).map(g => g.filename));
-        const xml = Buffer.from(
-          prior === null ? generated : mergeGameLists(
-            new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(prior),
-            generated,
-            system,
-            fallbackNames
-          ),
-          'utf8'
-        );
-        if (xml.length > MAX_XML_BYTES) {
-          throw new Error('Merged gamelist exceeds 32 MiB.');
-        }
-        return xml;
-      });
-      item.size = operation.size;
-      item.action = operation.action;
-      operations.push(operation);
-    } catch (error) {
-      conflicts.push(`${relativeDestination}: ${String(error)}`);
-    }
-  }
-  const plan: Omit<ExportPlan, 'fingerprint'> = {
-    destination: dest,
-    files,
-    systems: [...bySystem.keys()].sort(),
-    warnings,
-    conflicts,
-    bytes,
-    skippedRoms: entries.length - files.filter(file => file.kind === 'rom').length
-  };
-  return { plan: { ...plan, fingerprint: fingerprint(plan, options, operations) }, operations };
+  const draft = await exporter.prepare(entries, options, dest);
+  const plan = { ...draft.plan, destination: dest };
+  return { plan: { ...plan, fingerprint: fingerprint(plan, options, draft.operations) }, operations: draft.operations };
 }
 
 export async function previewExport(library: ExportLibrary, options: ExportOptions, artworkFolder: string): Promise<ExportPlan> {
-  return (await prepareExport(library, options, artworkFolder)).plan;
+  return (await prepareExport(library, options, new RetroPieExporter(artworkFolder))).plan;
 }
 
 let exporting = false;
@@ -239,7 +83,7 @@ export async function executeExport(
   }
   exporting = true;
   try {
-    const { plan, operations } = await prepareExport(library, options, artworkFolder);
+    const { plan, operations } = await prepareExport(library, options, new RetroPieExporter(artworkFolder));
     if (plan.fingerprint !== approvedFingerprint) {
       throw new Error('Export preview changed; preview again.');
     }
@@ -249,7 +93,6 @@ export async function executeExport(
     if (!plan.files.some(file => file.kind === 'rom')) {
       throw new Error('No exportable ROMs in preview.');
     }
-    // Artwork operations precede generated XML so references are published last.
     return await executeOperations(plan.destination, operations);
   } finally {
     exporting = false;

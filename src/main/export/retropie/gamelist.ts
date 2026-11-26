@@ -50,3 +50,16 @@ export function mergeGameLists(
 ): string {
   return mergeEmulationStationGameLists(existing, generated, value => keyFor(value, system), fallbackNames);
 }
+
+/** Generate metadata and merge it into the exact existing document, if any. */
+export function prepareGameList(games: readonly RetroPieGame[], system: string, prior: Buffer | null): Buffer {
+  const generated = gameListXml(games);
+  if (prior === null) {
+    return Buffer.from(generated, 'utf8');
+  }
+  const fallbackNames = new Set(games.filter(game =>
+    !game.entry.metadata?.title?.trim() && !game.entry.identifiedTitle?.trim()
+  ).map(game => game.filename));
+  const existing = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(prior);
+  return Buffer.from(mergeGameLists(existing, generated, system, fallbackNames), 'utf8');
+}
