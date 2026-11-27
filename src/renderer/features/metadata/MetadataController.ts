@@ -60,10 +60,8 @@ export class MetadataController extends ControllerState<MetadataState> {
   }
 
   public resetForNewGame(entry: LibraryEntry): void {
-    if (
-      entry.source === this.entryIdentity.source &&
-      entry.relativePath === this.entryIdentity.relativePath
-    ) {
+    const { source, relativePath } = this.entryIdentity;
+    if (entry.source === source && entry.relativePath === relativePath) {
       return;
     }
     this.entryIdentity = this.target(entry);
