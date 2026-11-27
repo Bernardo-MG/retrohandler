@@ -14,14 +14,15 @@
     "test": "npm run build:tests && node scripts/run-tests.cjs",
     "test:coverage": "npm run build:tests && node scripts/run-tests.cjs --coverage",
     "build:tests": "node scripts/run-tests.cjs --clean && tsc -p tsconfig.test.json && node scripts/copy-database-sql.cjs tests",
-    "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts \"*.json\" index.html",
-    "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts \"*.json\" index.html",
-    "validate": "npm run format:check && npm run typecheck && npm run test:coverage && npm run build:web",
+    "format": "npm exec --yes --package=prettier@3.6.2 -- prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts \"*.json\" index.html eslint.config.cjs",
+    "format:check": "npm exec --yes --package=prettier@3.6.2 -- prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,cjs}\" \"scripts/**/*.cjs\" vite.config.ts \"*.json\" index.html eslint.config.cjs",
+    "validate": "npm run format:check && npm run lint && npm run typecheck && npm run test:coverage && npm run build:web",
     "postinstall": "electron-builder install-app-deps",
     "rebuild:native": "electron-builder install-app-deps",
     "build:dir": "npm run clean:release && npm run build:web && electron-builder --win --x64 --dir --publish never && npm run verify:package -- --directory-only",
     "clean:release": "node scripts/package-windows.cjs clean",
-    "verify:package": "node scripts/package-windows.cjs verify"
+    "verify:package": "node scripts/package-windows.cjs verify",
+    "lint": "npm exec --yes --package=eslint@9.39.1 --package=@eslint/js@9.39.1 --package=@typescript-eslint/parser@8.48.0 --package=@typescript-eslint/eslint-plugin@8.48.0 --package=eslint-plugin-react-hooks@5.2.0 -- eslint src tests vite.config.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

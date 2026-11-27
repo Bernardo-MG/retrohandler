@@ -16,7 +16,7 @@ type FingerprintRow = Omit<FileFingerprint, 'size'> & {
 export class SqliteIdentificationRepository implements IdentificationRepository {
   constructor(private readonly executor: QueryExecutor) {}
 
-  importDat(dat: ParsedDat): {
+  public importDat(dat: ParsedDat): {
     name: string;
     count: number;
   } {
@@ -41,11 +41,11 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
     return { name: dat.name, count: dat.entries.length };
   }
 
-  entriesForIdentification(source: string): LibraryEntry[] {
+  public entriesForIdentification(source: string): LibraryEntry[] {
     return this.executor.findAll<LibraryEntry>('identification.entriesForIdentification', source);
   }
 
-  cachedFingerprint(
+  public cachedFingerprint(
     source: string,
     relativePath: string,
     size: number,
@@ -69,7 +69,7 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
       : null;
   }
 
-  matchFingerprint(hashes: FileFingerprint): FingerprintMatch {
+  public matchFingerprint(hashes: FileFingerprint): FingerprintMatch {
     const candidates = this.executor.findAll<FingerprintMatchCandidate>(
       'identification.matchFingerprint',
       hashes.sha1,
@@ -82,7 +82,7 @@ export class SqliteIdentificationRepository implements IdentificationRepository 
     return matchFingerprintCandidates(candidates);
   }
 
-  saveIdentification(source: string, results: readonly IdentificationResult[]): void {
+  public saveIdentification(source: string, results: readonly IdentificationResult[]): void {
     this.executor.transaction(() => {
       for (const row of results) {
         const f = row.fingerprint;

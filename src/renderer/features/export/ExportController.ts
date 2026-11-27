@@ -35,25 +35,35 @@ export class ExportController extends ControllerState<ExportState> {
     }
     try {
       const rows = await this.api.listSystems(source);
-      if (!signal.aborted && source === this.source) this.update({ systems: rows.map((row) => row.system) });
+      if (!signal.aborted && source === this.source) {
+        this.update({ systems: rows.map((row) => row.system) });
+      }
     } catch (reason) {
-      if (!signal.aborted && source === this.source) this.update({ error: String(reason) });
+      if (!signal.aborted && source === this.source) {
+        this.update({ error: String(reason) });
+      }
     }
   }
 
   public readonly changeArtwork = (includeArtwork: boolean): void => {
-    if (!this.getSnapshot().busy) this.update({ includeArtwork, plan: null });
+    if (!this.getSnapshot().busy) {
+      this.update({ includeArtwork, plan: null });
+    }
   };
 
   public readonly changeMapping = (system: string, value: string): void => {
     const { busy, overrides } = this.getSnapshot();
-    if (!busy) this.update({ overrides: { ...overrides, [system]: value.toLowerCase() }, plan: null });
+    if (!busy) {
+      this.update({ overrides: { ...overrides, [system]: value.toLowerCase() }, plan: null });
+    }
   };
 
   public readonly choose = (): Promise<void> =>
     this.execute(async () => {
       const destination = await this.api.chooseExportFolder();
-      if (destination) this.update({ destination, plan: null, done: '', completed: null });
+      if (destination) {
+        this.update({ destination, plan: null, done: '', completed: null });
+      }
     });
 
   public requestPreview(source: string | null): Promise<void> {

@@ -16,7 +16,9 @@ export function usePreferences(
   );
   useEffect(
     function persistLibraryPreferences() {
-      if (ready) void controller.persistLibrary(library);
+      if (ready) {
+        void controller.persistLibrary(library);
+      }
     },
     [controller, ready, library]
   );

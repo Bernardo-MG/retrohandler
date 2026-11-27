@@ -12,7 +12,7 @@ export class DatabaseConnection {
     private readonly executor: QueryExecutor
   ) {}
 
-  static open(filePath: string, createDatabase?: DatabaseFactory): DatabaseConnection {
+  public static open(filePath: string, createDatabase?: DatabaseFactory): DatabaseConnection {
     const registry = new QueryRegistry();
     registry.loadDirectory(path.join(__dirname, 'queries'));
 
@@ -29,11 +29,11 @@ export class DatabaseConnection {
     }
   }
 
-  static executorFor(connection: DatabaseConnection): QueryExecutor {
+  public static executorFor(connection: DatabaseConnection): QueryExecutor {
     return connection.executor;
   }
 
-  close(): void {
+  public close(): void {
     this.handle.close();
   }
 

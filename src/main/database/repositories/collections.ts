@@ -27,7 +27,7 @@ type RomRow = {
 export class SqliteCollectionRepository implements CollectionRepository {
   constructor(private readonly executor: QueryExecutor) {}
 
-  saveScan(result: ScanResult): void {
+  public saveScan(result: ScanResult): void {
     this.executor.transaction(() => {
       this.executor.execute(
         'collections.upsertCollection',
@@ -74,7 +74,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     });
   }
 
-  loadLastScan(): ScanResult | null {
+  public loadLastScan(): ScanResult | null {
     const row = this.executor.findOne<CollectionRow>('collections.lastScan');
     if (!row) {
       return null;
@@ -99,7 +99,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     };
   }
 
-  listCollections(): CollectionInfo[] {
+  public listCollections(): CollectionInfo[] {
     const rows = this.executor.findAll<CollectionListRow>('collections.listCollections');
     return rows.map((row) => ({
       rootPath: row.rootPath,
@@ -111,7 +111,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     }));
   }
 
-  renameCollection(source: string, label: string): void {
+  public renameCollection(source: string, label: string): void {
     const newLabel = label.trim();
     if (!newLabel || newLabel.length > 120) {
       throw new Error('Collection name must be 1–120 characters.');
@@ -122,7 +122,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
     }
   }
 
-  removeCollection(source: string): void {
+  public removeCollection(source: string): void {
     const changes = this.executor.execute('collections.removeCollection', source);
     if (!changes) {
       throw new Error('Collection not found.');

@@ -69,8 +69,9 @@ export class LibraryController extends ControllerState<LibraryState> {
   public readonly reloadCollections = async (): Promise<void> => {
     const request = ++this.collectionRequest;
     const collections = await this.api.listCollections();
-    if (request === this.collectionRequest)
+    if (request === this.collectionRequest) {
       this.update({ collections, revision: this.getSnapshot().revision + 1 });
+    }
   };
 
   public async loadInitialCollections(signal: AbortSignal): Promise<void> {
@@ -83,12 +84,17 @@ export class LibraryController extends ControllerState<LibraryState> {
       }
       const { preferences } = this.getSnapshot();
       this.update({ collections });
-      if (preferences.selected && !selectedCollection(collections, preferences.selected))
+      if (preferences.selected && !selectedCollection(collections, preferences.selected)) {
         this.selectCollection(null);
+      }
     } catch (reason) {
-      if (currentRequest()) this.reportError(`Could not load collections: ${String(reason)}`);
+      if (currentRequest()) {
+        this.reportError(`Could not load collections: ${String(reason)}`);
+      }
     } finally {
-      if (currentRequest()) this.update({ ready: true, loading: false });
+      if (currentRequest()) {
+        this.update({ ready: true, loading: false });
+      }
     }
   }
 
@@ -115,7 +121,9 @@ export class LibraryController extends ControllerState<LibraryState> {
         this.update({ systems });
       }
     } catch (reason) {
-      if (currentRequest()) this.reportError(String(reason));
+      if (currentRequest()) {
+        this.reportError(String(reason));
+      }
     }
   }
 
@@ -135,11 +143,17 @@ export class LibraryController extends ControllerState<LibraryState> {
     this.update({ loading: true });
     try {
       const page = await this.api.queryLibrary(query);
-      if (currentRequest()) this.update({ page });
+      if (currentRequest()) {
+        this.update({ page });
+      }
     } catch (reason) {
-      if (currentRequest()) this.reportError(String(reason));
+      if (currentRequest()) {
+        this.reportError(String(reason));
+      }
     } finally {
-      if (currentRequest()) this.update({ loading: false });
+      if (currentRequest()) {
+        this.update({ loading: false });
+      }
     }
   }
 
@@ -190,7 +204,9 @@ export class LibraryController extends ControllerState<LibraryState> {
     }
   };
   public readonly setOffset = (offset: number): void => {
-    if (offset !== this.getSnapshot().offset) this.update({ offset, details: null });
+    if (offset !== this.getSnapshot().offset) {
+      this.update({ offset, details: null });
+    }
   };
   public readonly setDetails = (details: LibraryEntry | null): void => this.update({ details });
   public readonly closeDetails = (): void => this.setDetails(null);
@@ -223,7 +239,9 @@ export class LibraryController extends ControllerState<LibraryState> {
   public readonly remove = async (source: string): Promise<void> => {
     try {
       await this.api.removeCollection(source);
-      if (this.getSnapshot().preferences.selected === source) this.selectCollection(null);
+      if (this.getSnapshot().preferences.selected === source) {
+        this.selectCollection(null);
+      }
       await this.reloadCollections();
     } catch (reason) {
       this.reportError(String(reason));

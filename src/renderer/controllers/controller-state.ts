@@ -15,6 +15,8 @@ export abstract class ControllerState<State extends object> {
 
   protected update(patch: Partial<State>): void {
     this.state = { ...this.state, ...patch };
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) {
+      listener();
+    }
   }
 }

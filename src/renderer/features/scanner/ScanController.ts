@@ -20,7 +20,9 @@ export class ScanController extends ControllerState<ScanState> {
 
   public connect(): () => void {
     return this.api.onScanProgress((update) => {
-      if (update.jobId === this.activeJob) this.update({ progress: update.progress });
+      if (update.jobId === this.activeJob) {
+        this.update({ progress: update.progress });
+      }
     });
   }
 
@@ -47,7 +49,9 @@ export class ScanController extends ControllerState<ScanState> {
         reportError(`Scan completed with ${receipt.warningCount} warnings. Some files could not be read.`);
       }
     } catch (reason) {
-      if (!String(reason).toLowerCase().includes('cancelled')) reportError(String(reason));
+      if (!String(reason).toLowerCase().includes('cancelled')) {
+        reportError(String(reason));
+      }
     } finally {
       this.choosing = false;
       this.activeJob = null;

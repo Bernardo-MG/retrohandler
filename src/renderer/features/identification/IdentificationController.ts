@@ -24,7 +24,9 @@ export class IdentificationController extends ControllerState<IdentificationStat
 
   public connect(): () => void {
     return this.api.onIdentificationProgress((update) => {
-      if (update.jobId === this.activeJob) this.update({ progress: update.progress });
+      if (update.jobId === this.activeJob) {
+        this.update({ progress: update.progress });
+      }
     });
   }
 
@@ -67,8 +69,9 @@ export class IdentificationController extends ControllerState<IdentificationStat
       });
       onCompleted();
     } catch (reason) {
-      if (!String(reason).toLowerCase().includes('cancelled'))
+      if (!String(reason).toLowerCase().includes('cancelled')) {
         reportError(`Identification failed: ${String(reason)}`);
+      }
     } finally {
       this.activeJob = null;
       this.update({ identifying: false, progress: null });

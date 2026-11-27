@@ -20,18 +20,32 @@ function filesIn(directory, predicate) {
     .sort();
 }
 
+function relative(projectRoot, file) {
+  return path.relative(projectRoot, file).split(path.sep).join('/');
+}
+
 function discoverTests(projectRoot) {
-  return [
-    ...filesIn(path.join(projectRoot, 'dist-tests', 'tests'), (file) => file.endsWith('.test.js')),
-    ...filesIn(path.join(projectRoot, 'tests'), (file) => file.endsWith('.test.cjs'))
-  ];
+  const source = path.join(projectRoot, 'tests');
+  const compiledTests = filesIn(path.join(projectRoot, 'dist-tests', 'tests'), (file) =>
+    file.endsWith('.test.js')
+  );
+  const expected = new Set(
+    filesIn(source, (file) => file.endsWith('.test.ts')).map((file) =>
+      path.join(projectRoot, 'dist-tests', relative(projectRoot, file).replace(/\.ts$/u, '.js'))
+    )
+  );
+  const actual = new Set(compiledTests);
+  const missing = [...expected].filter((file) => !actual.has(file));
+  const stale = compiledTests.filter((file) => !expected.has(file));
+  if (missing.length || stale.length) {
+    throw new Error(
+      `Test discovery mismatch: missing ${missing.join(', ')}; stale ${stale.join(', ')}. Rebuild the tests.`
+    );
+  }
+  return [...compiledTests, ...filesIn(source, (file) => file.endsWith('.test.cjs'))];
 }
 
-function relative(file) {
-  return path.relative(root, file).split(path.sep).join('/');
-}
-
-function reportCoverageScope(directory) {
+function coverageScope(projectRoot, directory, exclusions) {
   const loaded = new Set();
   for (const file of filesIn(directory, (name) => name.endsWith('.json'))) {
     const coverage = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -41,31 +55,42 @@ function reportCoverageScope(directory) {
       }
     }
   }
-  const compiledSource = path.join(compiled, 'src');
-  const unexecuted = filesIn(compiledSource, (name) => name.endsWith('.js')).filter((file) => {
-    // Type-only modules emit just the CommonJS module marker; they have no behavior to test.
-    const content = fs
-      .readFileSync(file, 'utf8')
-      .replace(/^\s*["']use strict["'];\s*/u, '')
-      .replace(/^\s*Object\.defineProperty\(exports, "__esModule", \{ value: true \}\);\s*/u, '');
-    return !loaded.has(file) && content.trim().length > 0;
-  });
+  const compiledRoot = path.join(projectRoot, 'dist-tests');
+  const unloaded = filesIn(path.join(compiledRoot, 'src'), (name) => name.endsWith('.js'))
+    .filter((file) => {
+      // Type-only modules emit just the CommonJS module marker; they have no behavior to test.
+      const content = fs
+        .readFileSync(file, 'utf8')
+        .replace(/^\s*["']use strict["'];\s*/u, '')
+        .replace(/^\s*Object\.defineProperty\(exports, "__esModule", \{ value: true \}\);\s*/u, '');
+      return !loaded.has(file) && content.trim().length > 0;
+    })
+    .map((file) => relative(projectRoot, file));
   const notCompiled = filesIn(
-    path.join(root, 'src'),
+    path.join(projectRoot, 'src'),
     (name) => /\.tsx?$/u.test(name) && !name.endsWith('.d.ts')
-  ).filter((file) => !fs.existsSync(path.join(compiled, relative(file).replace(/\.tsx?$/u, '.js'))));
-  console.log('\nCoverage scope (compiled JavaScript; unloaded modules do not enter Node’s totals):');
-  console.log(`  Compiled modules not loaded: ${unexecuted.length}`);
-  for (const file of unexecuted) {
-    console.log(`    ${relative(file)}`);
+  )
+    .map((file) => relative(projectRoot, file))
+    .filter((file) => !fs.existsSync(path.join(compiledRoot, file.replace(/\.tsx?$/u, '.js'))));
+  const unexpected = notCompiled.filter((file) => !Object.hasOwn(exclusions, file));
+  const obsolete = Object.keys(exclusions).filter((file) => !notCompiled.includes(file));
+  return { unloaded, notCompiled, unexpected, obsolete };
+}
+
+function reportCoverageScope(directory) {
+  const exclusions = require('../coverage-exclusions.json');
+  const scope = coverageScope(root, directory, exclusions);
+  console.log('\nCoverage scope (compiled application JavaScript):');
+  for (const file of scope.notCompiled) {
+    console.log(`  Outside Node coverage: ${file} (${exclusions[file] ?? 'UNEXPECTED'})`);
   }
-  console.log(`  TypeScript modules outside the Node test build: ${notCompiled.length}`);
-  for (const file of notCompiled) {
-    console.log(`    ${relative(file)}`);
+  for (const file of scope.unloaded) {
+    console.error(`  Unloaded application module: ${file}`);
   }
-  console.log(
-    '  React rendering, native Electron execution and packaged runtime require separate validation.'
-  );
+  for (const file of scope.obsolete) {
+    console.error(`  Obsolete coverage exclusion: ${file}`);
+  }
+  return !scope.unloaded.length && !scope.unexpected.length && !scope.obsolete.length;
 }
 
 function runTests(coverage) {
@@ -79,7 +104,9 @@ function runTests(coverage) {
     args.push(
       '--experimental-test-coverage',
       '--test-coverage-include=dist-tests/src/**/*.js',
-      '--test-coverage-include=scripts/*.cjs'
+      '--test-coverage-lines=90',
+      '--test-coverage-branches=85',
+      '--test-coverage-functions=90'
     );
   }
   try {
@@ -91,8 +118,8 @@ function runTests(coverage) {
     if (result.error) {
       throw result.error;
     }
-    if (directory) {
-      reportCoverageScope(directory);
+    if (directory && !reportCoverageScope(directory)) {
+      return 1;
     }
     return result.status ?? 1;
   } finally {
@@ -102,7 +129,7 @@ function runTests(coverage) {
   }
 }
 
-module.exports = { discoverTests };
+module.exports = { discoverTests, coverageScope };
 
 if (require.main === module) {
   try {

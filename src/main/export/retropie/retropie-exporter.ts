@@ -17,7 +17,7 @@ const MAX_XML_BYTES = 32 * 1024 * 1024;
 export class RetroPieExporter implements Exporter {
   constructor(private readonly artwork: ArtworkCache) {}
 
-  prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
+  public prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
     return new RetroPieDraftBuilder(this.artwork, options).build(entries);
   }
 }
@@ -44,7 +44,7 @@ class RetroPieDraftBuilder {
     this.includeArtwork = options.includeArtwork;
   }
 
-  async build(entries: readonly LibraryEntry[]): Promise<ExportDraft> {
+  public async build(entries: readonly LibraryEntry[]): Promise<ExportDraft> {
     for (const entry of entries) {
       await this.collectGame(entry);
     }

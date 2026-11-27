@@ -34,8 +34,5 @@ npm run format:check
 ## Validation
 
 ```powershell
-npm run format:check
-git diff --check
-npm run typecheck
-npm test
+npm run validate
 ```

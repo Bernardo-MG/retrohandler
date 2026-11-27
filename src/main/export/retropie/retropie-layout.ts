@@ -13,7 +13,7 @@ export class RetroPieLayout {
   constructor(private readonly overrides: Readonly<Record<string, string>>) {}
 
   /** Determine the RetroPie ROM reference, or explain why it cannot be exported. */
-  resolveRomDestination(
+  public resolveRomDestination(
     entry: Pick<LibraryEntry, 'system' | 'relativePath'>
   ): RomDestination | { warning: string } {
     const system = this.mapPlatform(entry.system);
@@ -32,25 +32,25 @@ export class RetroPieLayout {
     return { system, filename, relativeDestination: `${this.systemDirectory(system)}/${filename}` };
   }
 
-  artworkDestination(system: string, id: string): string {
+  public artworkDestination(system: string, id: string): string {
     return `${this.systemDirectory(system)}/${this.artworkRelativePath(id)}`;
   }
 
-  gameListDestination(system: string): string {
+  public gameListDestination(system: string): string {
     return `${this.systemDirectory(system)}/gamelist.xml`;
   }
 
-  romReference(filename: string): string {
+  public romReference(filename: string): string {
     return `./${filename}`;
   }
 
-  artworkReference(id: string): string {
+  public artworkReference(id: string): string {
     return `./${this.artworkRelativePath(id)}`;
   }
 
   // Match local system-relative paths and standard RetroPie home-directory paths.
   // Do not infer that a game in a different subdirectory is the same ROM.
-  normalizeGameReference(value: string, system: string): string | null {
+  public normalizeGameReference(value: string, system: string): string | null {
     let reference = value.trim();
     const absolute = /^(?:~|\/home\/[^/]+)\/RetroPie\/roms\/([^/]+)\/(.*)$/.exec(reference);
     if (absolute) {

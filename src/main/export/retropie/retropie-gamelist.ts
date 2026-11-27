@@ -17,7 +17,7 @@ export class RetroPieGameList {
     private readonly system: string
   ) {}
 
-  generateOrMerge(games: readonly RetroPieGame[], previousContent: Buffer | null): Buffer {
+  public generateOrMerge(games: readonly RetroPieGame[], previousContent: Buffer | null): Buffer {
     const generated = GameListDocument.fromEntries(games.map((game) => this.toGameListEntry(game)));
     if (previousContent === null) {
       return Buffer.from(generated.toXml(), 'utf8');

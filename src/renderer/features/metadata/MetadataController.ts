@@ -38,6 +38,8 @@ interface MetadataState {
 }
 
 export class MetadataController extends ControllerState<MetadataState> {
+  private entryIdentity: Pick<LibraryEntry, 'source' | 'relativePath'>;
+
   constructor(
     private readonly api: MetadataApi,
     entry: LibraryEntry,
@@ -58,9 +60,14 @@ export class MetadataController extends ControllerState<MetadataState> {
       error: '',
       notice: ''
     });
+    this.entryIdentity = this.target(entry);
   }
 
   public resetForNewGame(entry: LibraryEntry): void {
+    if (entry.source === this.entryIdentity.source && entry.relativePath === this.entryIdentity.relativePath) {
+      return;
+    }
+    this.entryIdentity = this.target(entry);
     this.update({
       form: initialMetadata(entry),
       systemOverride: entry.metadata?.systemOverride ?? '',
@@ -133,7 +140,9 @@ export class MetadataController extends ControllerState<MetadataState> {
     this.execute(async () => {
       this.update({ imported: '' });
       const result = await this.api.importLaunchBox();
-      if (result) this.update({ imported: `${result.count.toLocaleString()} LaunchBox games imported.` });
+      if (result) {
+        this.update({ imported: `${result.count.toLocaleString()} LaunchBox games imported.` });
+      }
     });
 
   public artwork(entry: LibraryEntry, refresh = false): Promise<void> {

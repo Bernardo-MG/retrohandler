@@ -29,11 +29,11 @@ export class ExportService {
     private readonly exporter: Exporter
   ) {}
 
-  async preview(options: ExportOptions): Promise<ExportPlan> {
+  public async preview(options: ExportOptions): Promise<ExportPlan> {
     return (await this.prepareExport(options)).plan;
   }
 
-  async execute(options: ExportOptions, approvedFingerprint: string): Promise<ExportReceipt> {
+  public async execute(options: ExportOptions, approvedFingerprint: string): Promise<ExportReceipt> {
     if (this.exporting) {
       throw new Error('Another configuration export is running.');
     }

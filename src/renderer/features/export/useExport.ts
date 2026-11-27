@@ -30,7 +30,9 @@ export function useExport({ source, onClose, preferences, onPreferencesChange }:
   useEffect(
     function persistOptions() {
       const value = validPreferences({ destination, includeArtwork, overrides });
-      if (value) onPreferencesChange(value);
+      if (value) {
+        onPreferencesChange(value);
+      }
     },
     [destination, includeArtwork, overrides, onPreferencesChange]
   );

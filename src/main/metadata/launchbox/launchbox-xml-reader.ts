@@ -70,7 +70,7 @@ export function assertImportNotCancelled(signal?: AbortSignal): void {
 
 /** Opens a bounded stream of records. This reader never touches the repository. */
 export class LaunchBoxXmlReader {
-  async open(file: string, signal?: AbortSignal): Promise<AsyncIterable<LaunchBoxGame>> {
+  public async open(file: string, signal?: AbortSignal): Promise<AsyncIterable<LaunchBoxGame>> {
     const info = await stat(file);
     if (!info.isFile() || info.size > MAX_LAUNCHBOX_XML_BYTES) {
       throw new Error('LaunchBox XML is too large or unavailable.');
@@ -102,7 +102,7 @@ class GameRecordBuffer {
   private buffer = '';
   private declarationTail = '';
 
-  *consume(chunk: string): Generator<LaunchBoxGame> {
+  public *consume(chunk: string): Generator<LaunchBoxGame> {
     this.rejectEntityDeclarations(chunk);
     this.buffer += chunk;
     for (;;) {
@@ -117,7 +117,7 @@ class GameRecordBuffer {
     }
   }
 
-  assertComplete(): void {
+  public assertComplete(): void {
     if (this.buffer.includes(GAME_START)) {
       throw new Error('Truncated LaunchBox XML.');
     }

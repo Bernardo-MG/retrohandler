@@ -82,7 +82,9 @@ export class SettingsController extends ControllerState<SettingsState> {
     this.update({ busy: true, error: '' });
     try {
       const destination = await this.api.chooseExportFolder();
-      if (destination) this.updateExport({ destination });
+      if (destination) {
+        this.updateExport({ destination });
+      }
     } catch (reason) {
       this.update({ error: String(reason) });
     } finally {
@@ -96,11 +98,17 @@ export class SettingsController extends ControllerState<SettingsState> {
     this.update({ storageLoading: true, storageError: '' });
     try {
       const storage = await this.api.getStorageInfo();
-      if (currentRequest()) this.update({ storage });
+      if (currentRequest()) {
+        this.update({ storage });
+      }
     } catch (reason) {
-      if (currentRequest()) this.update({ storage: null, storageError: String(reason) });
+      if (currentRequest()) {
+        this.update({ storage: null, storageError: String(reason) });
+      }
     } finally {
-      if (currentRequest()) this.update({ storageLoading: false });
+      if (currentRequest()) {
+        this.update({ storageLoading: false });
+      }
     }
   };
 

@@ -16,7 +16,7 @@ export interface RomFingerprintStrategy {
 export class RomFingerprintReader {
   constructor(private readonly strategies: readonly RomFingerprintStrategy[]) {}
 
-  async read(target: RomTarget, signal?: AbortSignal): Promise<FileFingerprint | null> {
+  public async read(target: RomTarget, signal?: AbortSignal): Promise<FileFingerprint | null> {
     throwIfCancelled(signal);
     const strategy = this.strategyFor(target.extension);
     if (!strategy) {
@@ -42,11 +42,11 @@ export class DirectRomFingerprint implements RomFingerprintStrategy {
     private readonly reader: FingerprintReader
   ) {}
 
-  supports(extension: string): boolean {
+  public supports(extension: string): boolean {
     return isDirectRom(extension);
   }
 
-  async fingerprint(file: RomSource, signal?: AbortSignal): Promise<FileFingerprint> {
+  public async fingerprint(file: RomSource, signal?: AbortSignal): Promise<FileFingerprint> {
     const cached = this.cache.cachedFingerprint(
       file.target.source,
       file.target.relativePath,
@@ -64,11 +64,11 @@ export class ArchivedRomFingerprint implements RomFingerprintStrategy {
     private readonly reader: FingerprintReader
   ) {}
 
-  supports(extension: string): boolean {
+  public supports(extension: string): boolean {
     return isRomArchive(extension);
   }
 
-  async fingerprint(file: RomSource, signal?: AbortSignal): Promise<FileFingerprint | null> {
+  public async fingerprint(file: RomSource, signal?: AbortSignal): Promise<FileFingerprint | null> {
     const members = await this.archive.list(file.filename, signal);
     throwIfCancelled(signal);
     const member = selectRomMember(members);

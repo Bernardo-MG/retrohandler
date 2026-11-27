@@ -12,11 +12,11 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
   constructor(private readonly executor: QueryExecutor) {}
 
   /** Stage imports separately so a failed parse cannot discard the previous catalogue. */
-  beginLaunchBoxImport(): void {
+  public beginLaunchBoxImport(): void {
     this.executor.execute('launchbox.clearStaging');
   }
 
-  addLaunchBoxGame(game: LaunchBoxGame): void {
+  public addLaunchBoxGame(game: LaunchBoxGame): void {
     this.executor.execute(
       'launchbox.insertStagingGame',
       game.id,
@@ -31,7 +31,7 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
     );
   }
 
-  finishLaunchBoxImport(): number {
+  public finishLaunchBoxImport(): number {
     return this.executor.transaction(() => {
       const count = this.executor.findRequired<{ n: number }>('launchbox.countStaging').n;
       if (!count) {
@@ -42,11 +42,11 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
     });
   }
 
-  abortLaunchBoxImport(): void {
+  public abortLaunchBoxImport(): void {
     this.executor.execute('launchbox.clearStaging');
   }
 
-  searchLaunchBox(term: string, platform: string): MetadataCandidate[] {
+  public searchLaunchBox(term: string, platform: string): MetadataCandidate[] {
     const matcher = new LaunchBoxTitleMatcher({ title: term, platform });
     const normalized = matcher.normalizedTitle;
     if (!normalized || normalized.length > 160) {
@@ -62,7 +62,7 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
     return matcher.rank(candidates);
   }
 
-  getLaunchBoxGame(id: number): LaunchBoxGame | null {
+  public getLaunchBoxGame(id: number): LaunchBoxGame | null {
     return this.executor.findOne<LaunchBoxGame>('launchbox.getGame', id);
   }
 }

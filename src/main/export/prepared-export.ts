@@ -18,7 +18,7 @@ export class PreparedExport {
   ) {}
 
   /** Keep the preview in sync with the operations that execution will actually use. */
-  static fromDraft(draft: ExportDraft, options: ExportOptions, destination: FileDestination): PreparedExport {
+  public static fromDraft(draft: ExportDraft, options: ExportOptions, destination: FileDestination): PreparedExport {
     const files = this.synchronizePreviewFiles(draft, destination);
     const plan = { ...draft.plan, files, destination: destination.root };
     return new PreparedExport(
@@ -28,7 +28,7 @@ export class PreparedExport {
     );
   }
 
-  assertApprovedForExecution(approvedFingerprint: string): void {
+  public assertApprovedForExecution(approvedFingerprint: string): void {
     if (this.plan.fingerprint !== approvedFingerprint) {
       throw new Error('Export preview changed; preview again.');
     }

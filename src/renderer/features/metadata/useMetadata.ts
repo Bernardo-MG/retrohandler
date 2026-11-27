@@ -17,18 +17,20 @@ export function useMetadata({ entry, onClose, onSaved, preferences }: MetadataPa
     () => new MetadataController(desktopApi(), entry, preferences)
   );
 
-  // The keyed editor preserves draft edits when the same game's library row refreshes.
+  // The controller preserves draft edits when the same game's library row refreshes.
   useEffect(
     function resetForNewGame() {
       controller.resetForNewGame(entry);
     },
-    [controller, entry.source, entry.relativePath]
+    [controller, entry]
   );
   useEffect(() => controller.connect(), [controller]);
   useEffect(
     function handleEscape() {
       function onKeyDown(event: KeyboardEvent) {
-        if (event.key === 'Escape') onClose();
+        if (event.key === 'Escape') {
+          onClose();
+        }
       }
       document.addEventListener('keydown', onKeyDown);
       return () => document.removeEventListener('keydown', onKeyDown);

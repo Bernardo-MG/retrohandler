@@ -58,9 +58,7 @@ const extensionHints: Record<string, string> = {
   '.cso': 'PlayStation Portable'
 };
 
-/** Classify files exactly as the v0.1 scanner does: first matching ancestor alias,
- * then extension hint, finally an explicitly unknown platform. This is an
- * inference, not positive identification of ROM contents. */
+/** Infer the platform from ancestor aliases before file extensions; this is not ROM identification. */
 export function inferPlatform(relativePath: string): string {
   const extension = path.extname(relativePath).toLowerCase();
   const ancestor = ancestorPlatform(relativePath);

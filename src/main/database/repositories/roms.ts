@@ -59,7 +59,7 @@ function buildSystemsQuery(executor: QueryExecutor, source: string | null): stri
 export class SqliteRomRepository implements RomRepository {
   constructor(private readonly executor: QueryExecutor) {}
 
-  queryLibrary(query: LibraryQuery): LibraryPage {
+  public queryLibrary(query: LibraryQuery): LibraryPage {
     if (
       !Number.isSafeInteger(query.offset) ||
       query.offset < 0 ||
@@ -106,7 +106,7 @@ export class SqliteRomRepository implements RomRepository {
     };
   }
 
-  listSystems(source: string | null): SystemCount[] {
+  public listSystems(source: string | null): SystemCount[] {
     const parameters = source === null ? [] : [source];
     return this.executor.findAll<SystemCount>(
       { sql: buildSystemsQuery(this.executor, source) },

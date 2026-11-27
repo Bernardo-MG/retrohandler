@@ -29,7 +29,7 @@ export class SqliteMetadataRepository
 {
   constructor(private readonly executor: QueryExecutor) {}
 
-  saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
+  public saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
     if (
       !metadata.title.trim() ||
       metadata.title.length > 200 ||
@@ -84,13 +84,13 @@ export class SqliteMetadataRepository
     return { source, relativePath, ...input };
   }
 
-  getArtworkId(source: string, relativePath: string): string | null {
+  public getArtworkId(source: string, relativePath: string): string | null {
     const row = this.executor.findOne<ArtworkRow>('metadata.getArtworkId', source, relativePath);
     return row?.artworkId ?? null;
   }
 
   /** Update only the system override; preserve other metadata fields. */
-  bulkAssignSystem(selection: BulkSystemSelection, value: string | null): number {
+  public bulkAssignSystem(selection: BulkSystemSelection, value: string | null): number {
     if (
       value !== null &&
       (typeof value !== 'string' || !value.trim() || value.length > 120 || /[\x00-\x1f]/.test(value))
@@ -174,7 +174,7 @@ export class SqliteMetadataRepository
     });
   }
 
-  getReferencedArtworkIds(): Set<string> {
+  public getReferencedArtworkIds(): Set<string> {
     const rows = this.executor.findAll<{ id: string }>('metadata.referencedArtwork');
     return new Set(rows.map((row) => row.id));
   }

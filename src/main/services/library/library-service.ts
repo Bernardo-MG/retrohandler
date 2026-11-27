@@ -39,36 +39,47 @@ export class FileSystemLibraryService implements LibraryService {
     private readonly scanner: Pick<RomScanner, 'scan'> = new RomScanner()
   ) {}
 
-  async scanFolder(folder: string, options?: ScanOptions): Promise<ScanResult> {
+  public async scanFolder(folder: string, options?: ScanOptions): Promise<ScanResult> {
     const result = await this.scanner.scan(folder, options);
     throwIfCancelled(options?.signal, 'Scan cancelled.');
     this.repositories.collections?.saveScan(result);
     return result;
   }
 
-  async listCollections(): Promise<CollectionInfo[]> {
+  public async listCollections(): Promise<CollectionInfo[]> {
     return this.repositories.collections?.listCollections?.() ?? [];
   }
-  async queryLibrary(query: LibraryQuery): Promise<LibraryPage> {
+
+  public async queryLibrary(query: LibraryQuery): Promise<LibraryPage> {
     return this.repositories.roms?.queryLibrary(query) ?? { items: [], total: 0 };
   }
-  async listSystems(source: string | null): Promise<SystemCount[]> {
+
+  public async listSystems(source: string | null): Promise<SystemCount[]> {
     return this.repositories.roms?.listSystems(source) ?? [];
   }
-  async bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number> {
-    if (!this.repositories.systemOverrides) throw new Error('Bulk system assignment unavailable.');
+
+  public async bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number> {
+    if (!this.repositories.systemOverrides) {
+      throw new Error('Bulk system assignment unavailable.');
+    }
     return this.repositories.systemOverrides.bulkAssignSystem(selection, systemOverride);
   }
-  async renameCollection(source: string, label: string): Promise<void> {
-    if (!this.repositories.collections?.renameCollection) throw new Error('Collection storage unavailable.');
+
+  public async renameCollection(source: string, label: string): Promise<void> {
+    if (!this.repositories.collections?.renameCollection) {
+      throw new Error('Collection storage unavailable.');
+    }
     this.repositories.collections.renameCollection(source, label);
   }
-  async removeCollection(source: string): Promise<void> {
-    if (!this.repositories.collections?.removeCollection) throw new Error('Collection storage unavailable.');
+
+  public async removeCollection(source: string): Promise<void> {
+    if (!this.repositories.collections?.removeCollection) {
+      throw new Error('Collection storage unavailable.');
+    }
     this.repositories.collections.removeCollection(source);
   }
 
-  async loadLastScan(): Promise<ScanResult | null> {
+  public async loadLastScan(): Promise<ScanResult | null> {
     return this.repositories.collections?.loadLastScan() ?? null;
   }
 }
