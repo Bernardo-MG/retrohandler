@@ -17,16 +17,20 @@ const entry: LibraryEntry = {
 const unexpected = async (): Promise<never> => assert.fail('Unexpected API call');
 
 function metadataController() {
-  return new MetadataController({
-    launchBoxSearch: unexpected,
-    launchBoxApply: unexpected,
-    downloadLaunchBox: unexpected,
-    cancelLaunchBoxDownload: unexpected,
-    importLaunchBox: unexpected,
-    searchLibretroCovers: unexpected,
-    metadataSave: unexpected,
-    onLaunchBoxProgress: () => () => {}
-  }, entry, defaultSettings().metadata);
+  return new MetadataController(
+    {
+      launchBoxSearch: unexpected,
+      launchBoxApply: unexpected,
+      downloadLaunchBox: unexpected,
+      cancelLaunchBoxDownload: unexpected,
+      importLaunchBox: unexpected,
+      searchLibretroCovers: unexpected,
+      metadataSave: unexpected,
+      onLaunchBoxProgress: () => () => {}
+    },
+    entry,
+    defaultSettings().metadata
+  );
 }
 
 describe('Metadata editor state', () => {
@@ -52,20 +56,24 @@ describe('Metadata editor state', () => {
   it('saves manual edits, selected artwork, and a normalized system override', async () => {
     let saved: GameMetadataInput | undefined;
     let completed = 0;
-    const controller = new MetadataController({
-      launchBoxSearch: unexpected,
-      launchBoxApply: unexpected,
-      downloadLaunchBox: unexpected,
-      cancelLaunchBoxDownload: unexpected,
-      importLaunchBox: unexpected,
-      searchLibretroCovers: unexpected,
-      metadataSave: async (target, input) => {
-        assert.deepEqual(target, { source: entry.source, relativePath: entry.relativePath });
-        saved = input;
-        return { ...input, ...target };
+    const controller = new MetadataController(
+      {
+        launchBoxSearch: unexpected,
+        launchBoxApply: unexpected,
+        downloadLaunchBox: unexpected,
+        cancelLaunchBoxDownload: unexpected,
+        importLaunchBox: unexpected,
+        searchLibretroCovers: unexpected,
+        metadataSave: async (target, input) => {
+          assert.deepEqual(target, { source: entry.source, relativePath: entry.relativePath });
+          saved = input;
+          return { ...input, ...target };
+        },
+        onLaunchBoxProgress: () => () => {}
       },
-      onLaunchBoxProgress: () => () => {}
-    }, entry, defaultSettings().metadata);
+      entry,
+      defaultSettings().metadata
+    );
     controller.set('title', 'Edited');
     controller.setSystemOverride(' SNES ');
     controller.selectCover('cover');
@@ -85,13 +93,16 @@ describe('Metadata editor state', () => {
 describe('Settings draft', () => {
   it('edits independent preferences without mutating the original settings', () => {
     const initial = defaultSettings();
-    const controller = new SettingsController({
-      getStorageInfo: unexpected,
-      chooseExportFolder: unexpected,
-      cleanupArtworkCache: unexpected,
-      saveSettings: unexpected,
-      resetSettings: unexpected
-    }, initial);
+    const controller = new SettingsController(
+      {
+        getStorageInfo: unexpected,
+        chooseExportFolder: unexpected,
+        cleanupArtworkCache: unexpected,
+        saveSettings: unexpected,
+        resetSettings: unexpected
+      },
+      initial
+    );
     controller.updateLibrary({ search: 'Mario', system: 'NES' });
     controller.changeCollection('/roms');
     controller.changeTheme('light');

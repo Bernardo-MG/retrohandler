@@ -58,7 +58,10 @@ export class FileSystemLibraryService implements LibraryService {
     return this.repositories.roms?.listSystems(source) ?? [];
   }
 
-  public async bulkAssignSystem(selection: BulkSystemSelection, systemOverride: string | null): Promise<number> {
+  public async bulkAssignSystem(
+    selection: BulkSystemSelection,
+    systemOverride: string | null
+  ): Promise<number> {
     if (!this.repositories.systemOverrides) {
       throw new Error('Bulk system assignment unavailable.');
     }

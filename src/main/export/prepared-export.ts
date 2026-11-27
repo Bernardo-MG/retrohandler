@@ -18,7 +18,11 @@ export class PreparedExport {
   ) {}
 
   /** Keep the preview in sync with the operations that execution will actually use. */
-  public static fromDraft(draft: ExportDraft, options: ExportOptions, destination: FileDestination): PreparedExport {
+  public static fromDraft(
+    draft: ExportDraft,
+    options: ExportOptions,
+    destination: FileDestination
+  ): PreparedExport {
     const files = this.synchronizePreviewFiles(draft, destination);
     const plan = { ...draft.plan, files, destination: destination.root };
     return new PreparedExport(

@@ -40,11 +40,7 @@ interface MetadataState {
 export class MetadataController extends ControllerState<MetadataState> {
   private entryIdentity: Pick<LibraryEntry, 'source' | 'relativePath'>;
 
-  constructor(
-    private readonly api: MetadataApi,
-    entry: LibraryEntry,
-    preferences: MetadataPreferences
-  ) {
+  constructor(private readonly api: MetadataApi, entry: LibraryEntry, preferences: MetadataPreferences) {
     super({
       showArtworkSearch: preferences.artwork === 'libretro',
       form: initialMetadata(entry),
@@ -64,7 +60,10 @@ export class MetadataController extends ControllerState<MetadataState> {
   }
 
   public resetForNewGame(entry: LibraryEntry): void {
-    if (entry.source === this.entryIdentity.source && entry.relativePath === this.entryIdentity.relativePath) {
+    if (
+      entry.source === this.entryIdentity.source &&
+      entry.relativePath === this.entryIdentity.relativePath
+    ) {
       return;
     }
     this.entryIdentity = this.target(entry);
