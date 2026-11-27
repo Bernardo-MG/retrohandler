@@ -1,7 +1,7 @@
-import path from 'node:path';
 import type { Readable } from 'node:stream';
 import { throwIfCancelled } from '../async/cancellation';
 import type { ArchiveEntry } from './archive-entry';
+import { archiveExtension } from './archive-formats';
 import type { ArchiveFormatReader, ArchiveReader } from './archive-reader';
 
 /** Select an archive backend in configured priority order. Never retry a failed operation. */
@@ -26,7 +26,7 @@ export class CompositeArchiveReader implements ArchiveReader {
 
   private async readerFor(filename: string, signal?: AbortSignal): Promise<ArchiveFormatReader> {
     throwIfCancelled(signal);
-    const extension = path.extname(filename).toLowerCase();
+    const extension = archiveExtension(filename);
     for (const reader of this.readers) {
       if (!reader.supports(extension)) {
         continue;

@@ -1,7 +1,7 @@
 import type { Stats } from 'node:fs';
-import { lstat, realpath } from 'node:fs/promises';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { sameRegularFileVersion } from '../../components/filesystem/file-version';
+import { RegularFileIdentity } from '../../components/filesystem/regular-file-identity';
 import { childOf } from '../../components/filesystem/paths';
 
 export interface RomTarget {
@@ -14,11 +14,17 @@ export interface RomTarget {
 export class RomSource {
   private constructor(
     readonly target: RomTarget,
-    readonly filename: string,
-    readonly stats: Stats,
-    private readonly canonicalRoot: string,
-    private readonly canonicalFile: string
+    readonly identity: RegularFileIdentity,
+    private readonly canonicalRoot: string
   ) {}
+
+  public get filename(): string {
+    return this.identity.filename;
+  }
+
+  public get stats(): Stats {
+    return this.identity.stats;
+  }
 
   public static async resolve(target: RomTarget): Promise<RomSource> {
     const root = path.resolve(target.source);
@@ -26,31 +32,21 @@ export class RomSource {
     if (!childOf(root, filename)) {
       throw new Error('File is outside collection root.');
     }
-    const stats = await lstat(filename);
-    if (!stats.isFile()) {
-      throw new Error('Not a regular file.');
-    }
+    const identity = await RegularFileIdentity.observe(filename, 'File changed during identification.');
     const canonicalRoot = await realpath(root);
-    const canonicalFile = await realpath(filename);
-    if (!childOf(canonicalRoot, canonicalFile)) {
+    if (!childOf(canonicalRoot, identity.canonicalFilename)) {
       throw new Error('File escapes collection.');
     }
-    const file = new RomSource(target, filename, stats, canonicalRoot, canonicalFile);
+    const file = new RomSource(target, identity, canonicalRoot);
     await file.assertUnchanged();
     return file;
   }
 
   public async assertUnchanged(): Promise<void> {
     const root = await realpath(this.target.source);
-    const file = await realpath(this.filename);
-    const current = await lstat(this.filename);
-    if (
-      root !== this.canonicalRoot ||
-      file !== this.canonicalFile ||
-      !childOf(root, file) ||
-      !sameRegularFileVersion(this.stats, current)
-    ) {
+    if (root !== this.canonicalRoot || !childOf(root, this.identity.canonicalFilename)) {
       throw new Error('File changed during identification.');
     }
+    await this.identity.assertUnchanged('File changed during identification.');
   }
 }

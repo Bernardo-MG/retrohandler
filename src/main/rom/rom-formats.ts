@@ -1,5 +1,6 @@
+import { isArchiveExtension } from '../components/archives';
+
 // A compressed container or disc image is not the underlying ROM.
-const ARCHIVES = new Set(['.zip', '.rar', '.7z']);
 const DIRECT_ROMS = new Set([
   '.nes',
   '.fds',
@@ -40,7 +41,7 @@ const OTHER_SCANNABLE_ROMS = new Set([
 ]);
 
 export function isRomArchive(extension: string): boolean {
-  return ARCHIVES.has(extension.toLowerCase());
+  return isArchiveExtension(extension);
 }
 
 export function isDirectRom(extension: string): boolean {

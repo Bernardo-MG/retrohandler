@@ -3,6 +3,7 @@ import type { Readable } from 'node:stream';
 import { throwIfCancelled } from '../../async/cancellation';
 import { readExactly } from '../../filesystem/binary-reader';
 import type { ArchiveEntry } from '../archive-entry';
+import { ARCHIVE_EXTENSIONS, normalizeArchiveExtension } from '../archive-formats';
 import type { ArchiveLimits } from '../archive-limits';
 import type { ArchiveFormatReader } from '../archive-reader';
 import {
@@ -21,7 +22,7 @@ export class ZipArchiveReader implements ArchiveFormatReader {
   constructor(private readonly limits: ArchiveLimits) {}
 
   public supports(extension: string): boolean {
-    return extension.toLowerCase() === '.zip';
+    return normalizeArchiveExtension(extension) === ARCHIVE_EXTENSIONS.zip;
   }
 
   public async supportsArchive(filename: string, signal?: AbortSignal): Promise<boolean> {

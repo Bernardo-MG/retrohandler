@@ -1,4 +1,5 @@
 import type { ArchiveEntry } from '../archive-entry';
+import { assertArchiveEntryCount, isValidArchiveEntrySize } from '../archive-entry-validation';
 import { DEFAULT_MAX_ARCHIVE_ENTRIES } from '../archive-limits';
 
 /** Parse 7-Zip's technical listing, excluding the archive header. */
@@ -15,9 +16,7 @@ export function parse7ZipListing(output: string): ArchiveEntry[] {
       continue;
     }
     entries.push(entry);
-    if (entries.length > DEFAULT_MAX_ARCHIVE_ENTRIES) {
-      throw new Error('Too many archive entries.');
-    }
+    assertArchiveEntryCount(entries.length, DEFAULT_MAX_ARCHIVE_ENTRIES);
   }
   return entries;
 }
@@ -44,7 +43,7 @@ function readFields(block: string): Map<string, string> {
 
 function readEntrySize(raw: string | undefined): number {
   const size = Number(raw);
-  if (!/^[0-9]+$/.test(raw ?? '') || !Number.isSafeInteger(size) || size < 0) {
+  if (!/^[0-9]+$/.test(raw ?? '') || !isValidArchiveEntrySize(size)) {
     throw new Error('Archive has invalid entry size.');
   }
   return size;

@@ -4,7 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import { throwIfCancelled } from '../async/cancellation';
 import { StreamSizeVerifier } from '../streams/stream-size-verifier';
 import type { ArchiveEntry } from './archive-entry';
-import type { ArchiveReader } from './archive-reader';
+import type { ArchiveSource } from './archive-source';
 
 export interface ExtractOptions {
   signal?: AbortSignal;
@@ -13,8 +13,7 @@ export interface ExtractOptions {
 
 /** Extract an entry to an explicit, new destination without trusting its archive path. */
 export async function extractArchiveEntry(
-  reader: ArchiveReader,
-  filename: string,
+  source: ArchiveSource,
   entry: ArchiveEntry,
   destination: string,
   options: ExtractOptions = {}
@@ -24,10 +23,12 @@ export async function extractArchiveEntry(
     throw new Error('Cannot extract an archive directory.');
   }
   const verifier = new ExtractionVerifier(entry.size, options.onProgress);
-  const source = await reader.open(filename, entry.name, options.signal);
-  await pipeline(source, verifier, createWriteStream(destination, { flags: 'wx' }), {
-    signal: options.signal
-  });
+  await source.readEntry(
+    entry,
+    (stream) =>
+      pipeline(stream, verifier, createWriteStream(destination, { flags: 'wx' }), { signal: options.signal }),
+    options.signal
+  );
 }
 
 class ExtractionVerifier extends Transform {

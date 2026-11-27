@@ -7,6 +7,7 @@ import { buffer } from 'node:stream/consumers';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import {
+  ArchiveSource,
   CompositeArchiveReader,
   extractArchiveEntry,
   SevenZipArchiveReader,
@@ -63,7 +64,8 @@ for (const method of [0, 8]) {
   test(`ZIP reader lists, opens and extracts an exact entry for method ${method}`, async () =>
     fixture(archive(method), async (reader, filename) => {
       assert.equal(await reader.supportsArchive(filename), true);
-      const entries = await reader.list(filename);
+      const source = await ArchiveSource.resolve(reader, filename);
+      const entries = await source.list();
       assert.deepEqual(entries, [
         { name: 'folder/Metadata.xml', size: data.length, directory: false }
       ]);
@@ -71,7 +73,7 @@ for (const method of [0, 8]) {
       assert.deepEqual(await buffer(await reader.open(filename, 'folder/Metadata.xml')), data);
       const target = path.join(path.dirname(filename), 'output.xml');
       const progress: number[] = [];
-      await extractArchiveEntry(reader, filename, entries[0], target, {
+      await extractArchiveEntry(source, entries[0], target, {
         onProgress: (processed, total) => {
           assert.equal(total, data.length);
           progress.push(processed);
@@ -79,7 +81,7 @@ for (const method of [0, 8]) {
       });
       assert.deepEqual(await readFile(target), data);
       assert.equal(progress.at(-1), data.length);
-      await assert.rejects(extractArchiveEntry(reader, filename, entries[0], target), /EEXIST/);
+      await assert.rejects(extractArchiveEntry(source, entries[0], target), /EEXIST/);
       assert.deepEqual(await readFile(target), data);
     }));
 }
@@ -100,9 +102,10 @@ test('ZIP reader rejects invalid local headers, mismatched names and incorrect C
       buffer(await reader.open(filename, 'folder/Metadata.xml')),
       /ZIP integrity check failed/
     );
-    const [entry] = await reader.list(filename);
+    const source = await ArchiveSource.resolve(reader, filename);
+    const [entry] = await source.list();
     await assert.rejects(
-      extractArchiveEntry(reader, filename, entry, path.join(path.dirname(filename), 'output.xml')),
+      extractArchiveEntry(source, entry, path.join(path.dirname(filename), 'output.xml')),
       /ZIP integrity check failed/
     );
   });

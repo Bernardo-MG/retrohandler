@@ -19,3 +19,23 @@ export function selectUniqueEntry<T extends object>(
   }
   return selected === undefined ? { kind: 'missing' } : { kind: 'found', entry: selected };
 }
+
+/** Match a full, literal entry name, without normalizing an archive path. */
+export function selectEntryByName<T extends { name: string }>(
+  entries: Iterable<T>,
+  name: string,
+  validate?: (entry: T) => void
+): EntrySelection<T> {
+  return selectUniqueEntry(entries, (entry) => entry.name === name, validate);
+}
+
+/** Find a file by its basename, including archive directories, without using host path semantics. */
+export function selectEntryByBasename<T extends { name: string; directory: boolean }>(
+  entries: Iterable<T>,
+  basename: string
+): EntrySelection<T> {
+  return selectUniqueEntry(
+    entries,
+    (entry) => !entry.directory && (entry.name === basename || entry.name.endsWith(`/${basename}`))
+  );
+}

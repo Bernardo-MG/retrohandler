@@ -1,37 +1,48 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
-import { extractArchiveEntry, type ArchiveEntry, type ArchiveReader } from '../../src/main/components/archives';
+import {
+  ArchiveSource,
+  extractArchiveEntry,
+  type ArchiveEntry,
+  type ArchiveReader
+} from '../../src/main/components/archives';
 
 const entry: ArchiveEntry = { name: 'folder/Metadata.xml', size: 3, directory: false };
 
-function readerFor(chunks: Buffer[]): ArchiveReader {
-  return {
-    list: async () => [entry],
-    open: async (filename, name) => {
-      assert.equal(filename, 'archive.zip');
-      assert.equal(name, entry.name);
-      return Readable.from(chunks);
-    }
-  };
+async function sourceFor(filename: string, chunks: Buffer[]): Promise<ArchiveSource> {
+  return ArchiveSource.resolve(
+    {
+      list: async () => [entry],
+      open: async (source, name) => {
+        assert.equal(source, filename);
+        assert.equal(name, entry.name);
+        return Readable.from(chunks);
+      }
+    },
+    filename
+  );
 }
 
-async function temporary(run: (destination: string) => Promise<void>): Promise<void> {
+async function temporary(run: (destination: string, filename: string) => Promise<void>): Promise<void> {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'rh-archive-extractor-'));
   try {
-    await run(path.join(folder, 'output.xml'));
+    const filename = path.join(folder, 'archive.zip');
+    await writeFile(filename, 'archive');
+    await run(path.join(folder, 'output.xml'), filename);
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
 }
 
 test('archive extraction forwards the selected name and reports incremental progress', async () =>
-  temporary(async (destination) => {
+  temporary(async (destination, filename) => {
     const progress: number[] = [];
-    await extractArchiveEntry(readerFor([Buffer.from('a'), Buffer.from('bc')]), 'archive.zip', entry, destination, {
+    const source = await sourceFor(filename, [Buffer.from('a'), Buffer.from('bc')]);
+    await extractArchiveEntry(source, entry, destination, {
       onProgress: (processed, total) => {
         assert.equal(total, entry.size);
         progress.push(processed);
@@ -42,44 +53,41 @@ test('archive extraction forwards the selected name and reports incremental prog
   }));
 
 test('archive extraction rejects oversized and truncated streams', async () => {
-  await temporary(async (destination) => {
-    await assert.rejects(
-      extractArchiveEntry(readerFor([Buffer.from('abcd')]), 'archive.zip', entry, destination),
-      /exceeds declared size/
-    );
+  await temporary(async (destination, filename) => {
+    const source = await sourceFor(filename, [Buffer.from('abcd')]);
+    await assert.rejects(extractArchiveEntry(source, entry, destination), /exceeds declared size/);
   });
-  await temporary(async (destination) => {
-    await assert.rejects(
-      extractArchiveEntry(readerFor([Buffer.from('ab')]), 'archive.zip', entry, destination),
-      /Truncated archive entry/
-    );
+  await temporary(async (destination, filename) => {
+    const source = await sourceFor(filename, [Buffer.from('ab')]);
+    await assert.rejects(extractArchiveEntry(source, entry, destination), /Truncated archive entry/);
   });
 });
 
 test('archive extraction rejects directories and cancelled operations before opening a stream', async () =>
-  temporary(async (destination) => {
+  temporary(async (destination, filename) => {
     const reader: ArchiveReader = {
       list: async () => [],
       open: async () => {
         assert.fail('Unexpected stream opening');
       }
     };
+    const source = await ArchiveSource.resolve(reader, filename);
     await assert.rejects(
-      extractArchiveEntry(reader, 'archive.zip', { ...entry, directory: true }, destination),
+      extractArchiveEntry(source, { ...entry, directory: true }, destination),
       /Cannot extract an archive directory/
     );
     const controller = new AbortController();
     controller.abort();
-    await assert.rejects(
-      extractArchiveEntry(reader, 'archive.zip', entry, destination, { signal: controller.signal }),
-      { name: 'AbortError' }
-    );
+    await assert.rejects(extractArchiveEntry(source, entry, destination, { signal: controller.signal }), {
+      name: 'AbortError'
+    });
   }));
 
 test('archive extraction propagates progress callback failures and cancellation', async () => {
-  await temporary(async (destination) => {
+  await temporary(async (destination, filename) => {
+    const source = await sourceFor(filename, [Buffer.from('abc')]);
     await assert.rejects(
-      extractArchiveEntry(readerFor([Buffer.from('abc')]), 'archive.zip', entry, destination, {
+      extractArchiveEntry(source, entry, destination, {
         onProgress: () => {
           throw new Error('Progress callback failed.');
         }
@@ -87,10 +95,11 @@ test('archive extraction propagates progress callback failures and cancellation'
       /Progress callback failed/
     );
   });
-  await temporary(async (destination) => {
+  await temporary(async (destination, filename) => {
     const controller = new AbortController();
+    const source = await sourceFor(filename, [Buffer.from('a'), Buffer.from('bc')]);
     await assert.rejects(
-      extractArchiveEntry(readerFor([Buffer.from('a'), Buffer.from('bc')]), 'archive.zip', entry, destination, {
+      extractArchiveEntry(source, entry, destination, {
         signal: controller.signal,
         onProgress: () => controller.abort()
       }),

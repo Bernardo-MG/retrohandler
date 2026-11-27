@@ -2,7 +2,12 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { LaunchBoxDownloadProgress } from '../../../shared';
-import { extractArchiveEntry, selectUniqueEntry, type ArchiveReader } from '../../components/archives';
+import {
+  ArchiveSource,
+  extractArchiveEntry,
+  selectEntryByBasename,
+  type ArchiveReader
+} from '../../components/archives';
 import { HttpClient, ResponseBodyError } from '../../components/http/http-client';
 import { LaunchBoxCatalogueImporter, type ImportOptions } from './launchbox-catalogue-importer';
 
@@ -104,20 +109,16 @@ export class LaunchBoxCatalogueUpdater {
 
   private async extractArchive(filename: string, xml: string, options: UpdateOptions): Promise<void> {
     assertNotCancelled(options.signal);
-    const entries = await this.archive.list(filename, options.signal);
-    const selected = selectUniqueEntry(
-      entries,
-      (entry) =>
-        !entry.directory &&
-        (entry.name === METADATA_FILENAME || entry.name.endsWith(`/${METADATA_FILENAME}`))
-    );
+    const source = await ArchiveSource.resolve(this.archive, filename, options.signal);
+    const entries = await source.list(options.signal);
+    const selected = selectEntryByBasename(entries, METADATA_FILENAME);
     if (selected.kind === 'ambiguous') {
       throw new Error(`Ambiguous archive: multiple ${METADATA_FILENAME} files.`);
     }
     if (selected.kind === 'missing') {
       throw new Error(`${METADATA_FILENAME} was not found in the archive.`);
     }
-    await extractArchiveEntry(this.archive, filename, selected.entry, xml, {
+    await extractArchiveEntry(source, selected.entry, xml, {
       signal: options.signal,
       onProgress: (processed, total) => options.onProgress?.({ phase: 'extract', processed, total })
     });

@@ -1,6 +1,7 @@
 import type { FileHandle } from 'node:fs/promises';
 import { readExactly } from '../../filesystem/binary-reader';
-import { selectUniqueEntry } from '../archive-entry-selector';
+import { selectEntryByName } from '../archive-entry-selector';
+import { isValidArchiveEntrySize } from '../archive-entry-validation';
 import type { ArchiveLimits } from '../archive-limits';
 import type { CentralDirectory, DirectoryEntry } from './zip-entry';
 
@@ -93,9 +94,9 @@ export function selectEntry(
   entryName: string,
   limits: ArchiveLimits
 ): DirectoryEntry {
-  const selected = selectUniqueEntry(
+  const selected = selectEntryByName(
     directoryEntries(directory, count),
-    (entry) => entry.name === entryName,
+    entryName,
     (entry) => {
       if (!isSupportedEntry(entry, limits)) {
         throw new Error(`Unsupported ${entryName} ZIP entry.`);
@@ -165,7 +166,7 @@ function isSupportedEntry(entry: DirectoryEntry, limits: ArchiveLimits): boolean
     supportedCompression &&
     entry.compressed > 0 &&
     entry.compressed <= limits.maxArchiveBytes &&
-    entry.size <= limits.maxEntryBytes &&
+    isValidArchiveEntrySize(entry.size, limits.maxEntryBytes) &&
     entry.compressed !== ZIP64_MARKER &&
     entry.size !== ZIP64_MARKER &&
     entry.offset !== ZIP64_MARKER

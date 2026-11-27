@@ -1,5 +1,6 @@
 import type { Readable } from 'node:stream';
 import type { ArchiveEntry } from '../archive-entry';
+import { ARCHIVE_EXTENSIONS, normalizeArchiveExtension } from '../archive-formats';
 import type { ArchiveFormatReader } from '../archive-reader';
 import { resolveSevenZipExecutable } from './seven-zip-executable';
 import { parse7ZipListing } from './seven-zip-listing-parser';
@@ -14,7 +15,12 @@ export class SevenZipArchiveReader implements ArchiveFormatReader {
   }
 
   public supports(extension: string): boolean {
-    return ['.zip', '.rar', '.7z'].includes(extension.toLowerCase());
+    const normalized = normalizeArchiveExtension(extension);
+    return (
+      normalized === ARCHIVE_EXTENSIONS.zip ||
+      normalized === ARCHIVE_EXTENSIONS.rar ||
+      normalized === ARCHIVE_EXTENSIONS.sevenZip
+    );
   }
 
   public async list(filename: string, signal?: AbortSignal): Promise<ArchiveEntry[]> {

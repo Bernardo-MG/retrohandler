@@ -1,4 +1,4 @@
-import type { ArchiveReader } from '../../components/archives';
+import { ArchiveFingerprintReader, ArchiveSource, type ArchiveReader } from '../../components/archives';
 import { throwIfCancelled } from '../../components/async/cancellation';
 import type { FileFingerprint } from '../../components/hashing/content-fingerprint';
 import { FingerprintReader } from '../../components/hashing/fingerprint-reader';
@@ -59,17 +59,22 @@ export class DirectRomFingerprint implements RomFingerprintStrategy {
 
 /** Stream the single supported archive entry; never fingerprint the container itself. */
 export class ArchivedRomFingerprint implements RomFingerprintStrategy {
+  private readonly fingerprints: ArchiveFingerprintReader;
+
   constructor(
     private readonly archive: ArchiveReader,
-    private readonly reader: FingerprintReader
-  ) {}
+    reader: FingerprintReader
+  ) {
+    this.fingerprints = new ArchiveFingerprintReader(reader);
+  }
 
   public supports(extension: string): boolean {
     return isRomArchive(extension);
   }
 
   public async fingerprint(file: RomSource, signal?: AbortSignal): Promise<FileFingerprint | null> {
-    const entries = await this.archive.list(file.filename, signal);
+    const source = new ArchiveSource(this.archive, file.identity);
+    const entries = await source.list(signal);
     throwIfCancelled(signal);
     const entry = selectRomEntry(entries);
     if (!entry) {
@@ -77,8 +82,7 @@ export class ArchivedRomFingerprint implements RomFingerprintStrategy {
     }
     await file.assertUnchanged();
     throwIfCancelled(signal);
-    const stream = await this.archive.open(file.filename, entry.name, signal);
-    const hashes = await this.reader.readStream(stream, entry.size, signal);
+    const hashes = await this.fingerprints.read(source, entry, signal);
     return { ...hashes, modifiedMs: file.stats.mtimeMs };
   }
 }
