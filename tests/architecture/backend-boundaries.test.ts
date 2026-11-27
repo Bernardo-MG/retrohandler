@@ -84,7 +84,7 @@ test('backend features and reusable components do not depend on desktop transpor
     path.join(mainRoot, 'scanner.ts'),
     ...packages.flatMap((name) => sourceFiles(path.join(mainRoot, name)))
   ];
-  const forbidden = ['app', 'ipc', 'database', 'main', 'settings/settings-ipc'].map((name) =>
+  const forbidden = ['app', 'desktop', 'ipc', 'database', 'main', 'settings/settings-ipc'].map((name) =>
     path.join(mainRoot, name)
   );
   const violations = files.flatMap((file) =>

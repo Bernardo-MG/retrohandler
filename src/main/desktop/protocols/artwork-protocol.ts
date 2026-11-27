@@ -1,6 +1,12 @@
 import { protocol } from 'electron';
-import type { ArtworkCache } from '../components/artwork/artwork-cache';
-import { isArtworkId } from '../components/artwork/artwork-image';
+import type { ArtworkCache } from '../../components/artwork/artwork-cache';
+import { isArtworkId } from '../../components/artwork/artwork-image';
+
+export function registerArtworkScheme(): void {
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+  ]);
+}
 
 /** Adapt content-addressed artwork to the application's read-only protocol. */
 export function registerArtworkProtocol(artwork: Pick<ArtworkCache, 'read'>): void {
