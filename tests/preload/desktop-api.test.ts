@@ -37,8 +37,6 @@ const requests: [keyof DesktopApi, string, unknown[]][] = [
   ['identifyCollection', 'identity:run', ['source', 'jobId']],
   ['cancelIdentification', 'identity:cancel', ['jobId']],
   ['chooseRomFolder', 'roms:choose-folder', []],
-  ['loadSavedLibrary', 'roms:load-saved', []],
-  ['scanFolder', 'roms:scan', ['folder', 'jobId']],
   ['scanIndexedFolder', 'roms:scan-indexed', ['folder', 'jobId']],
   ['listCollections', 'library:collections', []],
   ['queryLibrary', 'library:query', ['query']],

@@ -1,18 +1,11 @@
 import path from 'node:path';
-import type { CollectionInfo, Rom, ScanResult, ScanWarning } from '../../../shared';
+import type { CollectionInfo, ScanResult, ScanWarning } from '../../../shared';
 import type { CollectionRepository } from '../../contracts/persistence';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 
 type CollectionListRow = Omit<CollectionInfo, 'warningCount'> & {
   warningsJson: string;
-};
-
-type CollectionRow = {
-  root_path: string;
-  scanned_at: string;
-  ignored: number;
-  warnings_json: string;
 };
 
 type RomRow = {
@@ -72,31 +65,6 @@ export class SqliteCollectionRepository implements CollectionRepository {
         }
       }
     });
-  }
-
-  public loadLastScan(): ScanResult | null {
-    const row = this.executor.findOne<CollectionRow>('collections.lastScan');
-    if (!row) {
-      return null;
-    }
-    const games = this.executor.findAll<RomRow>('roms.lastScanGames', row.root_path).map(
-      (rom): Rom => ({
-        id: rom.id,
-        name: rom.name,
-        system: rom.system,
-        relativePath: rom.relative_path,
-        extension: rom.extension,
-        bytes: rom.bytes
-      })
-    );
-    const warnings = JSON.parse(row.warnings_json) as ScanWarning[];
-    return {
-      source: row.root_path,
-      games,
-      ignored: row.ignored,
-      scannedAt: row.scanned_at,
-      warnings
-    };
   }
 
   public listCollections(): CollectionInfo[] {

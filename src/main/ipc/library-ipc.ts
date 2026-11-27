@@ -12,7 +12,6 @@ import { isText } from './validation';
 
 export function registerLibraryIpc(library: LibraryService): void {
   registerScanIpc(library);
-  ipcMain.handle(channels.loadSavedLibrary, () => library.loadLastScan());
   ipcMain.handle(channels.bulkAssignSystem, (_event, selection: unknown, systemOverride: unknown) =>
     library.bulkAssignSystem(parseBulkSelection(selection), parseSystemOverride(systemOverride))
   );

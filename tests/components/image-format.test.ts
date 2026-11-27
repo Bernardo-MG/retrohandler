@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import {
-  createImageId,
-  detectImageFormat,
-  ImageValidationError,
-  isImageId,
-  validateImage
-} from '../../src/main/components/images';
+import { detectImageFormat } from '../../src/main/components/images/image-format';
+import { createImageId, isImageId } from '../../src/main/components/images/image-identifier';
+import { ImageValidationError, validateImage } from '../../src/main/components/images/image-validation';
 
 const samples = [
   { bytes: Buffer.from([0xff, 0xd8, 0xff, 0x01]), extension: 'jpg', mime: 'image/jpeg' },

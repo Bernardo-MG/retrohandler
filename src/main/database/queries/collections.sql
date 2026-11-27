@@ -6,12 +6,6 @@ ON CONFLICT (root_path) DO UPDATE SET
   ignored = excluded.ignored,
   warnings_json = excluded.warnings_json;
 
--- name: lastScan
-SELECT root_path, scanned_at, ignored, warnings_json
-FROM collections
-ORDER BY scanned_at DESC, root_path ASC
-LIMIT 1;
-
 -- name: listCollections
 SELECT
   c.root_path AS rootPath,

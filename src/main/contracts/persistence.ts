@@ -16,7 +16,6 @@ import type { FileFingerprint } from '../components/hashing/content-fingerprint'
 
 export interface ScanRepository {
   saveScan(result: ScanResult): void;
-  loadLastScan(): ScanResult | null;
 }
 
 export interface CollectionRepository extends ScanRepository {

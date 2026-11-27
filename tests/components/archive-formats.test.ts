@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { archiveExtension, isArchiveExtension } from '../../src/main/components/archives';
+import { archiveExtension, isArchiveExtension } from '../../src/main/components/archives/archive-formats';
 
 test('archive extension recognition is case insensitive and does not recognize unrelated formats', () => {
   for (const extension of ['.zip', '.ZIP', '.7z', '.7Z', '.rar', '.RAR']) {

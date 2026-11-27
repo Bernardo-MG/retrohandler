@@ -293,8 +293,6 @@ export interface DesktopApi {
   cancelIdentification(jobId: string): Promise<boolean>;
   onIdentificationProgress(listener: (update: IdentificationUpdate) => void): () => void;
   chooseRomFolder(): Promise<string | null>;
-  loadSavedLibrary(): Promise<ScanResult | null>;
-  scanFolder(folder: string, jobId?: string): Promise<ScanResult>;
   cancelScan(jobId: string): Promise<boolean>;
   onScanProgress(listener: (update: ScanUpdate) => void): () => void;
   scanIndexedFolder(folder: string, jobId: string): Promise<ScanReceipt>;

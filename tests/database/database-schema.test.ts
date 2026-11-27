@@ -338,7 +338,10 @@ test('prepared statement cache reuses static statements and rejects incomplete t
       const registry = new QueryRegistry();
       registry.loadDirectory(path.join(__dirname, '../../src/main/database/queries'));
       const statements = new PreparedStatements(db, registry);
-      assert.equal(statements.get('collections.lastScan'), statements.get('collections.lastScan'));
+      assert.equal(
+        statements.get('collections.listCollections'),
+        statements.get('collections.listCollections')
+      );
       assert.throws(() => statements.get('library.pageGames'), /requires explicit fragments/);
       assert.throws(() => registry.render('library.pageGames', { where: '' }), /Missing SQL fragment/);
       assert.throws(

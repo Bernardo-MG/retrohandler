@@ -25,7 +25,6 @@ describe('Library service repository contracts', () => {
     const service = new FileSystemLibraryService({
       collections: {
         saveScan: () => assert.fail('Unexpected scan'),
-        loadLastScan: () => null,
         listCollections: () => collections
       },
       roms: {
@@ -49,7 +48,6 @@ describe('Library service repository contracts', () => {
     const service = new FileSystemLibraryService({
       collections: {
         saveScan: () => assert.fail('Unexpected scan'),
-        loadLastScan: () => null,
         renameCollection: (...args) => {
           calls.push(['rename', ...args]);
         },

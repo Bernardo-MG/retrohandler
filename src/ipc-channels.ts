@@ -8,7 +8,6 @@ export const channels = {
   getStorageInfo: 'settings:storage',
   cleanupArtworkCache: 'settings:cleanup-artwork',
 
-  loadSavedLibrary: 'roms:load-saved',
   listCollections: 'library:collections',
   queryLibrary: 'library:query',
   listSystems: 'library:systems',
@@ -17,7 +16,6 @@ export const channels = {
   bulkAssignSystem: 'library:bulk-system',
 
   chooseRomFolder: 'roms:choose-folder',
-  scanFolder: 'roms:scan',
   scanIndexedFolder: 'roms:scan-indexed',
   cancelScan: 'roms:cancel',
   onScanProgress: 'roms:progress',

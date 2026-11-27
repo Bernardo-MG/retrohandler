@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import type { DatabaseHandle, Statement } from '../../src/main/database/sql/types';
 import { openTestRepositories } from '../helpers/database';
-import type { ScanResult } from '../../src/shared';
+import type { LibraryQuery, ScanResult } from '../../src/shared';
 
 // Node 22+ includes a SQLite implementation that can exercise the real SQL,
 // without requiring the Electron-specific better-sqlite3 native binary.
@@ -61,6 +61,16 @@ function result(source: string, names: string[], warnings: ScanResult['warnings'
   };
 }
 
+const query = (source: string): LibraryQuery => ({
+  source,
+  system: null,
+  search: '',
+  sort: 'name',
+  descending: false,
+  offset: 0,
+  limit: 20
+});
+
 test('SQLite saves and restores a collection across DB reopen', { skip: !DatabaseSync }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-db-'));
   const file = path.join(root, 'app', 'library.sqlite');
@@ -69,12 +79,13 @@ test('SQLite saves and restores a collection across DB reopen', { skip: !Databas
     first.collections.saveScan(result('C:\\roms', ['Game A', 'Game B']));
     first.database.close();
     const second = openTestRepositories(file, testDatabase);
-    const restored = second.collections.loadLastScan();
+    const restored = second.roms.queryLibrary(query('C:\\roms'));
     assert.deepEqual(
-      restored?.games.map((game) => game.name),
+      restored.items.map((game) => game.name),
       ['Game A', 'Game B']
     );
-    assert.equal(restored?.source, 'C:\\roms');
+    assert.equal(restored.total, 2);
+    assert.equal(second.collections.listCollections()[0].rootPath, 'C:\\roms');
     second.database.close();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -93,16 +104,16 @@ test(
         result('/roms', ['A'], [{ relativePath: 'unreadable', message: 'permission denied' }])
       );
       assert.deepEqual(
-        store.collections.loadLastScan()?.games.map((g) => g.name),
+        store.roms.queryLibrary(query('/roms')).items.map((g) => g.name),
         ['A', 'B']
       );
       store.collections.saveScan(result('/roms', ['A', 'C']));
       assert.deepEqual(
-        store.collections.loadLastScan()?.games.map((g) => g.name),
+        store.roms.queryLibrary(query('/roms')).items.map((g) => g.name),
         ['A', 'C']
       );
       store.collections.saveScan(result('/roms', ['A', 'C']));
-      assert.equal(store.collections.loadLastScan()?.games.length, 2);
+      assert.equal(store.roms.queryLibrary(query('/roms')).total, 2);
       store.database.close();
     } finally {
       await rm(root, { recursive: true, force: true });

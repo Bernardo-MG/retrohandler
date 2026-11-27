@@ -18,12 +18,6 @@ DELETE FROM rom_files
 WHERE source_root = ?
   AND relative_path = ?;
 
--- name: lastScanGames
-SELECT id, name, system, relative_path, extension, bytes
-FROM rom_files
-WHERE source_root = ?
-ORDER BY system, name, relative_path;
-
 -- name: findTarget
 SELECT source_root AS source, relative_path AS relativePath, name
 FROM rom_files

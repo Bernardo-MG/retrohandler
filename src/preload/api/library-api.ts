@@ -3,7 +3,6 @@ import type { IpcClient } from '../ipc/ipc-client';
 
 type LibraryApi = Pick<
   DesktopApi,
-  | 'loadSavedLibrary'
   | 'listCollections'
   | 'queryLibrary'
   | 'listSystems'
@@ -14,7 +13,6 @@ type LibraryApi = Pick<
 
 export function createLibraryApi(client: IpcClient): LibraryApi {
   return {
-    loadSavedLibrary: () => client.invoke('loadSavedLibrary'),
     listCollections: () => client.invoke('listCollections'),
     queryLibrary: (query) => client.invoke('queryLibrary', query),
     listSystems: (source) => client.invoke('listSystems', source),

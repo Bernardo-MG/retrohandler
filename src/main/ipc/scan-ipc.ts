@@ -1,6 +1,6 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { channels } from '../../ipc-channels';
-import type { ScanReceipt, ScanResult } from '../../shared';
+import type { ScanReceipt } from '../../shared';
 import type { LibraryService } from '../services/library';
 import { RendererJobs, sendProgress } from './renderer-jobs';
 import { isCollectionPath, isJobId } from './validation';
@@ -16,29 +16,24 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
     return result.canceled ? null : (result.filePaths[0] ?? null);
   }
 
-  async function scan(event: IpcMainInvokeEvent, folder: unknown, jobId?: unknown): Promise<ScanResult> {
-    if (!isCollectionPath(folder)) {
-      throw new Error('Invalid folder.');
-    }
-    if (jobId !== undefined && !isJobId(jobId)) {
-      throw new Error('Invalid scan ID.');
-    }
-    const sender = event.sender;
-    const id = typeof jobId === 'string' ? jobId : 'legacy';
-    return jobs.run(sender, id, (signal) =>
-      library.scanFolder(folder, {
-        signal,
-        onProgress: (progress) => sendProgress(sender, channels.onScanProgress, { jobId: id, progress })
-      })
-    );
-  }
-
   async function scanIndexed(
     event: IpcMainInvokeEvent,
     folder: unknown,
     jobId: unknown
   ): Promise<ScanReceipt> {
-    const result = await scan(event, folder, jobId);
+    if (!isCollectionPath(folder)) {
+      throw new Error('Invalid folder.');
+    }
+    if (!isJobId(jobId)) {
+      throw new Error('Invalid scan ID.');
+    }
+    const sender = event.sender;
+    const result = await jobs.run(sender, jobId, (signal) =>
+      library.scanFolder(folder, {
+        signal,
+        onProgress: (progress) => sendProgress(sender, channels.onScanProgress, { jobId, progress })
+      })
+    );
     return {
       source: result.source,
       gameCount: result.games.length,
@@ -51,7 +46,6 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
   }
 
   ipcMain.handle(channels.chooseRomFolder, chooseFolder);
-  ipcMain.handle(channels.scanFolder, scan);
   ipcMain.handle(channels.scanIndexedFolder, scanIndexed);
   ipcMain.handle(channels.cancelScan, cancel);
 }

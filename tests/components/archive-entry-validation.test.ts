@@ -4,7 +4,7 @@ import {
   assertArchiveEntryCount,
   assertArchiveEntrySize,
   isValidArchiveEntrySize
-} from '../../src/main/components/archives';
+} from '../../src/main/components/archives/archive-entry-validation';
 
 test('archive entry sizes are nonnegative safe integers within the configured maximum', () => {
   assert.equal(isValidArchiveEntrySize(0, 0), true);

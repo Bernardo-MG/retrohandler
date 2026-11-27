@@ -4,7 +4,7 @@ import {
   selectEntryByBasename,
   selectEntryByName,
   selectUniqueEntry
-} from '../../src/main/components/archives';
+} from '../../src/main/components/archives/archive-entry-selector';
 
 const nested = { name: 'folder/Metadata.xml', size: 12, directory: false };
 const root = { ...nested, name: 'Metadata.xml' };

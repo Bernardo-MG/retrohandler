@@ -19,10 +19,6 @@ export class ContentFingerprint {
   private readonly sha1 = createHash('sha1');
   private bytes = 0;
 
-  public get size(): number {
-    return this.bytes;
-  }
-
   public update(content: Uint8Array): void {
     this.crc.update(content);
     this.md5.update(content);

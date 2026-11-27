@@ -17,7 +17,6 @@ import type {
 
 export interface LibraryService {
   scanFolder(folder: string, options?: ScanOptions): Promise<ScanResult>;
-  loadLastScan(): Promise<ScanResult | null>;
   listCollections(): Promise<CollectionInfo[]>;
   queryLibrary(query: LibraryQuery): Promise<LibraryPage>;
   listSystems(source: string | null): Promise<SystemCount[]>;
@@ -80,9 +79,5 @@ export class FileSystemLibraryService implements LibraryService {
       throw new Error('Collection storage unavailable.');
     }
     this.repositories.collections.removeCollection(source);
-  }
-
-  public async loadLastScan(): Promise<ScanResult | null> {
-    return this.repositories.collections?.loadLastScan() ?? null;
   }
 }

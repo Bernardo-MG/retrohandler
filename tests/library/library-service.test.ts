@@ -12,9 +12,6 @@ class RecordingStore implements ScanRepository {
   saveScan(result: ScanResult) {
     this.scans.push(result);
   }
-  loadLastScan() {
-    return this.scans.at(-1) ?? null;
-  }
 }
 
 async function fixture(): Promise<string> {
@@ -23,15 +20,14 @@ async function fixture(): Promise<string> {
   return root;
 }
 
-test('completed scan is persisted and can be loaded', async () => {
+test('completed scan is persisted', async () => {
   const root = await fixture();
   try {
     const store = new RecordingStore();
     const library = new FileSystemLibraryService({ collections: store });
-    assert.equal(await library.loadLastScan(), null);
     const result = await library.scanFolder(root);
     assert.equal(result.games.length, 1);
-    assert.deepEqual(await library.loadLastScan(), result);
+    assert.deepEqual(store.scans, [result]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -46,8 +42,7 @@ test('cancellation does not replace a saved collection', async () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(library.scanFolder(root, { signal: controller.signal }), { name: 'AbortError' });
-    assert.equal(store.scans.length, 1);
-    assert.deepEqual(await library.loadLastScan(), previous);
+    assert.deepEqual(store.scans, [previous]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -60,19 +55,17 @@ test('invalid scan path does not overwrite persisted library', async () => {
     const library = new FileSystemLibraryService({ collections: store });
     const previous = await library.scanFolder(root);
     await assert.rejects(library.scanFolder(path.join(root, 'missing')));
-    assert.equal(store.scans.length, 1);
-    assert.deepEqual(await library.loadLastScan(), previous);
+    assert.deepEqual(store.scans, [previous]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test('without a store scans remain backward-compatible', async () => {
+test('scans return results without a persistence store', async () => {
   const root = await fixture();
   try {
     const library = new FileSystemLibraryService();
     assert.equal((await library.scanFolder(root)).games.length, 1);
-    assert.equal(await library.loadLastScan(), null);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
