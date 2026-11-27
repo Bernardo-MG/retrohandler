@@ -6,21 +6,21 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { parse7ZipListing } from '../../src/main/components/archives/seven-zip-reader';
-import type { ArchiveReader, ArchiveMember } from '../../src/main/components/archives/archive-reader';
+import type { ArchiveReader, ArchiveEntry } from '../../src/main/components/archives/archive-reader';
 import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
-import { selectRomMember } from '../../src/main/identification/rom/archive-rom-selection';
+import { selectRomEntry } from '../../src/main/identification/rom/archive-rom-selection';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
 import { identificationService } from '../helpers/identification';
 import type { IdentificationResult, LibraryEntry } from '../../src/shared';
 
 const data = Buffer.from('synthetic archive ROM');
 const fingerprintReader = new FingerprintReader();
-const member: ArchiveMember = { name: 'Game (USA).nes', size: data.length, directory: false };
-function mockArchive(members: ArchiveMember[], stream = data): ArchiveReader {
-  return { list: async () => members, open: () => Readable.from([stream]) };
+const romEntry: ArchiveEntry = { name: 'Game (USA).nes', size: data.length, directory: false };
+function mockArchive(entries: ArchiveEntry[], stream = data): ArchiveReader {
+  return { list: async () => entries, open: () => Readable.from([stream]) };
 }
 
-test('7-Zip technical listing parses members and excludes archive header', () => {
+test('7-Zip technical listing parses entries and excludes archive header', () => {
   const result = parse7ZipListing(
     'Path = sample.zip\nType = zip\n----------\nPath = docs\nFolder = +\nSize = 0\n\nPath = Game.nes\nFolder = -\nSize = 14\n'
   );
@@ -31,10 +31,10 @@ test('7-Zip technical listing parses members and excludes archive header', () =>
 });
 
 test('single-ROM selection is case-insensitive; multi-ROM and non-ROM archives are not misidentified', () => {
-  assert.equal(selectRomMember([{ ...member, name: 'Game.GBA' }])?.name, 'Game.GBA');
-  assert.equal(selectRomMember([member, { ...member, name: 'Other.nes' }]), null);
-  assert.equal(selectRomMember([{ ...member, name: 'readme.txt' }]), null);
-  assert.throws(() => selectRomMember([{ ...member, size: 2 ** 31 }]), /size limit/);
+  assert.equal(selectRomEntry([{ ...romEntry, name: 'Game.GBA' }])?.name, 'Game.GBA');
+  assert.equal(selectRomEntry([romEntry, { ...romEntry, name: 'Other.nes' }]), null);
+  assert.equal(selectRomEntry([{ ...romEntry, name: 'readme.txt' }]), null);
+  assert.throws(() => selectRomEntry([{ ...romEntry, size: 2 ** 31 }]), /size limit/);
 });
 
 test('fingerprintReader.readStream verifies decompressed byte count and content fingerprints', async () => {
@@ -79,7 +79,7 @@ test('ZIP, RAR and 7z use uncompressed ROM hashes for DAT matching', async () =>
         saved = [...results];
       }
     };
-    const counts = await identificationService(store, mockArchive([member])).identifyCollection(root);
+    const counts = await identificationService(store, mockArchive([romEntry])).identifyCollection(root);
     assert.equal(counts.verified, 3);
     assert.equal(saved.length, 3);
     assert.ok(saved.every((row) => row.fingerprint?.size === data.length));
@@ -115,7 +115,7 @@ test('archive with multiple candidate ROMs remains unsupported', async () => {
     };
     const counts = await identificationService(
       store,
-      mockArchive([member, { ...member, name: 'Other.nes' }])
+      mockArchive([romEntry, { ...romEntry, name: 'Other.nes' }])
     ).identifyCollection(root);
     assert.equal(counts.unsupported, 1);
     assert.equal(saved[0].fingerprint, null);
@@ -151,7 +151,7 @@ test('cancelling during archived ROM hashing does not commit partial results', a
       }
     };
     const reader: ArchiveReader = {
-      list: async () => [member],
+      list: async () => [romEntry],
       open: () => {
         controller.abort();
         return Readable.from([data]);

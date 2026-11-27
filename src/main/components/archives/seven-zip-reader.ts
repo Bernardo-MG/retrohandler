@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { PassThrough, type Readable } from 'node:stream';
 import { throwIfCancelled } from '../async/cancellation';
-import { MAX_ARCHIVE_MEMBERS, type ArchiveMember, type ArchiveReader } from './archive-reader';
+import { MAX_ARCHIVE_ENTRIES, type ArchiveEntry, type ArchiveReader } from './archive-reader';
 
 const MAX_LISTING_BYTES = 16 * 1024 * 1024;
 const MAX_DIAGNOSTIC_LENGTH = 2048;
@@ -13,14 +13,14 @@ type ArchiveProcess = ChildProcessByStdio<null, Readable, Readable>;
 export class SevenZipReader implements ArchiveReader {
   constructor(private readonly executable = resolveExecutable()) {}
 
-  public async list(filename: string, signal?: AbortSignal): Promise<ArchiveMember[]> {
+  public async list(filename: string, signal?: AbortSignal): Promise<ArchiveEntry[]> {
     const output = await this.readListing(filename, signal);
     return parse7ZipListing(output);
   }
 
-  public open(filename: string, member: string, signal?: AbortSignal): Readable {
-    // Disable wildcard expansion so an archive member is matched literally.
-    const child = this.start(['x', '-so', '-bd', '-y', '-spd', '--', filename, member], signal);
+  public open(filename: string, entryName: string, signal?: AbortSignal): Readable {
+    // Disable wildcard expansion so an archive entry is matched literally.
+    const child = this.start(['x', '-so', '-bd', '-y', '-spd', '--', filename, entryName], signal);
     return streamExtraction(child);
   }
 
@@ -159,33 +159,33 @@ function completeExtraction(output: PassThrough, code: number | null, diagnostic
 }
 
 /** Parse 7-Zip's technical listing, excluding the archive header. */
-export function parse7ZipListing(output: string): ArchiveMember[] {
+export function parse7ZipListing(output: string): ArchiveEntry[] {
   const divider = /^----------\r?$/m.exec(output);
   if (!divider) {
     throw new Error('Invalid 7-Zip archive listing.');
   }
   const content = output.slice(divider.index + divider[0].length);
-  const entries: ArchiveMember[] = [];
+  const entries: ArchiveEntry[] = [];
   for (const block of content.split(/\r?\n\s*\r?\n/)) {
-    const member = parseMember(block);
-    if (!member) {
+    const entry = parseEntry(block);
+    if (!entry) {
       continue;
     }
-    entries.push(member);
-    if (entries.length > MAX_ARCHIVE_MEMBERS) {
+    entries.push(entry);
+    if (entries.length > MAX_ARCHIVE_ENTRIES) {
       throw new Error('Too many archive entries.');
     }
   }
   return entries;
 }
 
-function parseMember(block: string): ArchiveMember | null {
+function parseEntry(block: string): ArchiveEntry | null {
   const fields = readFields(block);
   const name = fields.get('Path');
   if (name === undefined) {
     return null;
   }
-  return { name, size: readMemberSize(fields.get('Size')), directory: fields.get('Folder') === '+' };
+  return { name, size: readEntrySize(fields.get('Size')), directory: fields.get('Folder') === '+' };
 }
 
 function readFields(block: string): Map<string, string> {
@@ -199,10 +199,10 @@ function readFields(block: string): Map<string, string> {
   return fields;
 }
 
-function readMemberSize(raw: string | undefined): number {
+function readEntrySize(raw: string | undefined): number {
   const size = Number(raw);
   if (!/^[0-9]+$/.test(raw ?? '') || !Number.isSafeInteger(size) || size < 0) {
-    throw new Error('Archive has invalid member size.');
+    throw new Error('Archive has invalid entry size.');
   }
   return size;
 }

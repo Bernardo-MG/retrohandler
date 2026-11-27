@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream';
 
-export interface ArchiveMember {
+export interface ArchiveEntry {
   name: string;
   size: number;
   directory: boolean;
@@ -8,8 +8,8 @@ export interface ArchiveMember {
 
 /** Read archive contents without extracting files into the collection. */
 export interface ArchiveReader {
-  list(filename: string, signal?: AbortSignal): Promise<ArchiveMember[]>;
-  open(filename: string, member: string, signal?: AbortSignal): Readable;
+  list(filename: string, signal?: AbortSignal): Promise<ArchiveEntry[]>;
+  open(filename: string, entryName: string, signal?: AbortSignal): Readable;
 }
 
-export const MAX_ARCHIVE_MEMBERS = 10000;
+export const MAX_ARCHIVE_ENTRIES = 10000;
