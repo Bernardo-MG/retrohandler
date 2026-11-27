@@ -1,7 +1,7 @@
 {
   "src/main/desktop/application.ts": "Requires Electron runtime integration",
   "src/main/desktop/composition.ts": "Requires Electron runtime integration",
-  "src/main/desktop/protocols/artwork-protocol.ts": "Requires Electron runtime integration",
+  "src/main/desktop/protocols/image-protocol.ts": "Requires Electron runtime integration",
   "src/main/desktop/verification/package-smoke.ts": "Requires Electron runtime integration",
   "src/main/desktop/verification/renderer-verifier.ts": "Requires Electron runtime integration",
   "src/main/desktop/window/renderer-loader.ts": "Requires Electron runtime integration",

@@ -1,8 +1,8 @@
 import { app, BrowserWindow, nativeTheme } from 'electron';
-import { createCore, registerDesktopFeatures } from './composition';
+import { ARTWORK_PROTOCOL_OPTIONS, createCore, registerDesktopFeatures } from './composition';
 import { createWindow } from './window/window-manager';
 import { preparePackageSmoke } from './verification/package-smoke';
-import { registerArtworkScheme } from './protocols/artwork-protocol';
+import { registerImageScheme } from './protocols/image-protocol';
 
 function startDesktop(): void {
   const core = createCore(app.getPath('userData'));
@@ -49,7 +49,7 @@ export function startApplication(): void {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.retrohandler.desktop');
   }
-  registerArtworkScheme();
+  registerImageScheme(ARTWORK_PROTOCOL_OPTIONS.scheme);
 
   // A single instance owns settings and artwork cleanup.
   if (app.isPackaged && process.argv.includes('--retrohandler-package-smoke')) {

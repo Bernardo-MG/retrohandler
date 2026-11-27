@@ -13,7 +13,7 @@ import { MAX_ROM_BYTES } from '../identification/rom/archive-rom-selection';
 import { FingerprintReader } from '../components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../contracts/persistence';
 import { FileSystemLibraryService } from '../services/library';
-import { registerArtworkProtocol } from './protocols/artwork-protocol';
+import { registerImageProtocol, type ImageProtocolOptions } from './protocols/image-protocol';
 import {
   openDatabase,
   createCollectionRepository,
@@ -40,6 +40,12 @@ import { ExportService } from '../export';
 import { RetroPieExporter } from '../export/retropie/retropie-exporter';
 import { SettingsStore } from '../settings/settings-store';
 import { registerSettingsIpc } from '../settings/settings-ipc';
+
+export const ARTWORK_PROTOCOL_OPTIONS: Readonly<ImageProtocolOptions> = {
+  scheme: 'retro-art',
+  hostname: 'cover',
+  maxAgeSeconds: 86400
+};
 
 function createIdentificationService(repository: IdentificationRepository): IdentificationService {
   const reader = new FingerprintReader();
@@ -100,5 +106,5 @@ export function registerDesktopFeatures(core: ReturnType<typeof createCore>): vo
   const libretro = new LibretroProvider(artwork, new LibretroClient(http));
   registerMetadataIpc({ metadata: metadataService, artwork: libretro, launchBox });
   registerExportIpc(new ExportService(library, new RetroPieExporter(artwork)));
-  registerArtworkProtocol(artwork);
+  registerImageProtocol(artwork, ARTWORK_PROTOCOL_OPTIONS);
 }
