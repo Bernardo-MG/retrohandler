@@ -1,20 +1,20 @@
 import { useRef, useState } from 'react';
 import type { AppSettings, ScanReceipt, SettingsSnapshot } from '../../shared';
-import { useIdentificationController } from '../features/identification/useIdentificationController';
-import { useLibraryController } from '../features/library/useLibraryController';
-import { useScanController } from '../features/scanner/useScanController';
-import { usePreferencesController } from '../features/settings/usePreferencesController';
+import { useIdentification } from '../features/identification/useIdentification';
+import { useLibrary } from '../features/library/useLibrary';
+import { useScan } from '../features/scanner/useScan';
+import { usePreferences } from '../features/settings/usePreferences';
 
 /** Composes independent feature workflows and owns only application-level UI state. */
-export function useAppController(initial: SettingsSnapshot) {
+export function useApp(initial: SettingsSnapshot) {
   const [error, setError] = useState(initial.warning ?? '');
   const [showSettings, setShowSettings] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const settingsButton = useRef<HTMLButtonElement>(null);
-  const library = useLibraryController(initial.settings.library, setError);
-  const preferences = usePreferencesController(initial.settings, library.preferences, library.ready, setError);
-  const scanner = useScanController(scanCompleted, setError);
-  const identification = useIdentificationController(library.preferences.selected, library.refresh, setError);
+  const library = useLibrary(initial.settings.library, setError);
+  const preferences = usePreferences(initial.settings, library.preferences, library.ready, setError);
+  const scanner = useScan(scanCompleted, setError);
+  const identification = useIdentification(library.preferences.selected, library.refresh, setError);
 
   async function scanCompleted(receipt: ScanReceipt) {
     await library.reloadCollections();
@@ -41,4 +41,4 @@ export function useAppController(initial: SettingsSnapshot) {
   };
 }
 
-export type AppController = ReturnType<typeof useAppController>;
+export type AppViewModel = ReturnType<typeof useApp>;

@@ -5,13 +5,13 @@ import { LibraryFilters } from './LibraryFilters';
 import { LibraryTable } from './LibraryTable';
 import { LibraryGallery } from './LibraryGallery';
 import { PAGE_SIZE } from './library-model';
-import type { LibraryController } from './useLibraryController';
+import type { LibraryViewModel } from './useLibrary';
 
 const IDENTIFICATION_STATUSES: readonly IdentificationStatus[] = [
   'pending', 'verified', 'probable', 'ambiguous', 'unknown', 'unsupported', 'error'
 ];
 
-export function LibraryWorkspace({ library, metadataPreferences }: { library: LibraryController; metadataPreferences: MetadataPreferences }) {
+export function LibraryWorkspace({ library, metadataPreferences }: { library: LibraryViewModel; metadataPreferences: MetadataPreferences }) {
   const { preferences, selectedInfo, page, systems, offset, loading, details } = library;
   const { search, system, sort, descending, identification, view } = preferences;
   const Games = view === 'list' ? LibraryTable : LibraryGallery;

@@ -1,14 +1,14 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { SUGGESTED_SYSTEMS } from '../../utils/suggested-systems';
-import { useMetadataController, type MetadataController, type MetadataPanelProps } from './useMetadataController';
+import { useMetadata, type MetadataViewModel, type MetadataPanelProps } from './useMetadata';
 
 export function MetadataPanel(props: MetadataPanelProps) {
-  const model = useMetadataController(props);
+  const model = useMetadata(props);
   return <MetadataPanelView model={model} />;
 }
 
-export function MetadataPanelView({ model }: { model: MetadataController }) {
+export function MetadataPanelView({ model }: { model: MetadataViewModel }) {
   const {
     entry, onClose, preferences, showArtworkSearch, toggleArtworkSearch, form, systemOverride,
     query, results, imported, coverQuery, covers, updating, progressText, busy, error, notice,

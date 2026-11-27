@@ -121,3 +121,31 @@ test('all renderer modules parse and their relative imports resolve after moving
   }
   assert.deepEqual(violations, []);
 });
+
+test('framework-independent controllers cannot reach React, Electron, DOM globals or the preload adapter', () => {
+  const files = sourceFiles(root);
+  const controllers = files.filter(file => /(?:[A-Z][A-Za-z]*Controller|controller-state)\.ts$/.test(file));
+  assert.ok(controllers.length >= 9, 'feature controllers must be independently testable');
+  const violations: string[] = [];
+  const visited = new Set<string>();
+  function inspect(file: string): void {
+    if (visited.has(file)) return;
+    visited.add(file);
+    if (/\b(?:window|document)\s*\./.test(readFileSync(file, 'utf8'))) violations.push(referenceName(file, 'DOM access'));
+    for (const reference of imports(file)) {
+      if (!reference.startsWith('.')) {
+        violations.push(referenceName(file, `external dependency ${reference}`));
+        continue;
+      }
+      const target = path.resolve(path.dirname(file), reference);
+      if (target === path.resolve(root, '../shared')) continue;
+      if (!inside(root, target) || target === api.slice(0, -3) || /(?:^|[/\\])use[A-Z]/.test(target) || !existsSync(`${target}.ts`)) {
+        violations.push(referenceName(file, `integration dependency ${reference}`));
+      } else {
+        inspect(`${target}.ts`);
+      }
+    }
+  }
+  controllers.forEach(inspect);
+  assert.deepEqual(violations, []);
+});

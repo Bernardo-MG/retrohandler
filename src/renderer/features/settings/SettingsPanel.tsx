@@ -1,14 +1,14 @@
 import React from 'react';
 import type { AppSettings, LibraryPreferences } from '../../../shared';
 import { formatSize } from '../../utils/format-size';
-import { useSettingsController, type SettingsController, type SettingsPanelProps } from './useSettingsController';
+import { useSettings, type SettingsViewModel, type SettingsPanelProps } from './useSettings';
 
 export function SettingsPanel(props: SettingsPanelProps) {
-  const model = useSettingsController(props);
+  const model = useSettings(props);
   return <SettingsPanelView model={model} />;
 }
 
-export function SettingsPanelView({ model }: { model: SettingsController }) {
+export function SettingsPanelView({ model }: { model: SettingsViewModel }) {
   const {
     draft, collections, onClose, storage, storageLoading, storageError, notice, error, busy, confirmReset, panel, mappings,
     updateLibrary, changeCollection, clearFilters, keyDown, chooseDestination, removeMapping,

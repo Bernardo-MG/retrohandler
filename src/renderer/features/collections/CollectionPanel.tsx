@@ -1,14 +1,14 @@
 import React from 'react';
 import { Folder, Pencil, Settings2, Trash2, X } from 'lucide-react';
 import { SUGGESTED_SYSTEMS } from '../../utils/suggested-systems';
-import { useCollectionController, type CollectionController, type CollectionPanelProps } from './useCollectionController';
+import { useCollection, type CollectionViewModel, type CollectionPanelProps } from './useCollection';
 
 export function CollectionPanel(props: CollectionPanelProps) {
-  const model = useCollectionController(props);
+  const model = useCollection(props);
   return <CollectionPanelView model={model} />;
 }
 
-export function CollectionPanelView({ model }: { model: CollectionController }) {
+export function CollectionPanelView({ model }: { model: CollectionViewModel }) {
   const {
     collections, selected, busy, select, editing, assigning, label, system, saving, error, totalGames,
     setLabel, setSystem, beginAssignment, beginRename, cancelAssignment, cancelRename,

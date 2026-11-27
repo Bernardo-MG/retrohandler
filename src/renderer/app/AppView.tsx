@@ -6,9 +6,9 @@ import { ScanStatus } from '../features/scanner/ScanStatus';
 import { IdentificationStatus } from '../features/identification/IdentificationStatus';
 import { RetroPieExport } from '../features/export/RetroPieExport';
 import { SettingsPanel } from '../features/settings/SettingsPanel';
-import type { AppController } from './useAppController';
+import type { AppViewModel } from './useApp';
 
-export function AppView({ model }: { model: AppController }) {
+export function AppView({ model }: { model: AppViewModel }) {
   const { library, scanner, identification, preferences, error, dismissError, showExport, closeExport, showSettings, closeSettings, saveSettings } = model;
   return <div className="app">
     <Sidebar model={model} />
@@ -43,7 +43,7 @@ export function AppView({ model }: { model: AppController }) {
   </div>;
 }
 
-function Sidebar({ model }: { model: AppController }) {
+function Sidebar({ model }: { model: AppViewModel }) {
   const { library, scanner, identification, settingsButton, showSettings, showExport, openSettings } = model;
   return <aside className="sidebar">
     <div className="brand">
@@ -76,7 +76,7 @@ function Sidebar({ model }: { model: AppController }) {
   </aside>;
 }
 
-function WorkspaceHeader({ model }: { model: AppController }) {
+function WorkspaceHeader({ model }: { model: AppViewModel }) {
   const { library, scanner, identification, showSettings, openExport } = model;
   return <header>
     <div>
@@ -103,7 +103,7 @@ function WorkspaceHeader({ model }: { model: AppController }) {
   </header>;
 }
 
-function LibrarySummary({ library }: { library: AppController['library'] }) {
+function LibrarySummary({ library }: { library: AppViewModel['library'] }) {
   const { statistics, selectedInfo } = library;
   return <>
     <section className="stats">

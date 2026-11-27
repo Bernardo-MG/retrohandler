@@ -1,12 +1,12 @@
 import React from 'react';
-import { useExportController, type ExportController, type ExportPanelProps } from './useExportController';
+import { useExport, type ExportViewModel, type ExportPanelProps } from './useExport';
 
 export function RetroPieExport(props: ExportPanelProps) {
-  const model = useExportController(props);
+  const model = useExport(props);
   return <RetroPieExportView model={model} />;
 }
 
-export function RetroPieExportView({ model }: { model: ExportController }) {
+export function RetroPieExportView({ model }: { model: ExportViewModel }) {
   const {
     source, onClose, destination, includeArtwork, mappings, preview, completed,
     busy, error, done, changeArtwork, changeMapping, choose, requestPreview, run
