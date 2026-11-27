@@ -9,7 +9,8 @@ import {
   assertSafeDirectory,
   childOf,
   ensureSafeDirectory,
-  overlaps
+  overlaps,
+  resolveSafeDirectory
 } from '../../src/main/components/filesystem/paths';
 
 const writer = new FileWriter('test');
@@ -22,6 +23,24 @@ async function fixture(run: (root: string) => Promise<void>): Promise<void> {
     await rm(root, { recursive: true, force: true });
   }
 }
+
+test('directory resolution accepts temporary aliases and missing descendants', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-filesystem-alias-'));
+  try {
+    const canonical = await realpath(root);
+    assert.equal(await resolveSafeDirectory(root), canonical);
+    assert.equal(await resolveSafeDirectory(path.join(root, 'missing')), path.join(canonical, 'missing'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('directory resolution rejects junctions and symbolic links in ancestors', async () =>
+  fixture(async (root) => {
+    const link = path.join(root, 'redirect');
+    await symlink(root, link, process.platform === 'win32' ? 'junction' : 'dir');
+    await assert.rejects(resolveSafeDirectory(path.join(link, 'missing')), /redirected/);
+  }));
 
 test('containment rejects equal paths, siblings and parent traversal', () => {
   const root = path.resolve('root');

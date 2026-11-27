@@ -1,6 +1,7 @@
 import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { statIfExists } from './file-reader';
+import { sameFile } from './file-version';
 
 export const childOf = (parent: string, child: string) => {
   const rel = path.relative(parent, child);
@@ -10,22 +11,39 @@ export const overlaps = (a: string, b: string) => a === b || childOf(a, b) || ch
 
 const canonicalKey = (p: string) =>
   process.platform === 'win32' ? path.normalize(p).toLowerCase() : path.normalize(p);
-export async function assertSafeDirectory(folder: string): Promise<void> {
-  // Check every ancestor, including those above a not-yet-created folder.
-  for (let current = folder; ; current = path.dirname(current)) {
-    const st = await statIfExists(current);
-    if (
-      st &&
-      (!st.isDirectory() ||
-        st.isSymbolicLink() ||
-        canonicalKey(await realpath(current)) !== canonicalKey(current))
-    ) {
-      throw new Error(`Directory redirected or not a directory: ${current}`);
-    }
-    if (path.dirname(current) === current) {
-      break;
+/** Resolve an ordinary directory path, including any not-yet-created descendants. */
+export async function resolveSafeDirectory(folder: string): Promise<string> {
+  const current = path.resolve(folder);
+  const parent = path.dirname(current);
+  const canonicalParent = parent === current ? current : await resolveSafeDirectory(parent);
+  const expected = parent === current ? current : path.join(canonicalParent, path.basename(current));
+  const st = await statIfExists(current);
+  if (!st) {
+    return expected;
+  }
+  if (!st.isDirectory() || st.isSymbolicLink()) {
+    throw new Error(`Directory redirected or not a directory: ${current}`);
+  }
+  const canonical = await realpath(current);
+  if (canonicalKey(canonical) === canonicalKey(expected)) {
+    return canonical;
+  }
+  // Windows may expand an 8.3 alias without redirecting the directory.
+  if (
+    process.platform === 'win32' &&
+    /~[0-9]+(?:\.[^.]*)?$/.test(path.basename(current)) &&
+    canonicalKey(path.dirname(canonical)) === canonicalKey(canonicalParent)
+  ) {
+    const resolved = await statIfExists(canonical);
+    if (resolved?.isDirectory() && !resolved.isSymbolicLink() && sameFile(st, resolved)) {
+      return canonical;
     }
   }
+  throw new Error(`Directory redirected or not a directory: ${current}`);
+}
+
+export async function assertSafeDirectory(folder: string): Promise<void> {
+  await resolveSafeDirectory(folder);
 }
 
 export async function ensureSafeDirectory(folder: string): Promise<void> {

@@ -1,14 +1,25 @@
 import { constants, type Stats } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
+import path from 'node:path';
 import { sameFile, sameVersion } from './file-version';
 
 // Only a missing file counts as absent. Permission errors, links and other
 // file types must never be mistaken for a free destination path.
-export async function statIfExists(file: string) {
+export async function statIfExists(file: string): Promise<Stats | null> {
   try {
     return await lstat(file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // Windows can report ENOENT for a child of a regular file.
+      if (process.platform === 'win32') {
+        const parent = path.dirname(path.resolve(file));
+        if (parent !== path.resolve(file)) {
+          const info = await statIfExists(parent);
+          if (info && !info.isDirectory()) {
+            throw new Error(`ENOTDIR: not a directory: ${parent}`);
+          }
+        }
+      }
       return null;
     }
     throw error;

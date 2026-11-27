@@ -1,7 +1,13 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { readRegular } from '../filesystem/file-reader';
-import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../filesystem/paths';
+import {
+  assertSafeDirectory,
+  childOf,
+  ensureSafeDirectory,
+  overlaps,
+  resolveSafeDirectory
+} from '../filesystem/paths';
 
 /** A root-scoped filesystem destination. Resolve and recheck paths on every access. */
 export class FileDestination {
@@ -18,11 +24,10 @@ export class FileDestination {
     protectedRoots: readonly string[],
     overlapMessage = 'Destination overlaps a protected directory.'
   ): Promise<void> {
-    await assertSafeDirectory(this.root);
-    const destinationKey = this.root.toLowerCase();
+    const destinationKey = (await resolveSafeDirectory(this.root)).toLowerCase();
     const roots = new Set(protectedRoots.map((root) => path.resolve(root)));
     for (const root of roots) {
-      if (overlaps(root.toLowerCase(), destinationKey)) {
+      if (overlaps(root.toLowerCase(), this.root.toLowerCase())) {
         throw new Error(overlapMessage);
       }
     }

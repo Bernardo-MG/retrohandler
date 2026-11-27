@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm, writeFile, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile, symlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'node:test';
@@ -17,7 +17,7 @@ afterEach(async () => {
 async function collection() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-test-'));
   roots.push(root);
-  return root;
+  return realpath(root);
 }
 
 test('platform inference honors folders before extension hints', () => {
