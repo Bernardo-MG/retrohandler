@@ -41,7 +41,9 @@ test('an idle fingerprint stream is cancelled without waiting for another chunk'
 });
 
 test('reader.readStream verifies stream byte count and content fingerprints', async () => {
-  const hashes = await reader.readStream(Readable.from([data]), data.length);
+  const hashes = await reader.readStream(Readable.from([data.subarray(0, 4), data.subarray(4)]), data.length);
+  assert.equal(hashes.crc32, 'cbf43926');
+  assert.equal(hashes.size, data.length);
   assert.equal(hashes.sha1, createHash('sha1').update(data).digest('hex'));
   assert.equal(hashes.md5, createHash('md5').update(data).digest('hex'));
   await assert.rejects(reader.readStream(Readable.from([data]), data.length - 1), /advertised size/);

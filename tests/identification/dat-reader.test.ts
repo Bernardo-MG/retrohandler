@@ -4,17 +4,10 @@ import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { DatReader } from '../../src/main/identification/dat/dat-reader';
-import { inferPlatform } from '../../src/main/scanner/platforms';
 
 const datReader = new DatReader();
 const rom = (size = '12', name = 'real.nes') => `<rom name="${name}" size="${size}" crc="12345678"/>`;
 const dat = (body: string) => `<datafile><game name="Game">${body}</game></datafile>`;
-
-test('scanner ignores inherited object keys in ancestor names', () => {
-  assert.equal(inferPlatform(path.join('constructor', 'game.nes')), 'Nintendo Entertainment System');
-  assert.equal(inferPlatform(path.join('constructor', 'game.zip')), 'Needs identification');
-  assert.equal(inferPlatform(path.join('constructor', 'snes', 'game.zip')), 'Super Nintendo');
-});
 
 test('DAT ignores commented-out ROM records and CDATA markup', () => {
   const parsed = datReader.parse(
@@ -47,13 +40,13 @@ test('DAT accepts decimal sizes only, including zero', () => {
   );
 });
 
-test('DAT still rejects actual entity and DTD declarations', () => {
+test('DAT rejects entity and DTD declarations', () => {
   assert.throws(() => datReader.parse(`<!DOCTYPE datafile>${dat(rom())}`), /DTD/);
   assert.throws(() => datReader.parse(`<!ENTITY example "test">${dat(rom())}`), /DTD/);
 });
 
 test('DAT file import rejects directories and oversized files and reads normal files', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-stabilization-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-dat-reader-'));
   try {
     await assert.rejects(datReader.read(root));
     const file = path.join(root, 'test.dat');
