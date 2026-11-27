@@ -3,14 +3,15 @@ import { mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'no
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { readRegular, statIfExists } from '../../src/main/components/filesystem/file-reader';
+import { readRegular, statIfExists, statIfExistsSync } from '../../src/main/components/filesystem/file-reader';
 import { FileWriter } from '../../src/main/components/filesystem/file-writer';
 import {
   assertSafeDirectory,
   childOf,
   ensureSafeDirectory,
   overlaps,
-  resolveSafeDirectory
+  resolveSafeDirectory,
+  resolveSafeDirectorySync
 } from '../../src/main/components/filesystem/paths';
 
 const writer = new FileWriter('test');
@@ -29,7 +30,9 @@ test('directory resolution accepts temporary aliases and missing descendants', a
   try {
     const canonical = await realpath(root);
     assert.equal(await resolveSafeDirectory(root), canonical);
+    assert.equal(resolveSafeDirectorySync(root), canonical);
     assert.equal(await resolveSafeDirectory(path.join(root, 'missing')), path.join(canonical, 'missing'));
+    assert.equal(resolveSafeDirectorySync(path.join(root, 'missing')), path.join(canonical, 'missing'));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -40,6 +43,7 @@ test('directory resolution rejects junctions and symbolic links in ancestors', a
     const link = path.join(root, 'redirect');
     await symlink(root, link, process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(resolveSafeDirectory(path.join(link, 'missing')), /redirected/);
+    assert.throws(() => resolveSafeDirectorySync(path.join(link, 'missing')), /redirected/);
   }));
 
 test('containment rejects equal paths, siblings and parent traversal', () => {
@@ -69,6 +73,7 @@ test('bounded file reads distinguish absent, empty, oversized and nonregular fil
   fixture(async (root) => {
     const file = path.join(root, 'file');
     assert.equal(await statIfExists(file), null);
+    assert.equal(statIfExistsSync(file), null);
     assert.equal(await readRegular(file, 10), null);
     await writeFile(file, '');
     assert.deepEqual(await readRegular(file, 0), Buffer.alloc(0));
@@ -77,6 +82,7 @@ test('bounded file reads distinguish absent, empty, oversized and nonregular fil
     await assert.rejects(readRegular(file, 3), /Unsafe or oversized/);
     await assert.rejects(readRegular(root, 10), /Unsafe or oversized/);
     await assert.rejects(statIfExists(path.join(file, 'child')), /ENOTDIR/);
+    assert.throws(() => statIfExistsSync(path.join(file, 'child')), /ENOTDIR/);
   }));
 
 test(

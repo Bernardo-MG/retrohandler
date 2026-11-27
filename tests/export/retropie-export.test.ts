@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import type { ExportOptions, LibraryEntry } from '../../src/shared';
 import { ExportService, type ExportLibrary } from '../../src/main/export';
 import { RetroPieExporter } from '../../src/main/export/retropie/retropie-exporter';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
+import { createTestImageCache } from '../helpers/image-cache';
 import { RetroPieGameList } from '../../src/main/export/retropie/retropie-gamelist';
 import { RetroPieLayout } from '../../src/main/export/retropie/retropie-layout';
 
@@ -117,7 +117,10 @@ test('preview makes no files; confirmed export writes XML but never copies ROMs'
   fixture(async (_, src, dst) => {
     await writeFile(path.join(src, 'Game.zip'), 'data');
     const lib = library([entry(src, 'Game.zip')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork'))));
+    const service = new ExportService(
+      lib,
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
+    );
     const plan = await service.preview(options(dst));
     assert.equal(plan.conflicts.length, 0);
     assert.equal(plan.warnings.length, 0);
@@ -136,7 +139,10 @@ test('existing destination ROM is preserved and referenced without overwrite', a
     await mkdir(path.join(dst, 'roms', 'nes'), { recursive: true });
     await writeFile(path.join(dst, 'roms', 'nes', 'A.zip'), 'keep');
     const lib = library([entry(src, 'A.zip')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork'))));
+    const service = new ExportService(
+      lib,
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
+    );
     const plan = await service.preview(options(dst));
     assert.deepEqual(plan.conflicts, []);
     assert.deepEqual(await service.execute(options(dst), plan.fingerprint), { copied: 1 });
@@ -152,7 +158,7 @@ test('duplicate names from different collections are reported as warnings', asyn
     await writeFile(path.join(other, 'Same.zip'), 'bbbb');
     const service = new ExportService(
       library([entry(src, 'Same.zip'), entry(other, 'Same.zip')]),
-      new RetroPieExporter(new ArtworkCache(path.join(root, 'art')))
+      new RetroPieExporter(createTestImageCache(path.join(root, 'art')))
     );
     const plan = await service.preview(options(dst));
     assert.ok(plan.warnings.some((x) => x.includes('Filename collision')));
@@ -163,7 +169,7 @@ test('unknown platform can be configured, and overlapping destination rejected',
   fixture(async (_, src, dst) => {
     await writeFile(path.join(src, 'Mystery.zip'), 'data');
     const lib = library([entry(src, 'Mystery.zip', 'Needs identification')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'art'))));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(path.join(src, 'art'))));
     const plan = await service.preview(options(dst));
     assert.ok(plan.warnings.some((x) => x.includes('Unmapped')));
     const mapped = await service.preview({ ...options(dst), overrides: { 'Needs identification': 'nes' } });
@@ -175,7 +181,7 @@ test('an export cannot run with an outdated preview', async () =>
   fixture(async (_, src, dst) => {
     await writeFile(path.join(src, 'Game.zip'), 'data');
     const lib = library([entry(src, 'Game.zip')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'art'))));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(path.join(src, 'art'))));
     const plan = await service.preview(options(dst));
     await assert.rejects(
       service.execute({ ...options(dst), includeArtwork: true }, plan.fingerprint),
@@ -193,7 +199,7 @@ test('preview paginates large libraries instead of exporting only the visible pa
     }
     const service = new ExportService(
       library(items),
-      new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork')))
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
     );
     const plan = await service.preview(options(dst));
     assert.equal(plan.files.filter((file) => file.kind === 'rom').length, 205);
@@ -205,7 +211,7 @@ test('unsafe relative paths cannot escape the ROM source directory', async () =>
     await writeFile(path.join(root, 'outside.zip'), 'data');
     const service = new ExportService(
       library([entry(src, '../outside.zip')]),
-      new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork')))
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
     );
     const plan = await service.preview(options(dst));
     assert.ok(plan.warnings.some((message) => message.includes('Unsafe source')));
@@ -220,7 +226,7 @@ test('export uses effective per-ROM metadata system rather than scanner system',
     game.metadata = { ...game.metadata!, systemOverride: 'Super Nintendo' };
     const service = new ExportService(
       library([game]),
-      new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork')))
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
     );
     const plan = await service.preview(options(dst));
     assert.equal(plan.warnings.length, 0);
@@ -235,7 +241,10 @@ test('export skips unmapped games and writes gamelist only for approved ROMs', a
     await writeFile(path.join(src, 'Ready.zip'), 'ready');
     await writeFile(path.join(src, 'Unmapped.zip'), 'unknown');
     const lib = library([entry(src, 'Ready.zip'), entry(src, 'Unmapped.zip', 'Needs identification')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork'))));
+    const service = new ExportService(
+      lib,
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
+    );
     const plan = await service.preview(options(dst));
     assert.equal(plan.files.filter((f) => f.kind === 'rom').length, 1);
     assert.ok(plan.warnings.some((w) => w.includes('Unmapped system')));
@@ -256,7 +265,7 @@ test('skipped duplicate names are excluded from gamelist', async () =>
     const lib = library([entry(src, 'Same.zip'), entry(other, 'Same.zip')]);
     const service = new ExportService(
       lib,
-      new RetroPieExporter(new ArtworkCache(path.join(root, 'artwork')))
+      new RetroPieExporter(createTestImageCache(path.join(root, 'artwork')))
     );
     const plan = await service.preview(options(dst));
     assert.ok(plan.warnings.some((w) => w.includes('Filename collision')));
@@ -269,7 +278,10 @@ test('when all systems are unmapped there is nothing to export', async () =>
   fixture(async (_, src, dst) => {
     await writeFile(path.join(src, 'Unmapped.zip'), 'data');
     const lib = library([entry(src, 'Unmapped.zip', 'Needs identification')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(path.join(src, 'artwork'))));
+    const service = new ExportService(
+      lib,
+      new RetroPieExporter(createTestImageCache(path.join(src, 'artwork')))
+    );
     const plan = await service.preview(options(dst));
     assert.equal(plan.files.length, 0);
     await assert.rejects(service.execute(options(dst), plan.fingerprint), /No exportable ROMs/);

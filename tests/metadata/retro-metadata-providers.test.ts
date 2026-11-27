@@ -16,10 +16,10 @@ import { LibretroCatalogue, parseLibretroIndex } from '../../src/main/metadata/l
 import { MetadataService } from '../../src/main/metadata';
 import { LaunchBoxProvider } from '../../src/main/metadata/launchbox/launchbox-provider';
 import { HttpClient } from '../../src/main/components/http/http-client';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
+import { createTestImageCache } from '../helpers/image-cache';
 
 function createProvider(root: string, request: typeof fetch): LibretroProvider {
-  return new LibretroProvider(new ArtworkCache(root), new LibretroClient(new HttpClient(request)));
+  return new LibretroProvider(createTestImageCache(root), new LibretroClient(new HttpClient(request)));
 }
 
 function adapter(file: string): DatabaseHandle {
@@ -160,7 +160,7 @@ test('Libretro cover is platform-restricted, cached, and returns null on 404', a
       )
     );
     assert.ok(urls[0].includes('A%20_%20B'));
-    assert.equal((await new ArtworkCache(dir).read(id!)).mime, 'image/png');
+    assert.equal((await createTestImageCache(dir).read(id!)).mime, 'image/png');
     assert.equal(new LibretroTitleMatcher().candidates(['Game (USA).zip'])[0], 'Game (USA)');
     assert.ok(new LibretroTitleMatcher().candidates(['Game (USA).zip']).includes('Game'));
     await assert.rejects(
@@ -278,7 +278,7 @@ test('Libretro search returns cached image previews and skips unavailable catalo
     });
     assert.equal(covers.length, 1);
     assert.equal(covers[0].title, 'Alien 3 (1993)(LJN)(EU)');
-    assert.equal((await new ArtworkCache(dir).read(covers[0].artworkId)).mime, 'image/png');
+    assert.equal((await createTestImageCache(dir).read(covers[0].artworkId)).mime, 'image/png');
     // The primary thumbnail host and official GitHub mirror are both allowed.
     const primary =
       'https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%20Entertainment%20System/Named_Boxarts/';
@@ -289,6 +289,33 @@ test('Libretro search returns cached image previews and skips unavailable catalo
     assert.equal(urls[0], primary + '.index');
     assert.deepEqual(urls.slice(1).sort(), [primary + missing, mirror + missing, primary + available].sort());
     assert.ok(urls.indexOf(primary + missing) < urls.indexOf(mirror + missing));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('Libretro cover search skips invalid images but reports cache storage failures', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'rh-libretro-cache-'));
+  try {
+    const query = { system: 'NES', query: 'Game', regionHint: 'Game (USA)', refresh: true };
+    const catalogue = 'Game (USA).png\n';
+    const invalid: typeof fetch = async (url) =>
+      String(url).endsWith('/.index') ? new Response(catalogue) : new Response('invalid image');
+    assert.deepEqual(await createProvider(dir, invalid).searchCovers(query), []);
+
+    const failure = new Error('Cache write failed.');
+    const request: typeof fetch = async (url) =>
+      String(url).endsWith('/.index') ? new Response(catalogue) : new Response(png);
+    const provider = new LibretroProvider(
+      {
+        maxImageBytes: 1024,
+        store: async () => {
+          throw failure;
+        }
+      },
+      new LibretroClient(new HttpClient(request))
+    );
+    await assert.rejects(provider.searchCovers(query), (error) => error === failure);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

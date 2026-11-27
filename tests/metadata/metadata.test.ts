@@ -6,8 +6,6 @@ import { test } from 'node:test';
 import { DatabaseSync } from 'node:sqlite';
 import type { DatabaseHandle, Statement } from '../../src/main/database/sql/types';
 import { openTestRepositories } from '../helpers/database';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
-import { isArtworkId } from '../../src/main/components/artwork/artwork-image';
 import type { GameMetadataInput, LibraryQuery } from '../../src/shared';
 
 function adapter(file: string): DatabaseHandle {
@@ -120,25 +118,9 @@ test('manual metadata validates bad input and artwork names', async () => {
       () => store.metadata.saveMetadata(source, 'one.nes', { ...input, artworkId: '../../evil.png' }),
       /Invalid/
     );
-    const id = `${'a'.repeat(64)}.jpg`;
-    assert.equal(isArtworkId(id), true);
-    assert.equal(isArtworkId('../../evil.jpg'), false);
-    assert.equal(new ArtworkCache(dir).pathFor(id), path.join(dir, id));
     store.database.close();
   } finally {
     await rm(dir, { recursive: true, force: true });
-  }
-});
-
-test('artwork cache accepts verified images and preserves them for later reuse', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-artwork-'));
-  try {
-    const id = await new ArtworkCache(root).store(Buffer.from([0xff, 0xd8, 0xff, 0x00, 0x01]));
-    assert.match(id, /^[a-f0-9]{64}\.jpg$/);
-    assert.equal((await new ArtworkCache(root).read(id)).mime, 'image/jpeg');
-    await assert.rejects(new ArtworkCache(root).store(Buffer.from('bad')), /supported image/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
   }
 });
 

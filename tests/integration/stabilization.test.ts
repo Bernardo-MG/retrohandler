@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatReader } from '../../src/main/identification/dat/dat-reader';
 import { inferPlatform } from '../../src/main/scanner/platforms';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
 
 const datReader = new DatReader();
 const rom = (size = '12', name = 'real.nes') => `<rom name="${name}" size="${size}" crc="12345678"/>`;
@@ -76,28 +75,4 @@ test('DAT refuses incomplete root and unfinished comment or CDATA', () => {
   assert.throws(() => datReader.parse(dat(rom()).replace('</datafile>', '')), /Incomplete/);
   assert.throws(() => datReader.parse(dat(`<!-- ${rom()}`)), /Incomplete/);
   assert.throws(() => datReader.parse(dat(`<![CDATA[${rom()}`)), /Incomplete/);
-});
-
-test('cached artwork is validated against its content address', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-artwork-integrity-'));
-  try {
-    const cache = new ArtworkCache(root);
-    const original = Buffer.from([0xff, 0xd8, 0xff, 0x01]);
-    const id = await cache.store(original);
-    assert.deepEqual((await cache.read(id)).body, original);
-    await writeFile(path.join(root, id), Buffer.from([0xff, 0xd8, 0xff, 0x02]));
-    await assert.rejects(cache.read(id), /Invalid cached artwork/);
-    // Re-caching the original image repairs the entry under the same ID.
-    assert.equal(await cache.store(original), id);
-    assert.deepEqual((await cache.read(id)).body, original);
-    const handle = await open(path.join(root, id), 'r+');
-    try {
-      await handle.truncate(5 * 1024 * 1024 + 1);
-    } finally {
-      await handle.close();
-    }
-    await assert.rejects(cache.read(id), /Invalid cached artwork/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });

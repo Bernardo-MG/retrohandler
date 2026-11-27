@@ -8,7 +8,7 @@ import { RetroPieExporter } from '../../src/main/export/retropie/retropie-export
 import { GameListDocument } from '../../src/main/components/emulationstation/gamelist-document';
 import { GameListMerger } from '../../src/main/components/emulationstation/gamelist-merger';
 import { RetroPieLayout } from '../../src/main/export/retropie/retropie-layout';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
+import { createTestImageCache } from '../helpers/image-cache';
 import type { ExportOptions, LibraryEntry } from '../../src/shared';
 
 const game = (source: string, name = 'Game.zip'): LibraryEntry => ({
@@ -97,7 +97,7 @@ test('merges matching metadata, preserves unrelated records and old statistics, 
     await writeFile(path.join(f.system, 'Game.zip'), 'existing ROM');
     await writeFile(path.join(f.source, 'New.zip'), 'data');
     const lib = library([f.entry, game(f.source, 'New.zip')]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
     const plan = await service.preview(f.options);
     assert.deepEqual(plan.conflicts, []);
     assert.equal(plan.files.find((x) => x.kind === 'gamelist')?.action, 'update');
@@ -138,7 +138,10 @@ test('existing scraped title and missing metadata survive when local metadata is
   fixture(async (f) => {
     f.entry.metadata = null;
     await writeFile(f.xml, doc(oldGame()));
-    const service = new ExportService(library([f.entry]), new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(
+      library([f.entry]),
+      new RetroPieExporter(createTestImageCache(f.cache))
+    );
     const plan = await service.preview(f.options);
     assert.equal(plan.files.find((x) => x.kind === 'gamelist')?.action, 'reuse');
     assert.deepEqual(await service.execute(f.options, plan.fingerprint), { copied: 0 });
@@ -183,7 +186,7 @@ test('malformed, unsupported and ambiguous existing XML block writes', async () 
     for (const xml of bad) {
       await writeFile(f.xml, xml);
       const lib = library([f.entry]);
-      const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+      const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
       const plan = await service.preview(f.options);
       assert.equal(plan.conflicts.length, 1, xml);
       await assert.rejects(service.execute(f.options, plan.fingerprint), /conflicts/);
@@ -196,7 +199,7 @@ test('same-size changes to existing XML invalidate a preview without writing bac
   fixture(async (f) => {
     await writeFile(f.xml, doc(oldGame()));
     const lib = library([f.entry]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
     const plan = await service.preview(f.options);
     const changed = doc(oldGame().replace('Old name', 'New name'));
     await writeFile(f.xml, changed);
@@ -208,7 +211,7 @@ test('same-size changes to existing XML invalidate a preview without writing bac
 test('same-size changes to library metadata invalidate the preview', async () =>
   fixture(async (f) => {
     const lib = library([f.entry]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
     const plan = await service.preview(f.options);
     f.entry.metadata!.title = 'Alt & <Title>';
     await assert.rejects(service.execute(f.options, plan.fingerprint), /preview changed/);
@@ -218,11 +221,11 @@ test('same-size changes to library metadata invalidate the preview', async () =>
 test('artwork is copied once and subsequent identical images are reused', async () =>
   fixture(async (f) => {
     const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-    const id = await new ArtworkCache(f.cache).store(image);
+    const id = await createTestImageCache(f.cache).store(image);
     f.entry.metadata!.artworkId = id;
     f.options.includeArtwork = true;
     const lib = library([f.entry]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
     const plan = await service.preview(f.options);
     assert.equal(plan.files.find((x) => x.kind === 'artwork')?.action, 'create');
     assert.deepEqual(await service.execute(f.options, plan.fingerprint), { copied: 2 });
@@ -247,11 +250,11 @@ test('artwork is copied once and subsequent identical images are reused', async 
 test('same-length changes to cached artwork invalidate preview', async () =>
   fixture(async (f) => {
     const image = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
-    const id = await new ArtworkCache(f.cache).store(image);
+    const id = await createTestImageCache(f.cache).store(image);
     f.entry.metadata!.artworkId = id;
     f.options.includeArtwork = true;
     const lib = library([f.entry]);
-    const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+    const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
     const plan = await service.preview(f.options);
     const different = Buffer.from(image);
     different[different.length - 1] = 4;
@@ -273,7 +276,7 @@ test(
       await writeFile(external, doc(oldGame()));
       await symlink(external, f.xml);
       const lib = library([f.entry]);
-      const service = new ExportService(lib, new RetroPieExporter(new ArtworkCache(f.cache)));
+      const service = new ExportService(lib, new RetroPieExporter(createTestImageCache(f.cache)));
       const linked = await service.preview(f.options);
       assert.equal(linked.conflicts.length, 1);
       await assert.rejects(service.execute(f.options, linked.fingerprint), /conflicts/);
@@ -295,7 +298,7 @@ test('skipped ROMs are counted, rather than treating omitted artwork as a skippe
     const missing = game(f.source, 'Missing.zip');
     const service = new ExportService(
       library([f.entry, missing]),
-      new RetroPieExporter(new ArtworkCache(f.cache))
+      new RetroPieExporter(createTestImageCache(f.cache))
     );
     const plan = await service.preview(f.options);
     assert.equal(plan.skippedRoms, 1);

@@ -4,8 +4,7 @@ import type { ExportFile, LibraryEntry } from '../../../shared';
 import type { FileOperation } from '../../components/file-operations/file-operation';
 import { FileOperationPlanner } from '../../components/file-operations/file-operation-planner';
 import { childOf } from '../../components/filesystem/paths';
-import type { ArtworkCache } from '../../components/artwork/artwork-cache';
-import { isArtworkId, MAX_ARTWORK_BYTES } from '../../components/artwork/artwork-image';
+import { isImageId, type ImageCache } from '../../components/images';
 import type { Exporter, ExportTargetOptions } from '../exporter';
 import type { ExportDraft } from '../prepared-export';
 import { RetroPieGameList, type RetroPieGame } from './retropie-gamelist';
@@ -15,7 +14,7 @@ const MAX_XML_BYTES = 32 * 1024 * 1024;
 
 /** Prepares RetroPie configuration files; ROMs remain references only. */
 export class RetroPieExporter implements Exporter {
-  constructor(private readonly artwork: ArtworkCache) {}
+  constructor(private readonly artwork: Pick<ImageCache, 'locate' | 'maxImageBytes'>) {}
 
   public prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
     return new RetroPieDraftBuilder(this.artwork, options).build(entries);
@@ -36,7 +35,7 @@ class RetroPieDraftBuilder {
   private artworkBytes = 0;
 
   constructor(
-    private readonly artwork: ArtworkCache,
+    private readonly artwork: Pick<ImageCache, 'locate' | 'maxImageBytes'>,
     options: ExportTargetOptions
   ) {
     this.layout = new RetroPieLayout(options.overrides);
@@ -110,12 +109,12 @@ class RetroPieDraftBuilder {
 
   private async collectArtwork(entry: LibraryEntry, system: string): Promise<string | null> {
     const artworkId = entry.metadata?.artworkId;
-    if (!this.includeArtwork || !isArtworkId(artworkId)) {
+    if (!this.includeArtwork || !isImageId(artworkId)) {
       return null;
     }
     const relativeDestination = this.layout.artworkDestination(system, artworkId);
     const destinationKey = relativeDestination.toLowerCase();
-    const cached = await this.artwork.find(artworkId);
+    const cached = await this.artwork.locate(artworkId);
     if (!cached) {
       this.warnings.push(`Cached artwork unavailable: ${artworkId}`);
       return null;
@@ -143,7 +142,7 @@ class RetroPieDraftBuilder {
         relativeDestination: file.relativeDestination,
         sourcePath: file.source,
         expectedSize: file.size,
-        maxBytes: MAX_ARTWORK_BYTES,
+        maxBytes: this.artwork.maxImageBytes,
         fileLabel: 'artwork'
       });
       this.operations.push(operation);

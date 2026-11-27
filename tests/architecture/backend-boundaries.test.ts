@@ -154,3 +154,22 @@ test('archive consumers depend only on the public archive API', () => {
   }
   assert.deepEqual(violations, []);
 });
+
+test('image consumers use the public image API rather than implementation modules', () => {
+  const imagesRoot = path.join(componentsRoot, 'images');
+  const formerRoot = path.join(componentsRoot, 'artwork');
+  const violations = sourceFiles(path.dirname(mainRoot))
+    .filter((file) => !inside(imagesRoot, file))
+    .flatMap((file) =>
+      imports(file)
+        .filter((reference) => {
+          const target = path.resolve(path.dirname(file), reference);
+          return (
+            resolvesTo(file, reference, formerRoot) ||
+            (resolvesTo(file, reference, imagesRoot) && target !== imagesRoot)
+          );
+        })
+        .map((reference) => referenceName(file, reference))
+    );
+  assert.deepEqual(violations, []);
+});

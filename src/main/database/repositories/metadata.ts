@@ -4,7 +4,7 @@ import type {
   MetadataRepository,
   SystemOverrideRepository
 } from '../../contracts/persistence';
-import { isArtworkId } from '../../components/artwork/artwork-image';
+import { isImageId } from '../../components/images';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 import { buildFilter, type LibraryFilter } from './library-filter';
@@ -40,7 +40,7 @@ export class SqliteMetadataRepository
       !['manual', 'launchbox'].includes(metadata.provider) ||
       (metadata.providerId !== null && metadata.providerId.length > 80) ||
       (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
-      (metadata.artworkId !== null && !isArtworkId(metadata.artworkId)) ||
+      (metadata.artworkId !== null && !isImageId(metadata.artworkId)) ||
       (metadata.systemOverride !== undefined &&
         metadata.systemOverride !== null &&
         (typeof metadata.systemOverride !== 'string' ||

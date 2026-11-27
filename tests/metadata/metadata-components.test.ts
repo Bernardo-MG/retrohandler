@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import ts from 'typescript';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
 import { Crc32 } from '../../src/main/components/hashing/crc32';
 import { HttpClient, ResponseBodyError } from '../../src/main/components/http/http-client';
 import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
-
-const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x01]);
 
 function isOversized(error: unknown): boolean {
   return error instanceof ResponseBodyError && error.reason === 'too-large';
@@ -70,34 +67,6 @@ test('CRC32 is incremental and the ROM hashing workflow uses the same standard r
   );
   assert.equal(hashes.crc32, checksum.hex());
   assert.equal(hashes.size, 9);
-});
-
-test('artwork cache rejects linked files and validates byte identity on retrieval', async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'rh-artwork-component-'));
-  try {
-    const cache = new ArtworkCache(path.join(root, 'cache'));
-    const id = await cache.store(jpeg);
-    assert.equal((await cache.find(id))?.size, jpeg.length);
-    await writeFile(cache.pathFor(id), Buffer.from([0xff, 0xd8, 0xff, 0x02]));
-    await assert.rejects(cache.read(id), /Invalid cached artwork/);
-    await rm(cache.pathFor(id));
-    const external = path.join(root, 'external.jpg');
-    await writeFile(external, jpeg);
-    try {
-      await symlink(external, cache.pathFor(id), 'file');
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EPERM') {
-        t.skip('Symbolic links are unavailable on this system.');
-        return;
-      }
-      throw error;
-    }
-    assert.equal(await cache.find(id), null);
-    await assert.rejects(cache.read(id), /Invalid cached artwork/);
-    assert.deepEqual(await readFile(external), jpeg);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
 });
 
 function sourceFiles(directory: string): string[] {

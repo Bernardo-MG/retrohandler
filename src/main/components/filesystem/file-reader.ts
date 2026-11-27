@@ -1,4 +1,4 @@
-import { constants, type Stats } from 'node:fs';
+import { constants, lstatSync, type Stats } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { sameFile, sameVersion } from './file-version';
@@ -15,6 +15,27 @@ export async function statIfExists(file: string): Promise<Stats | null> {
         const parent = path.dirname(path.resolve(file));
         if (parent !== path.resolve(file)) {
           const info = await statIfExists(parent);
+          if (info && !info.isDirectory()) {
+            throw new Error(`ENOTDIR: not a directory: ${parent}`);
+          }
+        }
+      }
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** Synchronous counterpart for operations that must not yield between checking and acting. */
+export function statIfExistsSync(file: string): Stats | null {
+  try {
+    return lstatSync(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if (process.platform === 'win32') {
+        const parent = path.dirname(path.resolve(file));
+        if (parent !== path.resolve(file)) {
+          const info = statIfExistsSync(parent);
           if (info && !info.isDirectory()) {
             throw new Error(`ENOTDIR: not a directory: ${parent}`);
           }

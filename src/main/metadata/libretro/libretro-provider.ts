@@ -1,5 +1,4 @@
-import type { ArtworkCache } from '../../components/artwork/artwork-cache';
-import { MAX_ARTWORK_BYTES } from '../../components/artwork/artwork-image';
+import { ImageValidationError, type ImageCache } from '../../components/images';
 import { ResponseBodyError } from '../../components/http/http-client';
 import type { ArtworkProvider, CoverChoice, CoverLookup, CoverSearch } from '../artwork-provider';
 import { LibretroCatalogue } from './libretro-catalogue';
@@ -14,7 +13,7 @@ export class LibretroProvider implements ArtworkProvider {
   private readonly matcher = new LibretroTitleMatcher();
 
   constructor(
-    private readonly artwork: ArtworkCache,
+    private readonly artwork: Pick<ImageCache, 'store' | 'maxImageBytes'>,
     private readonly client = new LibretroClient()
   ) {
     this.catalogue = new LibretroCatalogue(client);
@@ -80,7 +79,7 @@ export class LibretroProvider implements ArtworkProvider {
 
   private async readExactImage(response: Response): Promise<Buffer> {
     try {
-      return await this.client.readImage(response, MAX_ARTWORK_BYTES);
+      return await this.client.readImage(response, this.artwork.maxImageBytes);
     } catch (error) {
       if (!(error instanceof ResponseBodyError)) {
         throw error;
@@ -99,7 +98,7 @@ export class LibretroProvider implements ArtworkProvider {
     }
     let bytes: Buffer;
     try {
-      bytes = await this.client.readImage(response, MAX_ARTWORK_BYTES);
+      bytes = await this.client.readImage(response, this.artwork.maxImageBytes);
     } catch (error) {
       if (error instanceof ResponseBodyError) {
         return null;
@@ -109,9 +108,12 @@ export class LibretroProvider implements ArtworkProvider {
     try {
       const artworkId = await this.artwork.store(bytes);
       return { title: filename.slice(0, -4), artworkId };
-    } catch {
-      /* A listed entry may be broken; continue with valid images. */
-      return null;
+    } catch (error) {
+      // A broken image may be skipped, but storage failures must remain visible.
+      if (error instanceof ImageValidationError) {
+        return null;
+      }
+      throw error;
     }
   }
 }

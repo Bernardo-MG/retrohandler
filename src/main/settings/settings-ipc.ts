@@ -2,22 +2,29 @@ import { BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electron';
 import { channels } from '../../ipc-channels';
 import type { CacheCleanupReceipt, StorageInfo } from '../../shared';
 import type { ArtworkReferences } from '../contracts/persistence';
-import type { ArtworkCache } from '../components/artwork/artwork-cache';
+import type { ImageCache } from '../components/images';
 import { SettingsStore } from './settings-store';
 import { restoreWindowBounds } from './window-bounds';
 
 export function registerSettingsIpc(
   store: SettingsStore,
   databasePath: string,
-  artwork: ArtworkCache,
+  artwork: Pick<ImageCache, 'root' | 'inspect' | 'cleanup'>,
   artworkReferences: ArtworkReferences
 ): void {
-  const storageInfo = (): StorageInfo => ({
-    databasePath,
-    settingsPath: store.filePath,
-    artworkPath: artwork.root,
-    ...artwork.inspect(artworkReferences.getReferencedArtworkIds())
-  });
+  const storageInfo = (): StorageInfo => {
+    const { cacheFiles, cacheBytes, ...reclaimable } = artwork.inspect(
+      artworkReferences.getReferencedArtworkIds()
+    );
+    return {
+      databasePath,
+      settingsPath: store.filePath,
+      artworkPath: artwork.root,
+      artworkFiles: cacheFiles,
+      artworkBytes: cacheBytes,
+      ...reclaimable
+    };
+  };
   ipcMain.handle(channels.getSettings, () => store.snapshot());
   ipcMain.handle(channels.saveSettings, (_event, raw: unknown) => {
     const settings = store.update(raw);

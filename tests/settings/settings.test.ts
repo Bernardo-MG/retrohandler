@@ -7,7 +7,6 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
-  utimesSync,
   writeFileSync
 } from 'node:fs';
 import os from 'node:os';
@@ -20,7 +19,6 @@ import {
   validateSettingsPatch
 } from '../../src/main/settings/settings-store';
 import { restoreWindowBounds } from '../../src/main/settings/window-bounds';
-import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
 
 function fixture(run: (root: string, file: string) => void) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'retrohandler-settings-'));
@@ -321,93 +319,3 @@ test('window restoration clamps an off-screen or oversized window to an availabl
     height: 820
   });
 });
-
-const DAY = 86400000;
-const NOW = Date.now();
-const asset = (letter: string) => `${letter.repeat(64)}.png`;
-function agedFile(root: string, name: string, ageDays: number, contents: string) {
-  const file = path.join(root, name);
-  writeFileSync(file, contents);
-  const date = new Date(NOW - ageDays * DAY);
-  utimesSync(file, date, date);
-  return file;
-}
-
-test('cache accounting and cleanup retain referenced artwork, new artwork and unrelated files', () =>
-  fixture((root) => {
-    const cache = path.join(root, 'artwork');
-    mkdirSync(cache);
-    const referenced = agedFile(cache, asset('a'), 10, 'keep');
-    const unused = agedFile(cache, asset('b'), 8, 'delete');
-    const recent = agedFile(cache, asset('c'), 2, 'recent');
-    const staleDownload = agedFile(cache, '.download-12345678-1234-1234-1234-123456789abc', 2, 'partial');
-    const freshDownload = agedFile(cache, '.download-12345678-1234-1234-1234-123456789def', 0, 'new');
-    const unrelated = agedFile(cache, 'notes.txt', 100, 'notes');
-    const refs = new Set([asset('a')]);
-    const info = new ArtworkCache(cache).inspect(refs, NOW);
-    assert.deepEqual(info, {
-      artworkFiles: 5,
-      artworkBytes: 26,
-      reclaimableFiles: 2,
-      reclaimableBytes: 13
-    });
-    assert.deepEqual(new ArtworkCache(cache).cleanup(refs, NOW), {
-      removedFiles: 2,
-      removedBytes: 13,
-      failedFiles: 0
-    });
-    for (const file of [referenced, recent, freshDownload, unrelated]) {
-      assert.ok(existsSync(file));
-    }
-    for (const file of [unused, staleDownload]) {
-      assert.equal(existsSync(file), false);
-    }
-    assert.equal(new ArtworkCache(cache).inspect(refs, NOW).reclaimableFiles, 0);
-  }));
-
-test('cache cleanup re-evaluates newly referenced artwork', () =>
-  fixture((root) => {
-    const cache = path.join(root, 'artwork');
-    mkdirSync(cache);
-    const file = agedFile(cache, asset('d'), 10, 'newly referenced');
-    assert.equal(new ArtworkCache(cache).inspect(new Set(), NOW).reclaimableFiles, 1);
-    assert.equal(new ArtworkCache(cache).cleanup(new Set([asset('d')]), NOW).removedFiles, 0);
-    assert.ok(existsSync(file));
-  }));
-
-test('cache cleanup does not create a missing cache or recurse into directories', () =>
-  fixture((root) => {
-    const cache = path.join(root, 'missing');
-    assert.deepEqual(new ArtworkCache(cache).inspect(new Set(), NOW), {
-      artworkFiles: 0,
-      artworkBytes: 0,
-      reclaimableFiles: 0,
-      reclaimableBytes: 0
-    });
-    assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
-    assert.equal(existsSync(cache), false);
-    mkdirSync(cache);
-    mkdirSync(path.join(cache, asset('a')));
-    const nested = agedFile(path.join(cache, asset('a')), asset('b'), 100, 'retain');
-    assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
-    assert.ok(existsSync(nested));
-  }));
-
-test(
-  'cache cleanup refuses redirected cache directories and skips linked files',
-  { skip: process.platform === 'win32' },
-  () =>
-    fixture((root) => {
-      const outside = path.join(root, 'outside');
-      mkdirSync(outside);
-      const file = agedFile(outside, asset('e'), 100, 'retain');
-      const link = path.join(root, 'link');
-      symlinkSync(outside, link, 'dir');
-      assert.throws(() => new ArtworkCache(link).cleanup(new Set(), NOW), /regular directory/);
-      const cache = path.join(root, 'artwork');
-      mkdirSync(cache);
-      symlinkSync(file, path.join(cache, asset('e')));
-      assert.equal(new ArtworkCache(cache).cleanup(new Set(), NOW).removedFiles, 0);
-      assert.equal(readFileSync(file, 'utf8'), 'retain');
-    })
-);

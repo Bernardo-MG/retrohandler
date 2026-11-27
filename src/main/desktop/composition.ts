@@ -23,7 +23,7 @@ import {
   createLaunchBoxRepository
 } from '../database';
 import { registerMetadataIpc } from '../ipc/metadata-ipc';
-import { ArtworkCache } from '../components/artwork/artwork-cache';
+import { ImageCache } from '../components/images';
 import { HttpClient } from '../components/http/http-client';
 import { MetadataService } from '../metadata';
 import { LaunchBoxCatalogueImporter } from '../metadata/launchbox/launchbox-catalogue-importer';
@@ -67,7 +67,11 @@ export function createCore(root: string) {
       systemOverrides: metadata
     });
     const settings = new SettingsStore(path.join(root, 'settings.json'));
-    const artwork = new ArtworkCache(path.join(root, 'artwork'));
+    const artwork = new ImageCache(path.join(root, 'artwork'), {
+      maxImageBytes: 5 * 1024 * 1024,
+      retentionMs: 7 * 24 * 60 * 60 * 1000,
+      temporaryRetentionMs: 24 * 60 * 60 * 1000
+    });
     registerLibraryIpc(library);
     registerIdentificationIpc(createIdentificationService(createIdentificationRepository(database)), library);
     registerSettingsIpc(settings, databasePath, artwork, metadata);
