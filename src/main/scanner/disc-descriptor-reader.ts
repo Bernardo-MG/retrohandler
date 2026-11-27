@@ -8,11 +8,11 @@ const GDI_TRACK = /^\s*\d+\s+\d+\s+\d+\s+\d+\s+(?:"([^"]+)"|(\S+))\s+\d+/i;
 
 /** Descriptor references are names only; never open a referenced track. */
 export class DiscDescriptorReader {
-  supports(filename: string): boolean {
+  public supports(filename: string): boolean {
     return /\.(cue|gdi)$/i.test(filename);
   }
 
-  async readTracks(filename: string): Promise<Set<string>> {
+  public async readTracks(filename: string): Promise<Set<string>> {
     const info = await lstat(filename);
     if (info.size > MAX_DESCRIPTOR_BYTES) {
       throw new Error('Disc descriptor exceeds 1 MiB.');
@@ -24,7 +24,7 @@ export class DiscDescriptorReader {
     return this.parseTracks(path.extname(filename).toLowerCase(), content.toString('utf8'));
   }
 
-  parseTracks(extension: string, contents: string): Set<string> {
+  public parseTracks(extension: string, contents: string): Set<string> {
     extension = extension.toLowerCase();
     if (extension !== '.cue' && extension !== '.gdi') {
       return new Set();
@@ -43,6 +43,11 @@ export class DiscDescriptorReader {
   }
 
   private isLocalName(name: string): boolean {
-    return name !== '.' && name !== '..' && name === path.posix.basename(name) && name === path.win32.basename(name);
+    return (
+      name !== '.' &&
+      name !== '..' &&
+      name === path.posix.basename(name) &&
+      name === path.win32.basename(name)
+    );
   }
 }

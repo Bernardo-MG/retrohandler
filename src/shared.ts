@@ -29,7 +29,14 @@ export interface ScanUpdate {
   jobId: string;
   progress: ScanProgress;
 }
-export type IdentificationStatus = 'pending' | 'verified' | 'probable' | 'ambiguous' | 'unknown' | 'unsupported' | 'error';
+export type IdentificationStatus =
+  | 'pending'
+  | 'verified'
+  | 'probable'
+  | 'ambiguous'
+  | 'unknown'
+  | 'unsupported'
+  | 'error';
 export interface IdentificationProgress {
   processed: number;
   total: number;
@@ -56,7 +63,7 @@ export interface IdentificationResult {
     md5: string;
     sha1: string;
     size: number;
-    modifiedMs: number
+    modifiedMs: number;
   } | null;
 }
 export interface DatImportReceipt {
@@ -110,13 +117,13 @@ export interface LaunchBoxDownloadProgress {
 /** Bulk edits operate on explicit games or the whole filtered result, not the current page. */
 export type BulkSystemSelection =
   | {
-    scope: 'selected';
-    targets: MetadataTarget[]
-  }
+      scope: 'selected';
+      targets: MetadataTarget[];
+    }
   | {
-    scope: 'filtered';
-    filter: Pick<LibraryQuery, 'source' | 'search' | 'system' | 'identification'>
-  };
+      scope: 'filtered';
+      filter: Pick<LibraryQuery, 'source' | 'search' | 'system' | 'identification'>;
+    };
 
 export const RETROPIE_SYSTEM_MAP: Readonly<Record<string, string>> = {
   'Nintendo Entertainment System': 'nes',
@@ -129,19 +136,19 @@ export const RETROPIE_SYSTEM_MAP: Readonly<Record<string, string>> = {
   'Mega Drive / Genesis': 'megadrive',
   'Master System': 'mastersystem',
   'Game Gear': 'gamegear',
-  'PlayStation': 'psx',
+  PlayStation: 'psx',
   'PlayStation 2': 'ps2',
   'PlayStation Portable': 'psp',
-  'Dreamcast': 'dreamcast',
+  Dreamcast: 'dreamcast',
   'Sega Saturn': 'saturn',
-  'Arcade': 'arcade',
+  Arcade: 'arcade',
   'Neo Geo': 'neogeo',
   'PC Engine / TurboGrafx-16': 'pcengine',
   'Atari 2600': 'atari2600',
   'Atari 7800': 'atari7800',
-  'Ports': 'ports',
-  'DOS': 'pc',
-  'ScummVM': 'scummvm'
+  Ports: 'ports',
+  DOS: 'pc',
+  ScummVM: 'scummvm'
 };
 
 /** Local export is preview-first; no export writes to source collections. */
@@ -177,7 +184,7 @@ export interface LibretroCoverChoice {
   artworkId: string;
 }
 
-/** Patch 009: preferences are independent from the library and artwork database. */
+/** Preferences are stored independently of library data. */
 export interface LibraryPreferences {
   selected: string | null;
   search: string;
@@ -264,17 +271,22 @@ export interface DesktopApi {
   runRetroPieExport(options: ExportOptions, fingerprint: string): Promise<ExportReceipt>;
 
   importLaunchBox(): Promise<{
-    count: number
+    count: number;
   } | null>;
   downloadLaunchBox(): Promise<{
-    count: number
+    count: number;
   }>;
   cancelLaunchBoxDownload(): Promise<boolean>;
   onLaunchBoxProgress(listener: (update: LaunchBoxDownloadProgress) => void): () => void;
   launchBoxSearch(query: string, system: string): Promise<MetadataCandidate[]>;
   launchBoxApply(target: MetadataTarget, id: number): Promise<GameMetadata>;
   findLibretroArtwork(system: string, names: string[]): Promise<string | null>;
-  searchLibretroCovers(system: string, query: string, regionHint: string, refresh?: boolean): Promise<LibretroCoverChoice[]>;
+  searchLibretroCovers(
+    system: string,
+    query: string,
+    regionHint: string,
+    refresh?: boolean
+  ): Promise<LibretroCoverChoice[]>;
   metadataSave(target: MetadataTarget, data: GameMetadataInput): Promise<GameMetadata>;
   importDat(): Promise<DatImportReceipt | null>;
   identifyCollection(source: string, jobId: string): Promise<IdentificationReceipt>;
@@ -293,8 +305,6 @@ export interface DesktopApi {
   removeCollection(source: string): Promise<void>;
 }
 
-/** Domain types for future persistence and metadata matching. The existing Rom
- * and ScanResult IPC payloads stay unchanged in Patch 001. */
 export type PlatformId = string;
 
 export interface CollectionSource {

@@ -15,7 +15,7 @@ export class PreparedExport {
     readonly destination: FileDestination,
     readonly plan: ExportPlan,
     readonly operations: readonly FileOperation[]
-  ) { }
+  ) {}
 
   /** Keep the preview in sync with the operations that execution will actually use. */
   static fromDraft(draft: ExportDraft, options: ExportOptions, destination: FileDestination): PreparedExport {
@@ -35,7 +35,7 @@ export class PreparedExport {
     if (this.plan.conflicts.length) {
       throw new Error('Resolve destination conflicts before export.');
     }
-    if (!this.plan.files.some(file => file.kind === 'rom')) {
+    if (!this.plan.files.some((file) => file.kind === 'rom')) {
       throw new Error('No exportable ROMs in preview.');
     }
   }
@@ -75,7 +75,11 @@ export class PreparedExport {
     return indexed;
   }
 
-  private static synchronizeFile(file: ExportFile, operation: FileOperation | undefined, hasConflicts: boolean): ExportFile {
+  private static synchronizeFile(
+    file: ExportFile,
+    operation: FileOperation | undefined,
+    hasConflicts: boolean
+  ): ExportFile {
     if (file.kind === 'rom') {
       if (operation) {
         throw new Error(`ROM reference cannot be an export operation: ${file.relativeDestination}`);
@@ -104,8 +108,18 @@ export class PreparedExport {
   ): string {
     const { destination, files, warnings, conflicts } = plan;
     const versions = operations.map(this.operationVersion);
-    return sha256(Buffer.from(JSON.stringify({
-      destination, files, warnings, conflicts, options, versions
-    }), 'utf8'));
+    return sha256(
+      Buffer.from(
+        JSON.stringify({
+          destination,
+          files,
+          warnings,
+          conflicts,
+          options,
+          versions
+        }),
+        'utf8'
+      )
+    );
   }
 }

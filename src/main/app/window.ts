@@ -20,7 +20,7 @@ export function createWindow(settings: SettingsStore): void {
   const saved = settings.snapshot().settings.window;
   const bounds = restoreWindowBounds(
     saved.bounds,
-    screen.getAllDisplays().map(display => display.workArea),
+    screen.getAllDisplays().map((display) => display.workArea),
     screen.getPrimaryDisplay().workArea
   );
   const win = new BrowserWindow({
@@ -33,29 +33,25 @@ export function createWindow(settings: SettingsStore): void {
   if (saved.maximized) {
     win.maximize();
   }
-  const updateBackground = () => win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0d111b' : '#f4f6fa');
+  const updateBackground = () =>
+    win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0d111b' : '#f4f6fa');
   nativeTheme.on('updated', updateBackground);
-  win.on(
-    'close',
-    () => {
-      try {
-        settings.saveWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
-      }
-      catch (error) {
-        console.error('Could not save window preferences:', error);
-      }
+  win.on('close', () => {
+    try {
+      settings.saveWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
+    } catch (error) {
+      console.error('Could not save window preferences:', error);
     }
-  );
+  });
   win.once('closed', () => nativeTheme.removeListener('updated', updateBackground));
   // Development URLs must never override the packaged renderer.
   const devUrl = !app.isPackaged ? process.env.VITE_DEV_SERVER_URL : undefined;
   if (devUrl && /^http:\/\/127\.0\.0\.1:5173\/?$/.test(devUrl)) {
     void win.loadURL(devUrl);
-  }
-  else {
+  } else {
     void win.loadFile(packagedRendererPath());
   }
-  win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 

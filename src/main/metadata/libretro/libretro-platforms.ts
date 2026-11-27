@@ -10,10 +10,10 @@ const LIBRETRO_PLATFORM: Readonly<Record<string, string>> = {
   'Mega Drive / Genesis': 'Sega - Mega Drive - Genesis',
   'Master System': 'Sega - Master System - Mark III',
   'Game Gear': 'Sega - Game Gear',
-  'PlayStation': 'Sony - PlayStation',
+  PlayStation: 'Sony - PlayStation',
   'PlayStation 2': 'Sony - PlayStation 2',
   'PlayStation Portable': 'Sony - PlayStation Portable',
-  'Dreamcast': 'Sega - Dreamcast',
+  Dreamcast: 'Sega - Dreamcast',
   'Sega Saturn': 'Sega - Saturn',
   'PC Engine / TurboGrafx-16': 'NEC - PC Engine - TurboGrafx 16',
   'Atari 2600': 'Atari - 2600',
@@ -54,7 +54,10 @@ const SYSTEM_ALIASES: Readonly<Record<string, string>> = {
   atari7800: 'Atari 7800'
 };
 function systemKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, ' ');
 }
 
 export function libretroPlatform(system: string): string | null {

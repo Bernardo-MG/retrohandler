@@ -8,12 +8,17 @@ const GAME_START = '<Game>';
 const GAME_END = '</Game>';
 
 const XML_ENTITIES: Readonly<Record<string, string>> = {
-  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'"
 };
 
 // Preserve LaunchBox's existing lenient text conversion without entity expansion.
 export function xmlText(value: string): string {
-  return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/<[^>]*>/g, '')
     .replace(/&(#x[\da-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, decodeEntity)
     .trim();
@@ -100,7 +105,7 @@ class GameRecordBuffer {
   *consume(chunk: string): Generator<LaunchBoxGame> {
     this.rejectEntityDeclarations(chunk);
     this.buffer += chunk;
-    for (; ;) {
+    for (;;) {
       const node = this.takeRecord();
       if (node === null) {
         return;

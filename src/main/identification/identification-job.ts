@@ -1,4 +1,9 @@
-import type { IdentificationProgress, IdentificationReceipt, IdentificationResult, IdentificationStatus } from '../../shared';
+import type {
+  IdentificationProgress,
+  IdentificationReceipt,
+  IdentificationResult,
+  IdentificationStatus
+} from '../../shared';
 import { throwIfCancelled } from '../components/async/cancellation';
 
 export interface IdentificationOptions {
@@ -10,28 +15,37 @@ export interface IdentificationOptions {
 export class IdentificationJob {
   private readonly pendingResults: IdentificationResult[] = [];
   private readonly counters: IdentificationReceipt = {
-    processed: 0, verified: 0, probable: 0, ambiguous: 0, unknown: 0, unsupported: 0, errors: 0
+    processed: 0,
+    verified: 0,
+    probable: 0,
+    ambiguous: 0,
+    unknown: 0,
+    unsupported: 0,
+    errors: 0
   };
 
-  constructor(private readonly total: number, private readonly options: IdentificationOptions) { }
+  constructor(
+    private readonly total: number,
+    private readonly options: IdentificationOptions
+  ) {}
 
-  get signal(): AbortSignal | undefined {
+  public get signal(): AbortSignal | undefined {
     return this.options.signal;
   }
 
-  get results(): readonly IdentificationResult[] {
+  public get results(): readonly IdentificationResult[] {
     return this.pendingResults;
   }
 
-  get receipt(): IdentificationReceipt {
+  public get receipt(): IdentificationReceipt {
     return { ...this.counters };
   }
 
-  checkCancellation(): void {
+  public checkCancellation(): void {
     throwIfCancelled(this.signal, 'Identification cancelled.');
   }
 
-  recordResult(result: IdentificationResult): void {
+  public recordResult(result: IdentificationResult): void {
     this.pendingResults.push(result);
     this.counters.processed++;
     this.countStatus(result.status);

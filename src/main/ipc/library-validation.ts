@@ -1,7 +1,15 @@
 import type { BulkSystemSelection, LibraryQuery } from '../../shared';
 import { isOneOf, isRecord, isText } from './validation';
 
-const IDENTIFICATION_STATUSES = ['pending', 'verified', 'probable', 'ambiguous', 'unknown', 'unsupported', 'error'] as const;
+const IDENTIFICATION_STATUSES = [
+  'pending',
+  'verified',
+  'probable',
+  'ambiguous',
+  'unknown',
+  'unsupported',
+  'error'
+] as const;
 const SORTS = ['name', 'system', 'bytes'] as const;
 
 function isNullableText(value: unknown, limit: number): value is string | null {
@@ -14,15 +22,25 @@ function isFilter(value: unknown): value is Record<string, unknown> & LibraryFil
   if (!isRecord(value)) {
     return false;
   }
-  return isNullableText(value.source, 4096) && isText(value.search, 256) &&
+  return (
+    isNullableText(value.source, 4096) &&
+    isText(value.search, 256) &&
     isNullableText(value.system, 256) &&
-    (value.identification === undefined || value.identification === null || isOneOf(value.identification, IDENTIFICATION_STATUSES));
+    (value.identification === undefined ||
+      value.identification === null ||
+      isOneOf(value.identification, IDENTIFICATION_STATUSES))
+  );
 }
 
 export function parseLibraryQuery(value: unknown): LibraryQuery {
-  if (!isRecord(value) || !isFilter(value) || !isOneOf(value.sort, SORTS) ||
-    typeof value.descending !== 'boolean' || !isIntegerInRange(value.offset, 0, Number.MAX_SAFE_INTEGER) ||
-    !isIntegerInRange(value.limit, 1, 200)) {
+  if (
+    !isRecord(value) ||
+    !isFilter(value) ||
+    !isOneOf(value.sort, SORTS) ||
+    typeof value.descending !== 'boolean' ||
+    !isIntegerInRange(value.offset, 0, Number.MAX_SAFE_INTEGER) ||
+    !isIntegerInRange(value.limit, 1, 200)
+  ) {
     throw new Error('Invalid library query.');
   }
   return {
@@ -42,9 +60,15 @@ function isIntegerInRange(value: unknown, min: number, max: number): value is nu
 }
 
 function isTarget(value: unknown): value is { source: string; relativePath: string } {
-  return isRecord(value) && isText(value.source, 4096) && isText(value.relativePath, 4096) &&
-    value.source.length > 0 && value.relativePath.length > 0 &&
-    !value.source.includes('\0') && !value.relativePath.includes('\0');
+  return (
+    isRecord(value) &&
+    isText(value.source, 4096) &&
+    isText(value.relativePath, 4096) &&
+    value.source.length > 0 &&
+    value.relativePath.length > 0 &&
+    !value.source.includes('\0') &&
+    !value.relativePath.includes('\0')
+  );
 }
 
 function parseTargets(values: unknown[]): Array<{ source: string; relativePath: string }> {

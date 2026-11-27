@@ -20,20 +20,26 @@ export class CollectionController extends ControllerState<CollectionState> {
     super({ editing: null, assigning: null, label: '', system: '', saving: false, error: '' });
   }
 
-  readonly setLabel = (label: string): void => this.update({ label });
-  readonly setSystem = (system: string): void => this.update({ system });
-  readonly beginAssignment = (collection: CollectionInfo): void => {
+  public readonly setLabel = (label: string): void => this.update({ label });
+  public readonly setSystem = (system: string): void => this.update({ system });
+  public readonly beginAssignment = (collection: CollectionInfo): void => {
     this.update({ assigning: collection.rootPath, editing: null, system: '', error: '' });
   };
-  readonly beginRename = (collection: CollectionInfo): void => {
+  public readonly beginRename = (collection: CollectionInfo): void => {
     this.update({ assigning: null, editing: collection.rootPath, label: collection.label });
   };
-  readonly cancelAssignment = (): void => this.update({ assigning: null, error: '' });
-  readonly cancelRename = (): void => this.update({ editing: null });
+  public readonly cancelAssignment = (): void => this.update({ assigning: null, error: '' });
+  public readonly cancelRename = (): void => this.update({ editing: null });
 
-  async saveName(collection: CollectionInfo, busy: boolean, rename: CollectionActions['rename']): Promise<void> {
+  public async saveName(
+    collection: CollectionInfo,
+    busy: boolean,
+    rename: CollectionActions['rename']
+  ): Promise<void> {
     const { saving, label } = this.getSnapshot();
-    if (saving || busy) return;
+    if (saving || busy) {
+      return;
+    }
     this.update({ saving: true, error: '' });
     try {
       await rename(collection.rootPath, label);
@@ -45,8 +51,12 @@ export class CollectionController extends ControllerState<CollectionState> {
     }
   }
 
-  async forget(collection: CollectionInfo, remove: CollectionActions['remove']): Promise<void> {
-    if (!this.confirm(`Forget “${collection.label}” from RetroHandler? Your ROM files will not be deleted.`)) return;
+  public async forget(collection: CollectionInfo, remove: CollectionActions['remove']): Promise<void> {
+    if (
+      !this.confirm(`Forget “${collection.label}” from RetroHandler? Your ROM files will not be deleted.`)
+    ) {
+      return;
+    }
     try {
       await remove(collection.rootPath);
     } catch (reason) {
@@ -54,17 +64,38 @@ export class CollectionController extends ControllerState<CollectionState> {
     }
   }
 
-  applySelectedSystem(collection: CollectionInfo, busy: boolean, assignSystem: CollectionActions['assignSystem']): Promise<void> {
+  public applySelectedSystem(
+    collection: CollectionInfo,
+    busy: boolean,
+    assignSystem: CollectionActions['assignSystem']
+  ): Promise<void> {
     return this.applySystem(collection, this.getSnapshot().system.trim(), busy, assignSystem);
   }
-  clearSystem(collection: CollectionInfo, busy: boolean, assignSystem: CollectionActions['assignSystem']): Promise<void> {
+  public clearSystem(
+    collection: CollectionInfo,
+    busy: boolean,
+    assignSystem: CollectionActions['assignSystem']
+  ): Promise<void> {
     return this.applySystem(collection, null, busy, assignSystem);
   }
 
-  private async applySystem(collection: CollectionInfo, override: string | null, busy: boolean, assignSystem: CollectionActions['assignSystem']): Promise<void> {
-    if (this.getSnapshot().saving || busy) return;
+  private async applySystem(
+    collection: CollectionInfo,
+    override: string | null,
+    busy: boolean,
+    assignSystem: CollectionActions['assignSystem']
+  ): Promise<void> {
+    if (this.getSnapshot().saving || busy) {
+      return;
+    }
     const action = override ? `set the system to “${override}”` : 'clear manual system assignments';
-    if (!this.confirm(`This will ${action} for all ${collection.gameCount.toLocaleString()} ROMs in “${collection.label}”. Continue?`)) return;
+    if (
+      !this.confirm(
+        `This will ${action} for all ${collection.gameCount.toLocaleString()} ROMs in “${collection.label}”. Continue?`
+      )
+    ) {
+      return;
+    }
     this.update({ saving: true, error: '' });
     try {
       await assignSystem(collection.rootPath, override);

@@ -4,7 +4,6 @@ import type { LibraryService } from '../services/library';
 import { RendererJobs, sendProgress } from './renderer-jobs';
 import { isCollectionPath, isJobId } from './validation';
 
-/** Renderer-scoped cancellation and progress; no fingerprint or persistence logic. */
 export function registerIdentificationIpc(
   identification: Pick<IdentificationService, 'importDat' | 'identifyCollection'>,
   library: Pick<LibraryService, 'listCollections'>
@@ -30,14 +29,16 @@ export function registerIdentificationIpc(
       throw new Error('Invalid identification request.');
     }
     const collections = await library.listCollections();
-    if (!collections.some(collection => collection.rootPath === source)) {
+    if (!collections.some((collection) => collection.rootPath === source)) {
       throw new Error('Collection not found.');
     }
     const sender = event.sender;
-    return jobs.run(sender, jobId, signal => identification.identifyCollection(source, {
-      signal,
-      onProgress: progress => sendProgress(sender, 'identity:progress', { jobId, progress })
-    }));
+    return jobs.run(sender, jobId, (signal) =>
+      identification.identifyCollection(source, {
+        signal,
+        onProgress: (progress) => sendProgress(sender, 'identity:progress', { jobId, progress })
+      })
+    );
   }
 
   function cancel(event: IpcMainInvokeEvent, jobId: unknown): boolean {

@@ -9,7 +9,7 @@ export const SCHEMA_VERSION = 1;
 export function initializeSchema(db: DatabaseHandle, executor: QueryExecutor): void {
   const initialize = db.transaction(() => {
     const { user_version: version } = executor.findRequired<{
-      user_version: number
+      user_version: number;
     }>('schema.readVersion');
 
     if (version !== 0 && version !== SCHEMA_VERSION) {
@@ -17,10 +17,12 @@ export function initializeSchema(db: DatabaseHandle, executor: QueryExecutor): v
     }
 
     const objects = executor.findAll<{
-      name: string
+      name: string;
     }>('schema.inspectObjects');
     if (objects.some((object) => object.name === 'schema_version')) {
-      throw new Error('Pre-release RetroHandler database detected. Back it up and move it aside before creating a new library.');
+      throw new Error(
+        'Pre-release RetroHandler database detected. Back it up and move it aside before creating a new library.'
+      );
     }
 
     if (version === SCHEMA_VERSION) {

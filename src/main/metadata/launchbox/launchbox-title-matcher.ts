@@ -28,17 +28,19 @@ function toMetadataCandidate(game: LaunchBoxCandidate): MetadataCandidate {
 
 /** Offline title and platform ranking, independent of SQL and persistence. */
 export class LaunchBoxTitleMatcher {
-  readonly normalizedTitle: string;
+  public readonly normalizedTitle: string;
   private readonly platform: string;
   private readonly platformAlias: string;
 
   constructor(query: { title: string; platform: string }) {
     this.normalizedTitle = normalizeLaunchBoxName(query.title);
     this.platform = normalizePlatform(query.platform);
-    this.platformAlias = Object.hasOwn(PLATFORM_ALIASES, this.platform) ? PLATFORM_ALIASES[this.platform] : this.platform;
+    this.platformAlias = Object.hasOwn(PLATFORM_ALIASES, this.platform)
+      ? PLATFORM_ALIASES[this.platform]
+      : this.platform;
   }
 
-  rank(candidates: readonly LaunchBoxCandidate[]): MetadataCandidate[] {
+  public rank(candidates: readonly LaunchBoxCandidate[]): MetadataCandidate[] {
     return [...candidates]
       .sort((first, second) => this.compare(first, second))
       .slice(0, 20)
@@ -46,7 +48,11 @@ export class LaunchBoxTitleMatcher {
   }
 
   private compare(first: LaunchBoxCandidate, second: LaunchBoxCandidate): number {
-    return this.score(second) - this.score(first) || first.title.localeCompare(second.title) || first.id - second.id;
+    return (
+      this.score(second) - this.score(first) ||
+      first.title.localeCompare(second.title) ||
+      first.id - second.id
+    );
   }
 
   private score(candidate: LaunchBoxCandidate): number {

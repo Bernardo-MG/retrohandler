@@ -33,7 +33,12 @@ export interface RomRepository {
 export interface IdentificationRepository {
   importDat(dat: ParsedDat): { name: string; count: number };
   entriesForIdentification(source: string): LibraryEntry[];
-  cachedFingerprint(source: string, relativePath: string, size: number, modifiedMs: number): FileFingerprint | null;
+  cachedFingerprint(
+    source: string,
+    relativePath: string,
+    size: number,
+    modifiedMs: number
+  ): FileFingerprint | null;
   matchFingerprint(hashes: FileFingerprint): FingerprintMatch;
   saveIdentification(source: string, results: readonly IdentificationResult[]): void;
 }

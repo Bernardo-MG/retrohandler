@@ -2,7 +2,10 @@ import type { DesktopApi, ExportOptions, ExportPlan, ExportPreferences } from '.
 import { ControllerState } from '../../controllers/controller-state';
 import { normalizedOverrides, summarizePlan } from './export-model';
 
-type ExportApi = Pick<DesktopApi, 'listSystems' | 'chooseExportFolder' | 'previewRetroPieExport' | 'runRetroPieExport'>;
+type ExportApi = Pick<
+  DesktopApi,
+  'listSystems' | 'chooseExportFolder' | 'previewRetroPieExport' | 'runRetroPieExport'
+>;
 interface ExportState extends ExportPreferences {
   systems: string[];
   plan: ExportPlan | null;
@@ -16,39 +19,44 @@ export class ExportController extends ControllerState<ExportState> {
   private source: string | null;
   private previewSource: string | null = null;
 
-  constructor(private readonly api: ExportApi, source: string | null, preferences: ExportPreferences) {
+  constructor(
+    private readonly api: ExportApi,
+    source: string | null,
+    preferences: ExportPreferences
+  ) {
     super({ ...preferences, systems: [], plan: null, busy: false, error: '', done: '', completed: null });
     this.source = source;
   }
 
-  async loadSystems(source: string | null, signal: AbortSignal): Promise<void> {
+  public async loadSystems(source: string | null, signal: AbortSignal): Promise<void> {
     if (source !== this.source) {
       this.source = source;
       this.update({ plan: null, systems: [] });
     }
     try {
       const rows = await this.api.listSystems(source);
-      if (!signal.aborted && source === this.source) this.update({ systems: rows.map(row => row.system) });
+      if (!signal.aborted && source === this.source) this.update({ systems: rows.map((row) => row.system) });
     } catch (reason) {
       if (!signal.aborted && source === this.source) this.update({ error: String(reason) });
     }
   }
 
-  readonly changeArtwork = (includeArtwork: boolean): void => {
+  public readonly changeArtwork = (includeArtwork: boolean): void => {
     if (!this.getSnapshot().busy) this.update({ includeArtwork, plan: null });
   };
 
-  readonly changeMapping = (system: string, value: string): void => {
+  public readonly changeMapping = (system: string, value: string): void => {
     const { busy, overrides } = this.getSnapshot();
     if (!busy) this.update({ overrides: { ...overrides, [system]: value.toLowerCase() }, plan: null });
   };
 
-  readonly choose = (): Promise<void> => this.execute(async () => {
-    const destination = await this.api.chooseExportFolder();
-    if (destination) this.update({ destination, plan: null, done: '', completed: null });
-  });
+  public readonly choose = (): Promise<void> =>
+    this.execute(async () => {
+      const destination = await this.api.chooseExportFolder();
+      if (destination) this.update({ destination, plan: null, done: '', completed: null });
+    });
 
-  requestPreview(source: string | null): Promise<void> {
+  public requestPreview(source: string | null): Promise<void> {
     return this.execute(async () => {
       this.update({ done: '', completed: null, plan: null });
       const plan = await this.api.previewRetroPieExport(this.options(source));
@@ -59,9 +67,11 @@ export class ExportController extends ControllerState<ExportState> {
     });
   }
 
-  run(source: string | null): Promise<void> | undefined {
+  public run(source: string | null): Promise<void> | undefined {
     const { plan } = this.getSnapshot();
-    if (!plan || this.previewSource !== source || !summarizePlan(plan).canGenerate) return;
+    if (!plan || this.previewSource !== source || !summarizePlan(plan).canGenerate) {
+      return;
+    }
     return this.execute(async () => {
       const receipt = await this.api.runRetroPieExport(this.options(source), plan.fingerprint);
       const { reused } = summarizePlan(plan);
@@ -79,7 +89,9 @@ export class ExportController extends ControllerState<ExportState> {
   }
 
   private async execute(operation: () => Promise<void>): Promise<void> {
-    if (this.getSnapshot().busy) return;
+    if (this.getSnapshot().busy) {
+      return;
+    }
     this.update({ busy: true, error: '' });
     try {
       await operation();

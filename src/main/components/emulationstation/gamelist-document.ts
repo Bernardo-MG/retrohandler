@@ -18,37 +18,36 @@ type DocumentNode = {
   openingTagEnd: number;
 };
 
-/** An EmulationStation document with its original XML and parsed record spans. */
 export class GameListDocument {
   private constructor(
     private readonly source: string,
     private parsedStructure?: DocumentNode
   ) {}
 
-  static parse(xml: string): GameListDocument {
+  public static parse(xml: string): GameListDocument {
     return new GameListDocument(xml, this.parseStructure(xml));
   }
 
-  static fromEntries(entries: readonly GameListEntry[]): GameListDocument {
+  public static fromEntries(entries: readonly GameListEntry[]): GameListDocument {
     return new GameListDocument(this.serializeEntries(entries));
   }
 
-  toXml(): string {
+  public toXml(): string {
     return this.source;
   }
 
-  sourceTextFor(span: Span): string {
+  public sourceTextFor(span: Span): string {
     return this.source.slice(span.start, span.end);
   }
 
-  get records(): readonly GameListRecord[] {
+  public get records(): readonly GameListRecord[] {
     return this.structure.records;
   }
 
   /** Create an insertion edit without exposing the document's root offsets. */
-  createAppendEdit(records: readonly string[]): XmlEdit {
+  public createAppendEdit(records: readonly string[]): XmlEdit {
     const { selfClosing, openingTagEnd, closingTagStart } = this.structure;
-    const text = '\n' + records.map(record => '  ' + record).join('\n') + '\n';
+    const text = '\n' + records.map((record) => '  ' + record).join('\n') + '\n';
     return selfClosing
       ? { start: openingTagEnd - 2, end: openingTagEnd, text: '>' + text + '</gameList>' }
       : { start: closingTagStart, end: closingTagStart, text };
@@ -56,7 +55,7 @@ export class GameListDocument {
 
   private get structure(): DocumentNode {
     // New files do not need a parse pass until a consumer asks for their spans.
-    return this.parsedStructure ??= GameListDocument.parseStructure(this.source);
+    return (this.parsedStructure ??= GameListDocument.parseStructure(this.source));
   }
 
   private static failInvalidDocument(): never {
@@ -105,7 +104,7 @@ export class GameListDocument {
       cursor.skipWhitespaceAndComments();
     }
     const closingTagStart = cursor.readClosingTag(tag.name);
-    const paths = fields.filter(f => f.name === 'path');
+    const paths = fields.filter((f) => f.name === 'path');
     if (paths.length !== 1 || !paths[0].value.trim()) {
       this.failInvalidDocument();
     }
@@ -141,7 +140,7 @@ export class GameListDocument {
   }
 
   private static serializeEntries(games: readonly GameListEntry[]): string {
-    const elements = games.map(game => this.serializeGame(game));
+    const elements = games.map((game) => this.serializeGame(game));
     return '<?xml version="1.0" encoding="UTF-8"?>\n<gameList>\n' + elements.join('\n') + '\n</gameList>\n';
   }
 

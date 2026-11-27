@@ -21,7 +21,7 @@ type DirectoryContents = DirectoryListing & { subdirectories: string[] };
 export class DirectoryWalker {
   constructor(private readonly maxDepth: number) {}
 
-  async resolveRoot(folder: string): Promise<string> {
+  public async resolveRoot(folder: string): Promise<string> {
     const root = await realpath(folder);
     if (!(await lstat(root)).isDirectory()) {
       throw new Error('Please choose a directory.');
@@ -29,7 +29,7 @@ export class DirectoryWalker {
     return root;
   }
 
-  async *walk(root: string, options: WalkOptions = {}): AsyncGenerator<DirectoryListing> {
+  public async *walk(root: string, options: WalkOptions = {}): AsyncGenerator<DirectoryListing> {
     const pending: PendingDirectory[] = [{ directory: root, depth: 0 }];
     while (pending.length) {
       throwIfCancelled(options.signal);
@@ -46,7 +46,11 @@ export class DirectoryWalker {
     throwIfCancelled(options.signal);
   }
 
-  private async readOrSkip(root: string, directory: string, options: WalkOptions): Promise<DirectoryContents | null> {
+  private async readOrSkip(
+    root: string,
+    directory: string,
+    options: WalkOptions
+  ): Promise<DirectoryContents | null> {
     try {
       return await this.readDirectory(root, directory, options.signal);
     } catch (error) {
@@ -60,7 +64,11 @@ export class DirectoryWalker {
     }
   }
 
-  private async readDirectory(root: string, directory: string, signal?: AbortSignal): Promise<DirectoryContents> {
+  private async readDirectory(
+    root: string,
+    directory: string,
+    signal?: AbortSignal
+  ): Promise<DirectoryContents> {
     await assertUnredirectedPath(root, directory);
     if (!(await lstat(directory)).isDirectory()) {
       throw new Error('Not a regular directory.');
@@ -83,7 +91,11 @@ export class DirectoryWalker {
     return { directory, files, subdirectories };
   }
 
-  private *childDirectories(current: PendingDirectory, children: readonly string[], options: WalkOptions): Generator<PendingDirectory> {
+  private *childDirectories(
+    current: PendingDirectory,
+    children: readonly string[],
+    options: WalkOptions
+  ): Generator<PendingDirectory> {
     for (const directory of children) {
       throwIfCancelled(options.signal);
       if (current.depth >= this.maxDepth) {

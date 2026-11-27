@@ -19,7 +19,11 @@ function assertX64Pe(file) {
       throw new Error(`Not a PE file: ${file}`);
     }
     const pe = Buffer.alloc(6);
-    if (fs.readSync(fd, pe, 0, 6, dos.readUInt32LE(60)) !== 6 || pe.readUInt32LE(0) !== 0x4550 || pe.readUInt16LE(4) !== 0x8664) {
+    if (
+      fs.readSync(fd, pe, 0, 6, dos.readUInt32LE(60)) !== 6 ||
+      pe.readUInt32LE(0) !== 0x4550 ||
+      pe.readUInt16LE(4) !== 0x8664
+    ) {
       throw new Error(`Expected Windows x64 PE: ${file}`);
     }
   } finally {
@@ -41,15 +45,17 @@ function verifyPackage(base = root, directoryOnly = false, runSmoke = true) {
   const resources = path.join(unpacked, 'resources');
   assertX64Pe(executable);
   assertNonempty(path.join(resources, 'app.asar'));
-  assertX64Pe(path.join(
-    resources,
-    'app.asar.unpacked',
-    'node_modules',
-    'better-sqlite3',
-    'build',
-    'Release',
-    'better_sqlite3.node'
-  ));
+  assertX64Pe(
+    path.join(
+      resources,
+      'app.asar.unpacked',
+      'node_modules',
+      'better-sqlite3',
+      'build',
+      'Release',
+      'better_sqlite3.node'
+    )
+  );
   if (!directoryOnly) {
     // NSIS installers may have a 32-bit bootstrap even for an x64 payload.
     assertNonempty(path.join(release, `RetroHandler-Setup-${manifest.version}-x64.exe`));
@@ -58,11 +64,11 @@ function verifyPackage(base = root, directoryOnly = false, runSmoke = true) {
     if (process.platform !== 'win32') {
       throw new Error('Packaged runtime verification requires Windows.');
     }
-    const result = spawnSync(
-      executable,
-      ['--retrohandler-package-smoke'],
-      { timeout: 60000, windowsHide: true, stdio: 'inherit' }
-    );
+    const result = spawnSync(executable, ['--retrohandler-package-smoke'], {
+      timeout: 60000,
+      windowsHide: true,
+      stdio: 'inherit'
+    });
     if (result.error || result.status !== 0) {
       throw new Error(`Packaged smoke test failed: ${result.error || result.signal || result.status}`);
     }
@@ -76,8 +82,10 @@ if (require.main === module) {
     const [command, ...args] = process.argv.slice(2);
     if (command === 'clean' && !args.length) {
       cleanRelease();
-    }
-    else if (command === 'verify' && (args.length === 0 || (args.length === 1 && args[0] === '--directory-only'))) {
+    } else if (
+      command === 'verify' &&
+      (args.length === 0 || (args.length === 1 && args[0] === '--directory-only'))
+    ) {
       verifyPackage(root, args.includes('--directory-only'));
       console.log('Windows package and runtime smoke test passed.');
     } else {

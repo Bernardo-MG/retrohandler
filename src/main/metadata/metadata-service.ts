@@ -4,17 +4,20 @@ import type { MetadataProvider, MetadataSearch } from './metadata-provider';
 
 /** Application metadata workflow, independent of Electron and concrete providers. */
 export class MetadataService {
-  constructor(private readonly repository: MetadataRepository, private readonly provider: MetadataProvider) { }
+  constructor(
+    private readonly repository: MetadataRepository,
+    private readonly provider: MetadataProvider
+  ) {}
 
-  search(request: MetadataSearch): MetadataCandidate[] {
+  public search(request: MetadataSearch): MetadataCandidate[] {
     return this.provider.search(request);
   }
 
-  save(target: MetadataTarget, metadata: GameMetadataInput): GameMetadata {
+  public save(target: MetadataTarget, metadata: GameMetadataInput): GameMetadata {
     return this.repository.saveMetadata(target.source, target.relativePath, metadata);
   }
 
-  applyCandidate(target: MetadataTarget, id: number): GameMetadata {
+  public applyCandidate(target: MetadataTarget, id: number): GameMetadata {
     if (!Number.isSafeInteger(id) || id <= 0) {
       throw new Error('Invalid LaunchBox match.');
     }

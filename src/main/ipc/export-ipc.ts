@@ -8,7 +8,7 @@ export function registerExportIpc(service: Pick<ExportService, 'preview' | 'exec
       title: 'Choose RetroPie export folder',
       properties: ['openDirectory', 'createDirectory']
     });
-    return chosen.canceled ? null : chosen.filePaths[0] ?? null;
+    return chosen.canceled ? null : (chosen.filePaths[0] ?? null);
   }
 
   ipcMain.handle('export:choose', chooseDestination);

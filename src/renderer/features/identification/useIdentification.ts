@@ -3,7 +3,11 @@ import { desktopApi } from '../../api/desktop-api';
 import { useControllerState } from '../../hooks/useControllerState';
 import { IdentificationController } from './IdentificationController';
 
-export function useIdentification(selected: string | null, onCompleted: () => void, reportError: (message: string) => void) {
+export function useIdentification(
+  selected: string | null,
+  onCompleted: () => void,
+  reportError: (message: string) => void
+) {
   const [controller, state] = useControllerState(() => new IdentificationController(desktopApi()));
   useEffect(() => controller.connect(), [controller]);
   return {

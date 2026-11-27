@@ -7,11 +7,15 @@ function applicationPreferences({ library: _library, ...settings }: AppSettings)
 }
 
 export class PreferencesController extends ControllerState<Omit<AppSettings, 'library'>> {
-  constructor(private readonly api: Pick<DesktopApi, 'saveSettings'>, initial: AppSettings, private readonly reportError: (message: string) => void) {
+  constructor(
+    private readonly api: Pick<DesktopApi, 'saveSettings'>,
+    initial: AppSettings,
+    private readonly reportError: (message: string) => void
+  ) {
     super(applicationPreferences(initial));
   }
 
-  async persistLibrary(library: LibraryPreferences): Promise<void> {
+  public async persistLibrary(library: LibraryPreferences): Promise<void> {
     try {
       await this.api.saveSettings({ library });
     } catch (reason) {
@@ -19,12 +23,12 @@ export class PreferencesController extends ControllerState<Omit<AppSettings, 'li
     }
   }
 
-  readonly rememberExport = (value: ExportPreferences): void => {
+  public readonly rememberExport = (value: ExportPreferences): void => {
     this.update({ export: value });
     void this.persistExport(value);
   };
 
-  readonly applyPreferences = (next: AppSettings): void => {
+  public readonly applyPreferences = (next: AppSettings): void => {
     this.update(applicationPreferences(next));
   };
 

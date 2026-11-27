@@ -4,7 +4,6 @@ import type { LibraryService } from '../services/library';
 import { RendererJobs, sendProgress } from './renderer-jobs';
 import { isCollectionPath, isJobId } from './validation';
 
-/** Owns renderer-scoped scan cancellation and forwards progress. */
 export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): void {
   const jobs = new RendererJobs({
     busy: 'A scan is already running.',
@@ -13,7 +12,7 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
 
   async function chooseFolder(): Promise<string | null> {
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-    return result.canceled ? null : result.filePaths[0] ?? null;
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   }
 
   async function scan(event: IpcMainInvokeEvent, folder: unknown, jobId?: unknown): Promise<ScanResult> {
@@ -25,15 +24,25 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
     }
     const sender = event.sender;
     const id = typeof jobId === 'string' ? jobId : 'legacy';
-    return jobs.run(sender, id, signal => library.scanFolder(folder, {
-      signal,
-      onProgress: progress => sendProgress(sender, 'roms:progress', { jobId: id, progress })
-    }));
+    return jobs.run(sender, id, (signal) =>
+      library.scanFolder(folder, {
+        signal,
+        onProgress: (progress) => sendProgress(sender, 'roms:progress', { jobId: id, progress })
+      })
+    );
   }
 
-  async function scanIndexed(event: IpcMainInvokeEvent, folder: unknown, jobId: unknown): Promise<ScanReceipt> {
+  async function scanIndexed(
+    event: IpcMainInvokeEvent,
+    folder: unknown,
+    jobId: unknown
+  ): Promise<ScanReceipt> {
     const result = await scan(event, folder, jobId);
-    return { source: result.source, gameCount: result.games.length, warningCount: result.warnings?.length ?? 0 };
+    return {
+      source: result.source,
+      gameCount: result.games.length,
+      warningCount: result.warnings?.length ?? 0
+    };
   }
 
   function cancel(event: IpcMainInvokeEvent, jobId: unknown): boolean {

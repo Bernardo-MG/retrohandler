@@ -15,16 +15,16 @@ export class RetroPieGameList {
   constructor(
     private readonly layout: RetroPieLayout,
     private readonly system: string
-  ) { }
+  ) {}
 
   generateOrMerge(games: readonly RetroPieGame[], previousContent: Buffer | null): Buffer {
-    const generated = GameListDocument.fromEntries(games.map(game => this.toGameListEntry(game)));
+    const generated = GameListDocument.fromEntries(games.map((game) => this.toGameListEntry(game)));
     if (previousContent === null) {
       return Buffer.from(generated.toXml(), 'utf8');
     }
     const xml = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(previousContent);
     const existing = GameListDocument.parse(xml);
-    const merger = new GameListMerger(value => this.layout.normalizeGameReference(value, this.system));
+    const merger = new GameListMerger((value) => this.layout.normalizeGameReference(value, this.system));
     return Buffer.from(merger.merge(existing, generated, this.pathsWithFallbackTitles(games)), 'utf8');
   }
 

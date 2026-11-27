@@ -19,11 +19,11 @@ export class ContentFingerprint {
   private readonly sha1 = createHash('sha1');
   private bytes = 0;
 
-  get size(): number {
+  public get size(): number {
     return this.bytes;
   }
 
-  update(content: Uint8Array): void {
+  public update(content: Uint8Array): void {
     this.crc.update(content);
     this.md5.update(content);
     this.sha1.update(content);
@@ -31,7 +31,7 @@ export class ContentFingerprint {
   }
 
   /** Finalize this calculation; like Node's Hash.digest(), call once. */
-  digest(): StreamFingerprint {
+  public digest(): StreamFingerprint {
     return {
       crc32: this.crc.hex(),
       md5: this.md5.digest('hex'),

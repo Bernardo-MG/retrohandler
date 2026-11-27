@@ -8,26 +8,33 @@ type CachedIndex = { expires: number; files: readonly string[] };
 
 /** Accept filename entries only, never paths or encoded separators. */
 function isBoxartName(value: string): boolean {
-  return value.toLowerCase().endsWith('.png') && value.length <= 220 && !/[/\\\0-\x1f]/.test(value) && !value.includes('%');
+  return (
+    value.toLowerCase().endsWith('.png') &&
+    value.length <= 220 &&
+    !/[/\\\0-\x1f]/.test(value) &&
+    !value.includes('%')
+  );
 }
 
 /** Collect and deduplicate a bounded set of image filenames. */
 class BoxartNames {
   private readonly names = new Set<string>();
 
-  add(value: string): void {
+  public add(value: string): void {
     if (this.names.size < MAX_INDEX_ITEMS && isBoxartName(value)) {
       this.names.add(value);
     }
   }
 
-  addEncoded(value: string): void {
+  public addEncoded(value: string): void {
     try {
       this.add(decodeURIComponent(value));
-    } catch { /* Ignore malformed catalogue entries. */ }
+    } catch {
+      /* Ignore malformed catalogue entries. */
+    }
   }
 
-  toArray(): string[] {
+  public toArray(): string[] {
     return [...this.names];
   }
 }
@@ -50,9 +57,12 @@ export function parseLibretroIndex(data: string): string[] {
 export class LibretroCatalogue {
   private readonly cache = new Map<string, CachedIndex>();
 
-  constructor(private readonly client: LibretroClient, private readonly now = Date.now) { }
+  constructor(
+    private readonly client: LibretroClient,
+    private readonly now = Date.now
+  ) {}
 
-  async getFiles(platform: string, refresh = false): Promise<readonly string[]> {
+  public async getFiles(platform: string, refresh = false): Promise<readonly string[]> {
     const cached = this.cache.get(platform);
     if (!refresh && cached && cached.expires > this.now()) {
       return cached.files;
@@ -87,6 +97,8 @@ export class LibretroCatalogue {
     } catch (error) {
       errors.push(`GitHub: ${String(error)}`);
     }
-    throw new Error(`Libretro artwork catalogue unavailable for ${platform} (${errors.join('; ') || 'empty catalogue'}).`);
+    throw new Error(
+      `Libretro artwork catalogue unavailable for ${platform} (${errors.join('; ') || 'empty catalogue'}).`
+    );
   }
 }

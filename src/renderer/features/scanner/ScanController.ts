@@ -11,23 +11,33 @@ export class ScanController extends ControllerState<ScanState> {
   private choosing = false;
   private activeJob: string | null = null;
 
-  constructor(private readonly api: ScanApi, private readonly createJobId = () => `scan_${Date.now()}_${Math.random().toString(36).slice(2)}`) {
+  constructor(
+    private readonly api: ScanApi,
+    private readonly createJobId = () => `scan_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  ) {
     super({ busy: false, progress: null });
   }
 
-  connect(): () => void {
-    return this.api.onScanProgress(update => {
+  public connect(): () => void {
+    return this.api.onScanProgress((update) => {
       if (update.jobId === this.activeJob) this.update({ progress: update.progress });
     });
   }
 
-  async scan(onCompleted: (receipt: ScanReceipt) => Promise<void>, reportError: (message: string) => void): Promise<void> {
-    if (this.choosing || this.activeJob) return;
+  public async scan(
+    onCompleted: (receipt: ScanReceipt) => Promise<void>,
+    reportError: (message: string) => void
+  ): Promise<void> {
+    if (this.choosing || this.activeJob) {
+      return;
+    }
     this.choosing = true;
     reportError('');
     try {
       const folder = await this.api.chooseRomFolder();
-      if (!folder) return;
+      if (!folder) {
+        return;
+      }
       const jobId = this.createJobId();
       this.activeJob = jobId;
       this.update({ busy: true, progress: null });
@@ -45,8 +55,10 @@ export class ScanController extends ControllerState<ScanState> {
     }
   }
 
-  async cancel(reportError: (message: string) => void): Promise<void> {
-    if (!this.activeJob) return;
+  public async cancel(reportError: (message: string) => void): Promise<void> {
+    if (!this.activeJob) {
+      return;
+    }
     try {
       await this.api.cancelScan(this.activeJob);
     } catch (reason) {

@@ -17,49 +17,54 @@ export class ScanJob {
   private filesVisited = 0;
   private directoriesVisited = 0;
 
-  constructor(readonly root: string, private readonly options: ScanOptions) {}
+  constructor(
+    readonly root: string,
+    private readonly options: ScanOptions
+  ) {}
 
-  get signal(): AbortSignal | undefined {
+  public get signal(): AbortSignal | undefined {
     return this.options.signal;
   }
 
-  checkCancellation(): void {
+  public checkCancellation(): void {
     throwIfCancelled(this.signal, 'Scan cancelled.');
   }
 
-  visitDirectory(): void {
+  public visitDirectory(): void {
     this.directoriesVisited++;
   }
 
-  visitFile(): void {
+  public visitFile(): void {
     this.filesVisited++;
   }
 
-  ignoreFile(): void {
+  public ignoreFile(): void {
     this.ignored++;
   }
 
-  addGame(game: Rom): void {
+  public addGame(game: Rom): void {
     this.games.push(game);
     if (this.games.length >= MAX_FILES) {
-      throw new Error(`Scan limit (${MAX_FILES.toLocaleString()} files) reached. Select a smaller collection.`);
+      throw new Error(
+        `Scan limit (${MAX_FILES.toLocaleString()} files) reached. Select a smaller collection.`
+      );
     }
   }
 
-  warn(filename: string, error: unknown): void {
+  public warn(filename: string, error: unknown): void {
     this.warnings.push({
       relativePath: path.relative(this.root, filename),
       message: error instanceof Error ? error.message : String(error)
     });
   }
 
-  reportFile(filename: string): void {
+  public reportFile(filename: string): void {
     if (this.filesVisited % PROGRESS_INTERVAL === 0) {
       this.report(filename);
     }
   }
 
-  report(currentPath: string): void {
+  public report(currentPath: string): void {
     this.options.onProgress?.({
       filesVisited: this.filesVisited,
       gamesFound: this.games.length,
@@ -70,11 +75,17 @@ export class ScanJob {
     });
   }
 
-  finish(): ScanResult {
+  public finish(): ScanResult {
     this.checkCancellation();
     this.games.sort(compareGames);
     this.report(this.root);
     this.checkCancellation();
-    return { source: this.root, games: this.games, ignored: this.ignored, scannedAt: new Date().toISOString(), warnings: this.warnings };
+    return {
+      source: this.root,
+      games: this.games,
+      ignored: this.ignored,
+      scannedAt: new Date().toISOString(),
+      warnings: this.warnings
+    };
   }
 }

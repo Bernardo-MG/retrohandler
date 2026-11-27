@@ -1,7 +1,7 @@
 /** Minimal driver contract for the SQL component. */
 export interface Statement {
   run(...params: unknown[]): {
-    changes: number
+    changes: number;
   };
   get(...params: unknown[]): unknown;
   all(...params: unknown[]): unknown[];

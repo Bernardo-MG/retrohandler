@@ -30,17 +30,20 @@ function assertNotCancelled(signal?: AbortSignal): void {
 export class LaunchBoxCatalogueUpdater {
   private updating = false;
 
-  constructor(private readonly importer: LaunchBoxCatalogueImporter, private readonly http = new HttpClient()) { }
+  constructor(
+    private readonly importer: LaunchBoxCatalogueImporter,
+    private readonly http = new HttpClient()
+  ) {}
 
-  get isUpdating(): boolean {
+  public get isUpdating(): boolean {
     return this.updating;
   }
 
-  importFile(file: string, options: ImportOptions = {}): Promise<number> {
+  public importFile(file: string, options: ImportOptions = {}): Promise<number> {
     return this.runExclusive(() => this.importer.importFile(file, options));
   }
 
-  download(options: UpdateOptions = {}): Promise<number> {
+  public download(options: UpdateOptions = {}): Promise<number> {
     return this.runExclusive(() => this.downloadAndImport(options));
   }
 
@@ -67,7 +70,7 @@ export class LaunchBoxCatalogueUpdater {
       assertNotCancelled(options.signal);
       return await this.importer.importFile(xml, {
         signal: options.signal,
-        onProgress: count => options.onProgress?.({ phase: 'import', processed: count, total: null })
+        onProgress: (count) => options.onProgress?.({ phase: 'import', processed: count, total: null })
       });
     } finally {
       await rm(folder, { recursive: true, force: true });
@@ -101,7 +104,10 @@ export class LaunchBoxCatalogueUpdater {
 
   private async extractArchive(zip: string, xml: string, options: UpdateOptions): Promise<void> {
     assertNotCancelled(options.signal);
-    const archive = new ZipArchiveReader(zip, { maxArchiveBytes: MAX_ZIP_BYTES, maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES });
+    const archive = new ZipArchiveReader(zip, {
+      maxArchiveBytes: MAX_ZIP_BYTES,
+      maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
+    });
     await archive.extract(METADATA_FILENAME, xml, {
       signal: options.signal,
       onProgress: (processed, total) => options.onProgress?.({ phase: 'extract', processed, total })

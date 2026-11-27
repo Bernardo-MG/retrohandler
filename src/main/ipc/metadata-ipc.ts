@@ -1,6 +1,13 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
-import type { ArtworkProvider, CoverLookup, CoverSearch, LaunchBoxCatalogueUpdater, MetadataSearch, MetadataService } from '../metadata';
+import type {
+  ArtworkProvider,
+  CoverLookup,
+  CoverSearch,
+  LaunchBoxCatalogueUpdater,
+  MetadataSearch,
+  MetadataService
+} from '../metadata';
 import { RendererJobs, sendProgress } from './renderer-jobs';
 import { isRecord, isText } from './validation';
 
@@ -89,14 +96,23 @@ function parseCoverLookup(system: unknown, names: unknown): CoverLookup {
   return { system, names };
 }
 
-function parseCoverSearch(system: unknown, query: unknown, regionHint: unknown, refresh: unknown): CoverSearch {
-  if (!isText(system, 120) || !isText(query, 120) || !isText(regionHint, 200) || typeof refresh !== 'boolean') {
+function parseCoverSearch(
+  system: unknown,
+  query: unknown,
+  regionHint: unknown,
+  refresh: unknown
+): CoverSearch {
+  if (
+    !isText(system, 120) ||
+    !isText(query, 120) ||
+    !isText(regionHint, 200) ||
+    typeof refresh !== 'boolean'
+  ) {
     throw new Error('Invalid Libretro cover search.');
   }
   return { system, query, regionHint, refresh };
 }
 
-/** Electron sender ownership and dialog/progress adaptation only. */
 class LaunchBoxIpc {
   private readonly updates = new RendererJobs({
     busy: 'A LaunchBox import is already running.',
@@ -105,19 +121,21 @@ class LaunchBoxIpc {
 
   constructor(private readonly updater: MetadataIpcDependencies['launchBox']) {}
 
-  register(): void {
-    ipcMain.handle('launchbox:download', event => this.download(event));
-    ipcMain.handle('launchbox:cancel', event => this.cancel(event.sender.id));
+  public register(): void {
+    ipcMain.handle('launchbox:download', (event) => this.download(event));
+    ipcMain.handle('launchbox:cancel', (event) => this.cancel(event.sender.id));
     ipcMain.handle('launchbox:import', () => this.importFile());
   }
 
   private async download(event: IpcMainInvokeEvent): Promise<{ count: number }> {
     this.assertIdle();
     const sender = event.sender;
-    const count = await this.updates.run(sender, 'download', signal => this.updater.download({
-      signal,
-      onProgress: update => sendProgress(sender, 'launchbox:progress', update)
-    }));
+    const count = await this.updates.run(sender, 'download', (signal) =>
+      this.updater.download({
+        signal,
+        onProgress: (update) => sendProgress(sender, 'launchbox:progress', update)
+      })
+    );
     return { count };
   }
 
@@ -148,13 +166,20 @@ class LaunchBoxIpc {
 export function registerMetadataIpc({ metadata, artwork, launchBox }: MetadataIpcDependencies): void {
   new LaunchBoxIpc(launchBox).register();
   ipcMain.handle('launchbox:search', (_event, query: unknown, system: unknown) =>
-    metadata.search(parseMetadataSearch(query, system)));
+    metadata.search(parseMetadataSearch(query, system))
+  );
   ipcMain.handle('launchbox:apply', (_event, input: unknown, id: unknown) =>
-    metadata.applyCandidate(parseTarget(input), parseCandidateId(id)));
+    metadata.applyCandidate(parseTarget(input), parseCandidateId(id))
+  );
   ipcMain.handle('libretro:artwork', (_event, system: unknown, names: unknown) =>
-    artwork.findCover(parseCoverLookup(system, names)));
-  ipcMain.handle('libretro:search-covers', (_event, system: unknown, query: unknown, regionHint: unknown, refresh: unknown) =>
-    artwork.searchCovers(parseCoverSearch(system, query, regionHint, refresh)));
+    artwork.findCover(parseCoverLookup(system, names))
+  );
+  ipcMain.handle(
+    'libretro:search-covers',
+    (_event, system: unknown, query: unknown, regionHint: unknown, refresh: unknown) =>
+      artwork.searchCovers(parseCoverSearch(system, query, regionHint, refresh))
+  );
   ipcMain.handle('metadata:save', (_event, input: unknown, data: unknown) =>
-    metadata.save(parseTarget(input), parseFields(data)));
+    metadata.save(parseTarget(input), parseFields(data))
+  );
 }

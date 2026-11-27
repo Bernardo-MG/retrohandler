@@ -1,18 +1,22 @@
 import type { BulkSystemSelection, GameMetadata, GameMetadataInput } from '../../../shared';
-import type { ArtworkReferences, MetadataRepository, SystemOverrideRepository } from '../../contracts/persistence';
+import type {
+  ArtworkReferences,
+  MetadataRepository,
+  SystemOverrideRepository
+} from '../../contracts/persistence';
 import { isArtworkId } from '../../components/artwork/artwork-image';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 import { buildFilter, type LibraryFilter } from './library-filter';
 
 type ArtworkRow = {
-  artworkId: string | null
+  artworkId: string | null;
 };
 
 type BulkTargetRow = {
   source: string;
   relativePath: string;
-  name: string
+  name: string;
 };
 
 function buildBulkTargetsQuery(executor: QueryExecutor, filter: LibraryFilter) {
@@ -20,19 +24,30 @@ function buildBulkTargetsQuery(executor: QueryExecutor, filter: LibraryFilter) {
   return { sql: executor.render('library.bulkTargets', { where }), params };
 }
 
-export class SqliteMetadataRepository implements MetadataRepository, SystemOverrideRepository, ArtworkReferences {
+export class SqliteMetadataRepository
+  implements MetadataRepository, SystemOverrideRepository, ArtworkReferences
+{
   constructor(private readonly executor: QueryExecutor) {}
 
   saveMetadata(source: string, relativePath: string, metadata: GameMetadataInput): GameMetadata {
-    if (!metadata.title.trim() || metadata.title.length > 200 || metadata.description.length > 4000 ||
-      [metadata.released, metadata.developer, metadata.publisher, metadata.genre].some(value => value.length > 200) ||
+    if (
+      !metadata.title.trim() ||
+      metadata.title.length > 200 ||
+      metadata.description.length > 4000 ||
+      [metadata.released, metadata.developer, metadata.publisher, metadata.genre].some(
+        (value) => value.length > 200
+      ) ||
       !['manual', 'launchbox'].includes(metadata.provider) ||
       (metadata.providerId !== null && metadata.providerId.length > 80) ||
       (metadata.providerSlug !== null && !/^[a-z0-9-]{1,150}$/.test(metadata.providerSlug)) ||
       (metadata.artworkId !== null && !isArtworkId(metadata.artworkId)) ||
-      (metadata.systemOverride !== undefined && metadata.systemOverride !== null &&
-        (typeof metadata.systemOverride !== 'string' || !metadata.systemOverride.trim() ||
-          metadata.systemOverride.length > 120 || /[\x00-\x1f]/.test(metadata.systemOverride)))) {
+      (metadata.systemOverride !== undefined &&
+        metadata.systemOverride !== null &&
+        (typeof metadata.systemOverride !== 'string' ||
+          !metadata.systemOverride.trim() ||
+          metadata.systemOverride.length > 120 ||
+          /[\x00-\x1f]/.test(metadata.systemOverride)))
+    ) {
       throw new Error('Invalid game metadata.');
     }
     // FK guarantees that the target is an indexed ROM. Never writes to ROM folders.
@@ -40,10 +55,18 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
     if (!exists) {
       throw new Error('Game not found in the library.');
     }
-    const previous = this.executor.findOne<{ systemOverride: string | null }>('metadata.getSystemOverride', source, relativePath);
-    const systemOverride = metadata.systemOverride === undefined ? (previous?.systemOverride ?? null) : metadata.systemOverride?.trim() ?? null;
+    const previous = this.executor.findOne<{ systemOverride: string | null }>(
+      'metadata.getSystemOverride',
+      source,
+      relativePath
+    );
+    const systemOverride =
+      metadata.systemOverride === undefined
+        ? (previous?.systemOverride ?? null)
+        : (metadata.systemOverride?.trim() ?? null);
     const input = { ...metadata, title: metadata.title.trim(), systemOverride };
-    this.executor.execute('metadata.saveMetadata',
+    this.executor.execute(
+      'metadata.saveMetadata',
       source,
       relativePath,
       input.title,
@@ -68,7 +91,10 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
 
   /** Update only the system override; preserve other metadata fields. */
   bulkAssignSystem(selection: BulkSystemSelection, value: string | null): number {
-    if (value !== null && (typeof value !== 'string' || !value.trim() || value.length > 120 || /[\x00-\x1f]/.test(value))) {
+    if (
+      value !== null &&
+      (typeof value !== 'string' || !value.trim() || value.length > 120 || /[\x00-\x1f]/.test(value))
+    ) {
       throw new Error('Invalid system assignment.');
     }
     const systemOverride = value?.trim() ?? null;
@@ -81,8 +107,15 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
         const keys = new Set<string>();
         targets = [];
         for (const target of selection.targets) {
-          if (!target || typeof target.source !== 'string' || typeof target.relativePath !== 'string' ||
-            target.source.length > 4096 || target.relativePath.length > 4096 || !target.source || !target.relativePath) {
+          if (
+            !target ||
+            typeof target.source !== 'string' ||
+            typeof target.relativePath !== 'string' ||
+            target.source.length > 4096 ||
+            target.relativePath.length > 4096 ||
+            !target.source ||
+            !target.relativePath
+          ) {
             throw new Error('Invalid ROM target.');
           }
           const key = JSON.stringify([target.source, target.relativePath]);
@@ -90,7 +123,11 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
             continue;
           }
           keys.add(key);
-          const row = this.executor.findOne<BulkTargetRow>('roms.findTarget', target.source, target.relativePath);
+          const row = this.executor.findOne<BulkTargetRow>(
+            'roms.findTarget',
+            target.source,
+            target.relativePath
+          );
           if (!row) {
             throw new Error('Selected ROM no longer exists. Refresh the library.');
           }
@@ -98,10 +135,17 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
         }
       } else if (selection.scope === 'filtered') {
         const q = selection.filter;
-        if (!q || (q.source !== null && (typeof q.source !== 'string' || q.source.length > 4096)) ||
-          typeof q.search !== 'string' || q.search.length > 256 ||
+        if (
+          !q ||
+          (q.source !== null && (typeof q.source !== 'string' || q.source.length > 4096)) ||
+          typeof q.search !== 'string' ||
+          q.search.length > 256 ||
           (q.system !== null && (typeof q.system !== 'string' || q.system.length > 256)) ||
-          (q.identification != null && !['pending', 'verified', 'probable', 'ambiguous', 'unknown', 'unsupported', 'error'].includes(q.identification))) {
+          (q.identification != null &&
+            !['pending', 'verified', 'probable', 'ambiguous', 'unknown', 'unsupported', 'error'].includes(
+              q.identification
+            ))
+        ) {
           throw new Error('Invalid bulk filter.');
         }
         const { sql: targetSql, params } = buildBulkTargetsQuery(this.executor, q);
@@ -116,9 +160,14 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
         // Clearing does not create unnecessary metadata records.
         if (systemOverride === null) {
           this.executor.execute('metadata.updateSystemOverride', null, target.source, target.relativePath);
-        }
-        else {
-          this.executor.execute('metadata.insertSystemOverride', target.source, target.relativePath, target.name || 'Untitled', systemOverride);
+        } else {
+          this.executor.execute(
+            'metadata.insertSystemOverride',
+            target.source,
+            target.relativePath,
+            target.name || 'Untitled',
+            systemOverride
+          );
         }
       }
       return targets.length;
@@ -127,10 +176,12 @@ export class SqliteMetadataRepository implements MetadataRepository, SystemOverr
 
   getReferencedArtworkIds(): Set<string> {
     const rows = this.executor.findAll<{ id: string }>('metadata.referencedArtwork');
-    return new Set(rows.map(row => row.id));
+    return new Set(rows.map((row) => row.id));
   }
 }
 
-export function createMetadataRepository(database: DatabaseConnection): MetadataRepository & SystemOverrideRepository & ArtworkReferences {
+export function createMetadataRepository(
+  database: DatabaseConnection
+): MetadataRepository & SystemOverrideRepository & ArtworkReferences {
   return new SqliteMetadataRepository(DatabaseConnection.executorFor(database));
 }

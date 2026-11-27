@@ -19,7 +19,7 @@ export class RendererJobs {
 
   constructor(private readonly messages: { busy: string; destroyed: string }) {}
 
-  async run<T>(sender: JobSender, id: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  public async run<T>(sender: JobSender, id: string, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (sender.isDestroyed()) {
       throw new Error(this.messages.destroyed);
     }
@@ -43,7 +43,7 @@ export class RendererJobs {
     }
   }
 
-  cancel(senderId: number, id: unknown): boolean {
+  public cancel(senderId: number, id: unknown): boolean {
     const job = this.active.get(senderId);
     if (!job || job.id !== id) {
       return false;

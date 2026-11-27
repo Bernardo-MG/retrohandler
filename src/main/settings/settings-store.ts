@@ -39,7 +39,11 @@ function record(value: unknown, keys?: readonly string[]): Record<string, unknow
   if (Object.getPrototypeOf(obj) !== Object.prototype && Object.getPrototypeOf(obj) !== null) {
     return invalid();
   }
-  if (keys && (Object.keys(obj).length !== keys.length || keys.some(k => !Object.prototype.hasOwnProperty.call(obj, k)))) {
+  if (
+    keys &&
+    (Object.keys(obj).length !== keys.length ||
+      keys.some((k) => !Object.prototype.hasOwnProperty.call(obj, k)))
+  ) {
     return invalid();
   }
   return obj;
@@ -74,7 +78,18 @@ function library(value: unknown): LibraryPreferences {
     system: v.system === null ? null : text(v.system, 256),
     sort: oneOf(v.sort, ['name', 'system', 'bytes']),
     descending: bool(v.descending),
-    identification: v.identification === null ? null : oneOf(v.identification, ['pending', 'verified', 'probable', 'ambiguous', 'unknown', 'unsupported', 'error']),
+    identification:
+      v.identification === null
+        ? null
+        : oneOf(v.identification, [
+            'pending',
+            'verified',
+            'probable',
+            'ambiguous',
+            'unknown',
+            'unsupported',
+            'error'
+          ]),
     view: oneOf(v.view, ['list', 'grid'])
   };
 }
@@ -86,8 +101,13 @@ function exportPreferences(value: unknown): ExportPreferences {
     return invalid();
   }
   for (const [key, val] of Object.entries(raw)) {
-    if (!text(key, 256).trim() || ['__proto__', 'prototype', 'constructor'].includes(key) ||
-      typeof val !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(val) || ['con', 'prn', 'aux', 'nul'].includes(val)) {
+    if (
+      !text(key, 256).trim() ||
+      ['__proto__', 'prototype', 'constructor'].includes(key) ||
+      typeof val !== 'string' ||
+      !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(val) ||
+      ['con', 'prn', 'aux', 'nul'].includes(val)
+    ) {
       return invalid();
     }
     overrides[key] = val;
@@ -106,7 +126,9 @@ function appearance(value: unknown): AppearancePreferences {
   return { theme: oneOf(v.theme, ['dark', 'light', 'system']) };
 }
 function integer(value: unknown, min: number, max: number): number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max ? value : invalid();
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max
+    ? value
+    : invalid();
 }
 function windowPreferences(value: unknown): WindowPreferences {
   const v = record(value, ['bounds', 'maximized']);
@@ -139,7 +161,7 @@ export function validateSettings(value: unknown): AppSettings {
 export function validateSettingsPatch(value: unknown): SettingsPatch {
   const v = record(value);
   const keys = Object.keys(v);
-  if (!keys.length || keys.some(k => !SECTIONS.some(section => section === k))) {
+  if (!keys.length || keys.some((k) => !SECTIONS.some((section) => section === k))) {
     return invalid();
   }
   const result: SettingsPatch = {};
@@ -178,9 +200,16 @@ export class SettingsStore {
         }
         const decoded: unknown = JSON.parse(raw);
         // An older application must not overwrite a newer settings schema.
-        if (decoded && typeof decoded === 'object' && 'version' in decoded && typeof decoded.version === 'number' && decoded.version > 1) {
+        if (
+          decoded &&
+          typeof decoded === 'object' &&
+          'version' in decoded &&
+          typeof decoded.version === 'number' &&
+          decoded.version > 1
+        ) {
           this.writable = false;
-          this.warning = 'Settings were created by a newer RetroHandler version. Preferences are read-only in this version.';
+          this.warning =
+            'Settings were created by a newer RetroHandler version. Preferences are read-only in this version.';
           return;
         }
         this.current = validateSettings(decoded);
@@ -196,16 +225,16 @@ export class SettingsStore {
       }
     }
   }
-  snapshot(): SettingsSnapshot {
+  public snapshot(): SettingsSnapshot {
     return { settings: structuredClone(this.current), warning: this.warning };
   }
-  update(value: unknown): AppSettings {
+  public update(value: unknown): AppSettings {
     return this.commit({ ...this.current, ...validateSettingsPatch(value) });
   }
-  saveWindow(value: unknown): AppSettings {
+  public saveWindow(value: unknown): AppSettings {
     return this.commit({ ...this.current, window: windowPreferences(value) });
   }
-  reset(): AppSettings {
+  public reset(): AppSettings {
     return this.commit(defaultSettings(), true);
   }
 
@@ -226,8 +255,7 @@ export class SettingsStore {
       if (!lstatSync(this.filePath).isFile()) {
         throw new Error('Settings path is not a regular file.');
       }
-    }
-    catch (error) {
+    } catch (error) {
       if (!missing(error)) {
         throw error;
       }
@@ -238,8 +266,7 @@ export class SettingsStore {
       try {
         writeFileSync(fd, data, 'utf8');
         fsyncSync(fd);
-      }
-      finally {
+      } finally {
         closeSync(fd);
       }
       renameSync(temp, this.filePath);

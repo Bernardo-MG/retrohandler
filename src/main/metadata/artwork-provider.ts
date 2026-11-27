@@ -14,7 +14,6 @@ export type CoverSearch = {
 
 export type CoverChoice = LibretroCoverChoice;
 
-/** Artwork-only provider capability; descriptive metadata is independent. */
 export interface ArtworkProvider {
   findCover(query: CoverLookup): Promise<string | null>;
   searchCovers(query: CoverSearch): Promise<CoverChoice[]>;

@@ -4,7 +4,10 @@ import { desktopApi } from '../../api/desktop-api';
 import { useControllerState } from '../../hooks/useControllerState';
 import { ScanController } from './ScanController';
 
-export function useScan(onCompleted: (receipt: ScanReceipt) => Promise<void>, reportError: (message: string) => void) {
+export function useScan(
+  onCompleted: (receipt: ScanReceipt) => Promise<void>,
+  reportError: (message: string) => void
+) {
   const [controller, state] = useControllerState(() => new ScanController(desktopApi()));
   useEffect(() => controller.connect(), [controller]);
   return {

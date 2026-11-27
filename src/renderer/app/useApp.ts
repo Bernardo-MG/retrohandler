@@ -5,7 +5,6 @@ import { useLibrary } from '../features/library/useLibrary';
 import { useScan } from '../features/scanner/useScan';
 import { usePreferences } from '../features/settings/usePreferences';
 
-/** Composes independent feature workflows and owns only application-level UI state. */
 export function useApp(initial: SettingsSnapshot) {
   const [error, setError] = useState(initial.warning ?? '');
   const [showSettings, setShowSettings] = useState(false);
@@ -20,7 +19,9 @@ export function useApp(initial: SettingsSnapshot) {
     await library.reloadCollections();
     library.selectCollection(receipt.source);
   }
-  function openSettings() { setShowSettings(true); }
+  function openSettings() {
+    setShowSettings(true);
+  }
   function closeSettings() {
     setShowSettings(false);
     requestAnimationFrame(() => settingsButton.current?.focus());
@@ -30,14 +31,31 @@ export function useApp(initial: SettingsSnapshot) {
     library.applyPreferences(next.library);
     closeSettings();
   }
-  function openExport() { setShowExport(true); }
-  function closeExport() { setShowExport(false); }
-  function dismissError() { setError(''); }
+  function openExport() {
+    setShowExport(true);
+  }
+  function closeExport() {
+    setShowExport(false);
+  }
+  function dismissError() {
+    setError('');
+  }
 
   return {
-    library, preferences, scanner, identification, error, dismissError,
-    settingsButton, showSettings, openSettings, closeSettings, saveSettings,
-    showExport, openExport, closeExport
+    library,
+    preferences,
+    scanner,
+    identification,
+    error,
+    dismissError,
+    settingsButton,
+    showSettings,
+    openSettings,
+    closeSettings,
+    saveSettings,
+    showExport,
+    openExport,
+    closeExport
   };
 }
 

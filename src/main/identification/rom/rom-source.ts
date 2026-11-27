@@ -18,9 +18,9 @@ export class RomSource {
     readonly stats: Stats,
     private readonly canonicalRoot: string,
     private readonly canonicalFile: string
-  ) { }
+  ) {}
 
-  static async resolve(target: RomTarget): Promise<RomSource> {
+  public static async resolve(target: RomTarget): Promise<RomSource> {
     const root = path.resolve(target.source);
     const filename = path.resolve(root, target.relativePath);
     if (!childOf(root, filename)) {
@@ -40,12 +40,16 @@ export class RomSource {
     return file;
   }
 
-  async assertUnchanged(): Promise<void> {
+  public async assertUnchanged(): Promise<void> {
     const root = await realpath(this.target.source);
     const file = await realpath(this.filename);
     const current = await lstat(this.filename);
-    if (root !== this.canonicalRoot || file !== this.canonicalFile || !childOf(root, file) ||
-      !sameRegularFileVersion(this.stats, current)) {
+    if (
+      root !== this.canonicalRoot ||
+      file !== this.canonicalFile ||
+      !childOf(root, file) ||
+      !sameRegularFileVersion(this.stats, current)
+    ) {
       throw new Error('File changed during identification.');
     }
   }

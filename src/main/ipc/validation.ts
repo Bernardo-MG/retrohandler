@@ -17,5 +17,5 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
-  return typeof value === 'string' && allowed.some(item => item === value);
+  return typeof value === 'string' && allowed.some((item) => item === value);
 }

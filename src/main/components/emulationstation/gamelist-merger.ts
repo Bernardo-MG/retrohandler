@@ -9,7 +9,7 @@ type PathMatch = { normalizedPath: string; record: GameListRecord };
 export class GameListMerger {
   constructor(private readonly resolvePath: (value: string) => string | null) {}
 
-  merge(
+  public merge(
     existing: GameListDocument,
     generated: GameListDocument,
     pathsWithFallbackTitles: ReadonlySet<string> = new Set()
@@ -93,7 +93,7 @@ export class GameListMerger {
       if (field.name === 'path') {
         continue;
       }
-      const existingFields = previousRecord.fields.filter(old => old.name === field.name);
+      const existingFields = previousRecord.fields.filter((old) => old.name === field.name);
       // A filename-derived fallback should not erase an existing scraped title.
       if (this.shouldPreserveExistingTitle(field, existingFields, preserveExistingName)) {
         continue;
@@ -112,7 +112,11 @@ export class GameListMerger {
       }
     }
     if (newFields.length) {
-      edits.push({ start: previousRecord.closingTagStart, end: previousRecord.closingTagStart, text: '\n' + newFields.join('\n') + '\n  ' });
+      edits.push({
+        start: previousRecord.closingTagStart,
+        end: previousRecord.closingTagStart,
+        text: '\n' + newFields.join('\n') + '\n  '
+      });
     }
     return edits;
   }
@@ -122,6 +126,6 @@ export class GameListMerger {
     existingFields: readonly XmlTextElement[],
     preserveExistingName: boolean
   ): boolean {
-    return field.name === 'name' && preserveExistingName && existingFields.some(old => old.value.trim());
+    return field.name === 'name' && preserveExistingName && existingFields.some((old) => old.value.trim());
   }
 }

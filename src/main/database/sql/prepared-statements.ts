@@ -10,7 +10,7 @@ export class PreparedStatements {
     private readonly registry: QueryRegistry
   ) {}
 
-  get(name: string): Statement {
+  public get(name: string): Statement {
     let statement = this.statements.get(name);
     if (!statement) {
       const text = this.registry.sql(name);

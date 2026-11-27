@@ -1,5 +1,12 @@
 import path from 'node:path';
-import type { ExportOptions, ExportPlan, ExportReceipt, LibraryEntry, LibraryPage, LibraryQuery } from '../../shared';
+import type {
+  ExportOptions,
+  ExportPlan,
+  ExportReceipt,
+  LibraryEntry,
+  LibraryPage,
+  LibraryQuery
+} from '../../shared';
 import { FileDestination } from '../components/file-operations/file-destination';
 import { FileOperationExecutor } from '../components/file-operations/file-operation-executor';
 import { FileWriter } from '../components/filesystem/file-writer';
@@ -7,7 +14,7 @@ import type { Exporter } from './exporter';
 import { PreparedExport } from './prepared-export';
 
 export type ExportLibrary = {
-  queryLibrary(query: LibraryQuery): Promise<LibraryPage>
+  queryLibrary(query: LibraryQuery): Promise<LibraryPage>;
 };
 
 const PAGE_SIZE = 200;
@@ -20,7 +27,7 @@ export class ExportService {
   constructor(
     private readonly library: ExportLibrary,
     private readonly exporter: Exporter
-  ) { }
+  ) {}
 
   async preview(options: ExportOptions): Promise<ExportPlan> {
     return (await this.prepareExport(options)).plan;
@@ -46,7 +53,7 @@ export class ExportService {
     this.validateOptions(options);
     const entries = await this.readSelectedEntries(options.source);
     const destination = new FileDestination(options.destination);
-    const protectedRoots = entries.map(entry => entry.source);
+    const protectedRoots = entries.map((entry) => entry.source);
     // Protect the selected collection even when it contains no indexed files.
     if (options.source) {
       protectedRoots.push(options.source);

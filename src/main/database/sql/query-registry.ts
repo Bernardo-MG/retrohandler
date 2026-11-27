@@ -5,7 +5,7 @@ import path from 'node:path';
 export class QueryRegistry {
   private readonly queries = new Map<string, string>();
 
-  load(namespace: string, file: string): void {
+  public load(namespace: string, file: string): void {
     if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(namespace)) {
       throw new Error(`Invalid SQL namespace: ${namespace}`);
     }
@@ -35,15 +35,17 @@ export class QueryRegistry {
   }
 
   /** Discover catalogs by filename in a caller-supplied directory. */
-  loadDirectory(root: string): void {
-    for (const entry of readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+  public loadDirectory(root: string): void {
+    for (const entry of readdirSync(root, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    )) {
       if (entry.isFile() && entry.name.endsWith('.sql')) {
         this.load(path.basename(entry.name, '.sql'), path.join(root, entry.name));
       }
     }
   }
 
-  sql(name: string): string {
+  public sql(name: string): string {
     const statement = this.queries.get(name);
     if (statement === undefined) {
       throw new Error(`Unknown SQL statement: ${name}`);
@@ -52,7 +54,7 @@ export class QueryRegistry {
   }
 
   /** Only trusted SQL fragments, never user values, are substituted. */
-  render(name: string, fragments: Readonly<Record<string, string>>): string {
+  public render(name: string, fragments: Readonly<Record<string, string>>): string {
     const used = new Set<string>();
     const statement = this.sql(name).replace(/\{\{([A-Za-z]+)\}\}/g, (_match, key: string) => {
       if (!Object.hasOwn(fragments, key)) {

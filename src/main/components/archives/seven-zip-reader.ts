@@ -13,12 +13,12 @@ type ArchiveProcess = ChildProcessByStdio<null, Readable, Readable>;
 export class SevenZipReader implements ArchiveReader {
   constructor(private readonly executable = resolveExecutable()) {}
 
-  async list(filename: string, signal?: AbortSignal): Promise<ArchiveMember[]> {
+  public async list(filename: string, signal?: AbortSignal): Promise<ArchiveMember[]> {
     const output = await this.readListing(filename, signal);
     return parse7ZipListing(output);
   }
 
-  open(filename: string, member: string, signal?: AbortSignal): Readable {
+  public open(filename: string, member: string, signal?: AbortSignal): Readable {
     // Disable wildcard expansion so an archive member is matched literally.
     const child = this.start(['x', '-so', '-bd', '-y', '-spd', '--', filename, member], signal);
     return streamExtraction(child);
@@ -88,11 +88,11 @@ class ListingOutput {
     child.stdout.on('data', (chunk: Buffer) => this.append(chunk));
   }
 
-  get exceededLimit(): boolean {
+  public get exceededLimit(): boolean {
     return this.overflow;
   }
 
-  get text(): string {
+  public get text(): string {
     return Buffer.concat(this.chunks).toString('utf8');
   }
 
@@ -118,7 +118,7 @@ class ProcessDiagnostics {
     stream.on('data', (chunk: string) => this.append(chunk));
   }
 
-  get summary(): string {
+  public get summary(): string {
     return this.text.slice(0, 300);
   }
 
@@ -132,7 +132,7 @@ function waitForExit(child: ArchiveProcess): Promise<number> {
     child.on('error', reject);
     child.stdout.on('error', reject);
     child.stderr.on('error', reject);
-    child.once('close', code => resolve(code ?? -1));
+    child.once('close', (code) => resolve(code ?? -1));
   });
 }
 
@@ -145,7 +145,7 @@ function streamExtraction(child: ArchiveProcess): Readable {
   child.stderr.on('error', fail);
   // Wait for process success even if stdout ends early.
   child.stdout.pipe(output, { end: false });
-  child.once('close', code => completeExtraction(output, code, diagnostics));
+  child.once('close', (code) => completeExtraction(output, code, diagnostics));
   output.once('close', () => stopProcess(child));
   return output;
 }

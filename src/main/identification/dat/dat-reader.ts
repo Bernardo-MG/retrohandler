@@ -7,7 +7,7 @@ const ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>',
 
 /** Deliberately restricted Logiqx XML DAT reader. No DTD/entity expansion. */
 export class DatReader {
-  async read(filename: string): Promise<ParsedDat> {
+  public async read(filename: string): Promise<ParsedDat> {
     const handle = await open(filename, 'r');
     try {
       await this.validateFile(handle);
@@ -17,7 +17,7 @@ export class DatReader {
     }
   }
 
-  parse(xml: string): ParsedDat {
+  public parse(xml: string): ParsedDat {
     const document = this.maskNonMarkup(xml);
     this.validateDocument(document);
     const entries = this.readGameRecords(document);
@@ -154,5 +154,7 @@ function decodeEntity(raw: string, reference: string): string {
 }
 
 function isValidCodePoint(number: number): boolean {
-  return Number.isInteger(number) && number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff);
+  return (
+    Number.isInteger(number) && number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff)
+  );
 }

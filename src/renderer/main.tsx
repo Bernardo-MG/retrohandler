@@ -6,6 +6,10 @@ import './styles/library.css';
 import './styles/preferences.css';
 
 const root = createRoot(document.getElementById('root')!);
-void initializeApplication().then(initial => {
-  root.render(<React.StrictMode><App initial={initial} /></React.StrictMode>);
+void initializeApplication().then((initial) => {
+  root.render(
+    <React.StrictMode>
+      <App initial={initial} />
+    </React.StrictMode>
+  );
 });

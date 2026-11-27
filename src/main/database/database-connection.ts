@@ -10,12 +10,9 @@ export class DatabaseConnection {
   private constructor(
     private readonly handle: DatabaseHandle,
     private readonly executor: QueryExecutor
-  ) { }
+  ) {}
 
-  static open(
-    filePath: string,
-    createDatabase?: DatabaseFactory
-  ): DatabaseConnection {
+  static open(filePath: string, createDatabase?: DatabaseFactory): DatabaseConnection {
     const registry = new QueryRegistry();
     registry.loadDirectory(path.join(__dirname, 'queries'));
 
@@ -40,15 +37,10 @@ export class DatabaseConnection {
     this.handle.close();
   }
 
-  private static openHandle(
-    filePath: string,
-    createDatabase?: DatabaseFactory
-  ): DatabaseHandle {
+  private static openHandle(filePath: string, createDatabase?: DatabaseFactory): DatabaseHandle {
     mkdirSync(path.dirname(filePath), { recursive: true });
 
-    const db = createDatabase
-      ? createDatabase(filePath)
-      : this.openNativeDatabase(filePath);
+    const db = createDatabase ? createDatabase(filePath) : this.openNativeDatabase(filePath);
 
     try {
       db.pragma('journal_mode = WAL');
@@ -61,11 +53,8 @@ export class DatabaseConnection {
   }
 
   private static openNativeDatabase(filePath: string): DatabaseHandle {
-    const Database = require('better-sqlite3') as new (
-      filename: string
-    ) => DatabaseHandle;
+    const Database = require('better-sqlite3') as new (filename: string) => DatabaseHandle;
 
     return new Database(filePath);
   }
-
 }

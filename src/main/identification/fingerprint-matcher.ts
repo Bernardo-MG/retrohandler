@@ -7,13 +7,15 @@ export interface FingerprintMatchCandidate {
 }
 
 /** SHA-1 and MD5 outrank CRC32. Different titles at the strongest level are ambiguous. */
-export function matchFingerprintCandidates(candidates: readonly FingerprintMatchCandidate[]): FingerprintMatch {
+export function matchFingerprintCandidates(
+  candidates: readonly FingerprintMatchCandidate[]
+): FingerprintMatch {
   if (!candidates.length) {
     return { status: 'unknown', title: null, datName: null };
   }
   const strongest = selectStrongest(candidates);
   const first = strongest[0];
-  if (strongest.some(candidate => candidate.game !== first.game)) {
+  if (strongest.some((candidate) => candidate.game !== first.game)) {
     return { status: 'ambiguous', title: null, datName: null };
   }
   return {
@@ -23,7 +25,9 @@ export function matchFingerprintCandidates(candidates: readonly FingerprintMatch
   };
 }
 
-function selectStrongest(candidates: readonly FingerprintMatchCandidate[]): readonly FingerprintMatchCandidate[] {
+function selectStrongest(
+  candidates: readonly FingerprintMatchCandidate[]
+): readonly FingerprintMatchCandidate[] {
   const sha1 = candidates.filter(hasSha1);
   if (sha1.length) {
     return sha1;

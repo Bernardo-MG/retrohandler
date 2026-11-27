@@ -16,19 +16,19 @@ export class QueryExecutor {
     this.statements = new PreparedStatements(db, registry);
   }
 
-  sql(name: string): string {
+  public sql(name: string): string {
     return this.registry.sql(name);
   }
 
-  render(name: string, fragments: Readonly<Record<string, string>>): string {
+  public render(name: string, fragments: Readonly<Record<string, string>>): string {
     return this.registry.render(name, fragments);
   }
 
-  findOne<T>(query: Query, ...params: unknown[]): T | null {
+  public findOne<T>(query: Query, ...params: unknown[]): T | null {
     return (this.prepare(query).get(...params) as T | undefined) ?? null;
   }
 
-  findRequired<T>(query: Query, ...params: unknown[]): T {
+  public findRequired<T>(query: Query, ...params: unknown[]): T {
     const result = this.findOne<T>(query, ...params);
     if (result === null) {
       throw new Error('Expected a database record.');
@@ -36,16 +36,16 @@ export class QueryExecutor {
     return result;
   }
 
-  findAll<T>(query: Query, ...params: unknown[]): T[] {
+  public findAll<T>(query: Query, ...params: unknown[]): T[] {
     return this.prepare(query).all(...params) as T[];
   }
 
-  execute(query: Query, ...params: unknown[]): number {
+  public execute(query: Query, ...params: unknown[]): number {
     return this.prepare(query).run(...params).changes;
   }
 
   /** Only trusted, registered, parameter-free SQL scripts are allowed here. */
-  executeBatch(name: string): void {
+  public executeBatch(name: string): void {
     const text = this.registry.sql(name);
     if (/\{\{|\}\}/.test(text)) {
       throw new Error(`SQL script requires explicit fragments: ${name}`);
@@ -53,7 +53,7 @@ export class QueryExecutor {
     this.db.exec(text);
   }
 
-  transaction<T>(operation: () => T): T {
+  public transaction<T>(operation: () => T): T {
     return this.db.transaction(operation)();
   }
 

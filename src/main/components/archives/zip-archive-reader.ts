@@ -50,10 +50,13 @@ type DirectoryEntry = {
 
 /** Restricted classic ZIP reader. Never uses an archive name as an output path. */
 export class ZipArchiveReader {
-  constructor(private readonly filename: string, private readonly limits: ArchiveLimits) {}
+  constructor(
+    private readonly filename: string,
+    private readonly limits: ArchiveLimits
+  ) {}
 
   /** Select exactly one file by basename, optionally inside an archive directory. */
-  async findEntry(basename: string): Promise<ZipEntry> {
+  public async findEntry(basename: string): Promise<ZipEntry> {
     const handle = await open(this.filename, 'r');
     try {
       const info = await handle.stat();
@@ -69,7 +72,7 @@ export class ZipArchiveReader {
     }
   }
 
-  async extract(basename: string, destination: string, options: ExtractOptions = {}): Promise<void> {
+  public async extract(basename: string, destination: string, options: ExtractOptions = {}): Promise<void> {
     options.signal?.throwIfAborted();
     const entry = await this.findEntry(basename);
     const verifier = new EntryVerifier(entry, options.onProgress);
@@ -117,8 +120,12 @@ export class ZipArchiveReader {
   }
 
   private isSupportedDirectory(directory: CentralDirectory, endOffset: number): boolean {
-    return directory.entries <= MAX_ENTRIES && directory.size <= MAX_DIRECTORY_BYTES &&
-      directory.offset !== ZIP64_MARKER && directory.offset + directory.size <= endOffset;
+    return (
+      directory.entries <= MAX_ENTRIES &&
+      directory.size <= MAX_DIRECTORY_BYTES &&
+      directory.offset !== ZIP64_MARKER &&
+      directory.offset + directory.size <= endOffset
+    );
   }
 
   private selectEntry(directory: Buffer, count: number, basename: string): DirectoryEntry {
@@ -170,22 +177,36 @@ export class ZipArchiveReader {
 
   private isSupportedEntry(entry: DirectoryEntry): boolean {
     const supportedCompression = entry.method === 0 || entry.method === 8;
-    return !(entry.flags & 1) && supportedCompression && entry.compressed > 0 &&
-      entry.compressed <= this.limits.maxArchiveBytes && entry.size <= this.limits.maxEntryBytes &&
-      entry.compressed !== ZIP64_MARKER && entry.size !== ZIP64_MARKER && entry.offset !== ZIP64_MARKER;
+    return (
+      !(entry.flags & 1) &&
+      supportedCompression &&
+      entry.compressed > 0 &&
+      entry.compressed <= this.limits.maxArchiveBytes &&
+      entry.size <= this.limits.maxEntryBytes &&
+      entry.compressed !== ZIP64_MARKER &&
+      entry.size !== ZIP64_MARKER &&
+      entry.offset !== ZIP64_MARKER
+    );
   }
 
-  private async readLocalHeader(handle: FileHandle, entry: DirectoryEntry, directoryOffset: number): Promise<ZipEntry> {
+  private async readLocalHeader(
+    handle: FileHandle,
+    entry: DirectoryEntry,
+    directoryOffset: number
+  ): Promise<ZipEntry> {
     const header = await readExactly(handle, 30, entry.offset, 'Invalid ZIP local header.');
     if (header.readUInt32LE(0) !== LOCAL_SIGNATURE) {
       throw new Error('Invalid ZIP local header.');
     }
-    if (header.readUInt16LE(8) !== entry.method || (header.readUInt16LE(6) & 1)) {
+    if (header.readUInt16LE(8) !== entry.method || header.readUInt16LE(6) & 1) {
       throw new Error('ZIP header mismatch.');
     }
     const nameLength = header.readUInt16LE(26);
     const start = entry.offset + 30 + nameLength + header.readUInt16LE(28);
-    if (start + entry.compressed > directoryOffset || (entry.method === 0 && entry.compressed !== entry.size)) {
+    if (
+      start + entry.compressed > directoryOffset ||
+      (entry.method === 0 && entry.compressed !== entry.size)
+    ) {
       throw new Error('ZIP data boundaries are invalid.');
     }
     const localName = await readExactly(handle, nameLength, entry.offset + 30, 'Invalid ZIP local filename.');
@@ -196,7 +217,12 @@ export class ZipArchiveReader {
   }
 }
 
-async function readExactly(handle: FileHandle, length: number, offset: number, errorMessage: string): Promise<Buffer> {
+async function readExactly(
+  handle: FileHandle,
+  length: number,
+  offset: number,
+  errorMessage: string
+): Promise<Buffer> {
   const buffer = Buffer.alloc(length);
   let received = 0;
   while (received < length) {
@@ -213,11 +239,14 @@ class EntryVerifier extends Transform {
   private processed = 0;
   private readonly checksum = new Crc32();
 
-  constructor(private readonly entry: ZipEntry, private readonly onProgress?: ExtractOptions['onProgress']) {
+  constructor(
+    private readonly entry: ZipEntry,
+    private readonly onProgress?: ExtractOptions['onProgress']
+  ) {
     super();
   }
 
-  override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+  public override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
     this.processed += chunk.length;
     if (this.processed > this.entry.size) {
       callback(new Error('ZIP entry exceeds declared size.'));
@@ -232,7 +261,7 @@ class EntryVerifier extends Transform {
     }
   }
 
-  override _flush(callback: TransformCallback): void {
+  public override _flush(callback: TransformCallback): void {
     if (this.processed !== this.entry.size || this.checksum.digest() !== this.entry.crc) {
       callback(new Error('ZIP integrity check failed.'));
       return;

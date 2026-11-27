@@ -22,14 +22,13 @@ export class FileWriter {
 
   // Open exclusively so even a name collision cannot overwrite another file.
   // Flush the contents before considering a backup or replacement ready.
-  async createExclusive(file: string, content: Buffer): Promise<void> {
+  public async createExclusive(file: string, content: Buffer): Promise<void> {
     const handle = await open(file, 'wx');
     try {
       try {
         await handle.writeFile(content);
         await handle.sync();
-      }
-      finally {
+      } finally {
         await handle.close();
       }
     } catch (error) {
@@ -39,7 +38,7 @@ export class FileWriter {
   }
 
   /** Back up the approved bytes before replacing a file. Report the backup even if replacement fails. */
-  async replaceWithBackup(replacement: FileReplacement): Promise<void> {
+  public async replaceWithBackup(replacement: FileReplacement): Promise<void> {
     const { targetPath, newContent, approvedContent, maxBytes, onBackup } = replacement;
     const folder = path.dirname(targetPath);
     await assertSafeDirectory(folder);

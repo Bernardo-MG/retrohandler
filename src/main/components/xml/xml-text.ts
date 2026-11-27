@@ -16,10 +16,14 @@ export function xmlEscape(text: string): string {
 export const hasInvalidXmlChars = (text: string): boolean => invalidXmlChars.test(text);
 
 function validChar(codePoint: number): boolean {
-  return codePoint === 9 || codePoint === 10 || codePoint === 13 ||
+  return (
+    codePoint === 9 ||
+    codePoint === 10 ||
+    codePoint === 13 ||
     (codePoint >= 32 && codePoint <= 0xd7ff) ||
     (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
-    (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+    (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+  );
 }
 export function checkXmlChars(text: string, invalid: () => never = invalidXml): void {
   // XML 1.0 does not allow unpaired surrogates, NUL or most controls.
@@ -34,20 +38,25 @@ export function decodeXmlText(text: string, invalid: () => never = invalidXml): 
     invalid();
   }
   // Validate each entity before decoding (including bare ampersands).
-  return text.replace(
-    /&(?:#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);|&/g,
-    entity => decodeEntity(entity, invalid)
+  return text.replace(/&(?:#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);|&/g, (entity) =>
+    decodeEntity(entity, invalid)
   );
 }
 
 function decodeEntity(entity: string, invalid: () => never): string {
   switch (entity) {
-    case '&amp;': return '&';
-    case '&lt;': return '<';
-    case '&gt;': return '>';
-    case '&quot;': return '"';
-    case '&apos;': return "'";
-    default: return decodeNumericEntity(entity, invalid);
+    case '&amp;':
+      return '&';
+    case '&lt;':
+      return '<';
+    case '&gt;':
+      return '>';
+    case '&quot;':
+      return '"';
+    case '&apos;':
+      return "'";
+    default:
+      return decodeNumericEntity(entity, invalid);
   }
 }
 

@@ -18,12 +18,11 @@ type GeneratedFileRequest = FileTarget & {
   generate: (previousContent: Buffer | null) => Buffer;
 };
 
-/** Plans read-only operations within a configured destination. */
 export class FileOperationPlanner {
   constructor(private readonly destination: FileDestination) {}
 
   /** Inspect a source file without retaining its bytes in the prepared export. */
-  async planFileCopy(request: FileCopyRequest): Promise<FileOperation> {
+  public async planFileCopy(request: FileCopyRequest): Promise<FileOperation> {
     const { relativeDestination, sourcePath, expectedSize, maxBytes, fileLabel } = request;
     await this.destination.assertSafeParent(relativeDestination);
     const sourceContent = await readRegular(sourcePath, maxBytes);
@@ -48,7 +47,7 @@ export class FileOperationPlanner {
   }
 
   /** The consumer supplies the format-specific generation or merge policy. */
-  async planGeneratedFile(request: GeneratedFileRequest): Promise<FileOperation> {
+  public async planGeneratedFile(request: GeneratedFileRequest): Promise<FileOperation> {
     const { relativeDestination, maxBytes, generate } = request;
     const previousContent = await this.destination.readFile(relativeDestination, maxBytes);
     const bytes = generate(previousContent);

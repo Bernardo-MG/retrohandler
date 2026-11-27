@@ -4,14 +4,13 @@ import { sha256, sha256OrNull } from '../hashing/content-hash';
 import type { FileDestination } from './file-destination';
 import type { FileOperation, FileOperationReceipt } from './file-operation';
 
-/** Execute approved operations in order without depending on export models. */
 export class FileOperationExecutor {
   constructor(
     private readonly destination: FileDestination,
     private readonly writer: FileWriter
   ) {}
 
-  async execute(operations: readonly FileOperation[]): Promise<FileOperationReceipt> {
+  public async execute(operations: readonly FileOperation[]): Promise<FileOperationReceipt> {
     let writtenCount = 0;
     const backups: string[] = [];
     const recordBackup = (backup: string): void => {
@@ -25,14 +24,19 @@ export class FileOperationExecutor {
       }
     } catch (error) {
       if (writtenCount || backups.length) {
-        throw new Error(`Export stopped after ${writtenCount} file(s) written. Backups: ${backups.join(', ') || 'none'}. Preview again before retrying. ${String(error)}`);
+        throw new Error(
+          `Export stopped after ${writtenCount} file(s) written. Backups: ${backups.join(', ') || 'none'}. Preview again before retrying. ${String(error)}`
+        );
       }
       throw error;
     }
     return backups.length ? { copied: writtenCount, backups } : { copied: writtenCount };
   }
 
-  private async executeOperation(operation: FileOperation, onBackup: (file: string) => void): Promise<boolean> {
+  private async executeOperation(
+    operation: FileOperation,
+    onBackup: (file: string) => void
+  ): Promise<boolean> {
     const { relativeDestination, maxBytes, previousHash, outputHash, action } = operation;
     const targetPath = await this.destination.ensureParentDirectory(relativeDestination);
     const previousContent = await this.destination.readFile(relativeDestination, maxBytes);

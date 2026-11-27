@@ -10,10 +10,12 @@ type RomDestination = {
 
 /** Owns all RetroPie-specific directory and reference layout rules for one export. */
 export class RetroPieLayout {
-  constructor(private readonly overrides: Readonly<Record<string, string>>) { }
+  constructor(private readonly overrides: Readonly<Record<string, string>>) {}
 
   /** Determine the RetroPie ROM reference, or explain why it cannot be exported. */
-  resolveRomDestination(entry: Pick<LibraryEntry, 'system' | 'relativePath'>): RomDestination | { warning: string } {
+  resolveRomDestination(
+    entry: Pick<LibraryEntry, 'system' | 'relativePath'>
+  ): RomDestination | { warning: string } {
     const system = this.mapPlatform(entry.system);
     if (!system) {
       return { warning: `Unmapped system: ${entry.system}` };
@@ -23,7 +25,9 @@ export class RetroPieLayout {
       return { warning: `Unsupported filename: ${entry.relativePath}` };
     }
     if (['.rar', '.7z'].includes(path.extname(filename).toLowerCase())) {
-      return { warning: `RetroPie emulator compatibility not established for ${entry.relativePath}; convert to a supported format first.` };
+      return {
+        warning: `RetroPie emulator compatibility not established for ${entry.relativePath}; convert to a supported format first.`
+      };
     }
     return { system, filename, relativeDestination: `${this.systemDirectory(system)}/${filename}` };
   }
@@ -55,7 +59,12 @@ export class RetroPieLayout {
       }
       reference = absolute[2];
     }
-    if (reference.startsWith('/') || reference.startsWith('~') || reference.includes('\\') || /^[A-Za-z]:/.test(reference)) {
+    if (
+      reference.startsWith('/') ||
+      reference.startsWith('~') ||
+      reference.includes('\\') ||
+      /^[A-Za-z]:/.test(reference)
+    ) {
       return null;
     }
     const normalizedPath = path.posix.normalize(reference);
@@ -79,8 +88,11 @@ export class RetroPieLayout {
   /** Unknown platforms require an explicit override. */
   private mapPlatform(system: string): string | null {
     const mappedSystem = this.lookupPlatform(system);
-    if (!mappedSystem || !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(mappedSystem) ||
-      ['con', 'prn', 'nul', 'aux'].includes(mappedSystem)) {
+    if (
+      !mappedSystem ||
+      !/^[a-z0-9][a-z0-9_-]{0,49}$/.test(mappedSystem) ||
+      ['con', 'prn', 'nul', 'aux'].includes(mappedSystem)
+    ) {
       return null;
     }
     return mappedSystem;

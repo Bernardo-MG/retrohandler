@@ -10,6 +10,11 @@ export function sameVersion(first: Stats, second: Stats): boolean {
 
 /** Stronger in-process check; not a persistent fingerprint cache key. */
 export function sameRegularFileVersion(first: Stats, second: Stats): boolean {
-  return first.isFile() && second.isFile() && sameFile(first, second) &&
-    sameVersion(first, second) && first.ctimeMs === second.ctimeMs;
+  return (
+    first.isFile() &&
+    second.isFile() &&
+    sameFile(first, second) &&
+    sameVersion(first, second) &&
+    first.ctimeMs === second.ctimeMs
+  );
 }

@@ -15,14 +15,17 @@ export class IdentificationService {
     private readonly repository: IdentificationRepository,
     private readonly fingerprints: RomFingerprintReader,
     private readonly datReader: DatReader
-  ) { }
+  ) {}
 
-  async importDat(filename: string): Promise<DatImportReceipt> {
+  public async importDat(filename: string): Promise<DatImportReceipt> {
     const catalogue = await this.datReader.read(filename);
     return this.repository.importDat(catalogue);
   }
 
-  async identifyCollection(source: string, options: IdentificationOptions = {}): Promise<IdentificationReceipt> {
+  public async identifyCollection(
+    source: string,
+    options: IdentificationOptions = {}
+  ): Promise<IdentificationReceipt> {
     throwIfCancelled(options.signal, 'Identification cancelled.');
     if (this.activeSources.has(source)) {
       throw new Error('Identification is already running for this collection.');

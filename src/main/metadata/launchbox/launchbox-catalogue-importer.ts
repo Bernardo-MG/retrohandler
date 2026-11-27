@@ -11,9 +11,9 @@ export class LaunchBoxCatalogueImporter {
   constructor(
     private readonly repository: LaunchBoxImportRepository,
     private readonly reader = new LaunchBoxXmlReader()
-  ) { }
+  ) {}
 
-  async importFile(file: string, options: ImportOptions = {}): Promise<number> {
+  public async importFile(file: string, options: ImportOptions = {}): Promise<number> {
     this.assertRepositoryAvailable();
     const records = await this.reader.open(file, options.signal);
     this.repository.beginLaunchBoxImport();
@@ -46,7 +46,8 @@ export class LaunchBoxCatalogueImporter {
   }
 
   private assertRepositoryAvailable(): void {
-    const { beginLaunchBoxImport, addLaunchBoxGame, finishLaunchBoxImport, abortLaunchBoxImport } = this.repository;
+    const { beginLaunchBoxImport, addLaunchBoxGame, finishLaunchBoxImport, abortLaunchBoxImport } =
+      this.repository;
     if (!beginLaunchBoxImport || !addLaunchBoxGame || !finishLaunchBoxImport || !abortLaunchBoxImport) {
       throw new Error('LaunchBox import storage unavailable.');
     }

@@ -14,7 +14,7 @@ export interface RomFingerprintStrategy {
 
 /** Select an explicit strategy and validate the source around its work. */
 export class RomFingerprintReader {
-  constructor(private readonly strategies: readonly RomFingerprintStrategy[]) { }
+  constructor(private readonly strategies: readonly RomFingerprintStrategy[]) {}
 
   async read(target: RomTarget, signal?: AbortSignal): Promise<FileFingerprint | null> {
     throwIfCancelled(signal);
@@ -31,7 +31,7 @@ export class RomFingerprintReader {
   }
 
   private strategyFor(extension: string): RomFingerprintStrategy | undefined {
-    return this.strategies.find(strategy => strategy.supports(extension));
+    return this.strategies.find((strategy) => strategy.supports(extension));
   }
 }
 
@@ -40,7 +40,7 @@ export class DirectRomFingerprint implements RomFingerprintStrategy {
   constructor(
     private readonly cache: Pick<IdentificationRepository, 'cachedFingerprint'>,
     private readonly reader: FingerprintReader
-  ) { }
+  ) {}
 
   supports(extension: string): boolean {
     return isDirectRom(extension);
@@ -53,7 +53,7 @@ export class DirectRomFingerprint implements RomFingerprintStrategy {
       file.stats.size,
       file.stats.mtimeMs
     );
-    return cached ?? await this.reader.readFile(file.filename, signal);
+    return cached ?? (await this.reader.readFile(file.filename, signal));
   }
 }
 
@@ -62,7 +62,7 @@ export class ArchivedRomFingerprint implements RomFingerprintStrategy {
   constructor(
     private readonly archive: ArchiveReader,
     private readonly reader: FingerprintReader
-  ) { }
+  ) {}
 
   supports(extension: string): boolean {
     return isRomArchive(extension);

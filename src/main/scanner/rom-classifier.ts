@@ -8,11 +8,11 @@ import { assertUnredirectedPath } from '../components/filesystem/paths';
 import { titleFromName } from './naming';
 
 export class RomClassifier {
-  accepts(filename: string, tracks: ReadonlySet<string>): boolean {
+  public accepts(filename: string, tracks: ReadonlySet<string>): boolean {
     return isScannableRom(path.extname(filename)) && !this.isReferencedTrack(filename, tracks);
   }
 
-  async classify(root: string, filename: string): Promise<Rom> {
+  public async classify(root: string, filename: string): Promise<Rom> {
     await assertUnredirectedPath(root, filename);
     const info = await lstat(filename);
     if (!info.isFile()) {
@@ -30,6 +30,8 @@ export class RomClassifier {
   }
 
   private isReferencedTrack(filename: string, tracks: ReadonlySet<string>): boolean {
-    return path.extname(filename).toLowerCase() === '.bin' && tracks.has(path.basename(filename).toLowerCase());
+    return (
+      path.extname(filename).toLowerCase() === '.bin' && tracks.has(path.basename(filename).toLowerCase())
+    );
   }
 }

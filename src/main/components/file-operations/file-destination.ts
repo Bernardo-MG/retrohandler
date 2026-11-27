@@ -5,7 +5,7 @@ import { assertSafeDirectory, childOf, ensureSafeDirectory, overlaps } from '../
 
 /** A root-scoped filesystem destination. Resolve and recheck paths on every access. */
 export class FileDestination {
-  readonly root: string;
+  public readonly root: string;
 
   constructor(root: string) {
     if (!path.isAbsolute(root)) {
@@ -14,10 +14,13 @@ export class FileDestination {
     this.root = path.resolve(root);
   }
 
-  async validateAgainst(protectedRoots: readonly string[], overlapMessage = 'Destination overlaps a protected directory.'): Promise<void> {
+  public async validateAgainst(
+    protectedRoots: readonly string[],
+    overlapMessage = 'Destination overlaps a protected directory.'
+  ): Promise<void> {
     await assertSafeDirectory(this.root);
     const destinationKey = this.root.toLowerCase();
-    const roots = new Set(protectedRoots.map(root => path.resolve(root)));
+    const roots = new Set(protectedRoots.map((root) => path.resolve(root)));
     for (const root of roots) {
       if (overlaps(root.toLowerCase(), destinationKey)) {
         throw new Error(overlapMessage);
@@ -32,7 +35,7 @@ export class FileDestination {
     }
   }
 
-  resolvePath(relativePath: string): string {
+  public resolvePath(relativePath: string): string {
     const target = path.join(this.root, ...relativePath.split('/'));
     if (!childOf(this.root, target)) {
       throw new Error('Invalid export destination path.');
@@ -40,23 +43,23 @@ export class FileDestination {
     return target;
   }
 
-  async assertSafeParent(relativePath: string): Promise<string> {
+  public async assertSafeParent(relativePath: string): Promise<string> {
     const target = this.resolvePath(relativePath);
     await assertSafeDirectory(path.dirname(target));
     return target;
   }
 
-  async readFile(relativePath: string, maxBytes: number): Promise<Buffer | null> {
+  public async readFile(relativePath: string, maxBytes: number): Promise<Buffer | null> {
     return readRegular(await this.assertSafeParent(relativePath), maxBytes);
   }
 
-  async ensureParentDirectory(relativePath: string): Promise<string> {
+  public async ensureParentDirectory(relativePath: string): Promise<string> {
     const target = this.resolvePath(relativePath);
     await ensureSafeDirectory(path.dirname(target));
     return target;
   }
 
-  relativePathOf(file: string): string {
+  public relativePathOf(file: string): string {
     if (!childOf(this.root, file)) {
       throw new Error('Invalid export destination path.');
     }

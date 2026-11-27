@@ -26,22 +26,21 @@ export interface ArtworkFile {
   size: number;
 }
 
-/** Owns the content-addressed cache and its retention policy. */
 export class ArtworkCache {
-  readonly root: string;
+  public readonly root: string;
 
   constructor(root: string) {
     this.root = path.resolve(root);
   }
 
-  pathFor(id: string): string {
+  public pathFor(id: string): string {
     if (!isArtworkId(id)) {
       throw new Error('Invalid artwork ID.');
     }
     return path.join(this.root, id);
   }
 
-  async store(bytes: Buffer): Promise<string> {
+  public async store(bytes: Buffer): Promise<string> {
     const { id } = identifyArtwork(bytes);
     await ensureSafeDirectory(this.root);
     const temp = path.join(this.root, `.download-${randomUUID()}`);
@@ -61,7 +60,7 @@ export class ArtworkCache {
     return id;
   }
 
-  async read(id: string): Promise<CachedArtwork> {
+  public async read(id: string): Promise<CachedArtwork> {
     const file = this.pathFor(id);
     await assertSafeDirectory(this.root);
     try {
@@ -80,7 +79,7 @@ export class ArtworkCache {
   }
 
   /** Inspect a source for export; the export planner verifies its content hash. */
-  async find(id: string): Promise<ArtworkFile | null> {
+  public async find(id: string): Promise<ArtworkFile | null> {
     const file = this.pathFor(id);
     try {
       await assertSafeDirectory(this.root);
@@ -91,7 +90,7 @@ export class ArtworkCache {
     }
   }
 
-  inspect(referenced: ReadonlySet<string>, now = Date.now()) {
+  public inspect(referenced: ReadonlySet<string>, now = Date.now()) {
     const statistics = { artworkFiles: 0, artworkBytes: 0, reclaimableFiles: 0, reclaimableBytes: 0 };
     for (const file of this.listFiles(referenced, now)) {
       statistics.artworkFiles++;
@@ -106,7 +105,7 @@ export class ArtworkCache {
 
   /** Only old, recognized, unreferenced files are eligible. The main process obtains
    * references from SQLite immediately before this synchronous operation. */
-  cleanup(referenced: ReadonlySet<string>, now = Date.now()) {
+  public cleanup(referenced: ReadonlySet<string>, now = Date.now()) {
     const receipt = { removedFiles: 0, removedBytes: 0, failedFiles: 0 };
     for (const file of this.listFiles(referenced, now)) {
       if (!file.reclaimable) {
@@ -116,8 +115,7 @@ export class ArtworkCache {
         unlinkSync(path.join(this.root, file.name));
         receipt.removedFiles++;
         receipt.removedBytes += file.size;
-      }
-      catch {
+      } catch {
         receipt.failedFiles++;
       }
     }

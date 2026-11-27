@@ -20,25 +20,25 @@ export class XmlCursor {
     this.readDeclaration();
   }
 
-  get position(): number {
+  public get position(): number {
     return this.offset;
   }
 
-  get atClosingTag(): boolean {
+  public get atClosingTag(): boolean {
     return this.xml.startsWith('</', this.offset);
   }
 
-  get atEnd(): boolean {
+  public get atEnd(): boolean {
     return this.offset === this.xml.length;
   }
 
-  skipWhitespaceAndComments(): void {
+  public skipWhitespaceAndComments(): void {
     do {
       this.matchAtPosition(/[ \t\r\n]*/y);
     } while (this.skipComment());
   }
 
-  readOpeningTag() {
+  public readOpeningTag() {
     const start = this.offset;
     const name = this.matchAtPosition(/<([A-Za-z_][A-Za-z0-9_.-]*)/y)?.[1] ?? this.failInvalidXml();
     const attributes = new Set<string>();
@@ -67,7 +67,7 @@ export class XmlCursor {
     decodeXmlText(attribute[2] ?? attribute[3], this.failInvalidXml);
   }
 
-  readClosingTag(name: string): number {
+  public readClosingTag(name: string): number {
     const closingTagStart = this.offset;
     if (this.matchAtPosition(/<\/([A-Za-z_][A-Za-z0-9_.-]*)[ \t\r\n]*>/y)?.[1] !== name) {
       this.failInvalidXml();
@@ -75,7 +75,7 @@ export class XmlCursor {
     return closingTagStart;
   }
 
-  readTextElement(): XmlTextElement {
+  public readTextElement(): XmlTextElement {
     const tag = this.readOpeningTag();
     const value = tag.selfClosing ? '' : this.readElementContent(tag.name);
     return {
@@ -121,7 +121,8 @@ export class XmlCursor {
     if (!this.xml.startsWith('<?xml', this.offset)) {
       return;
     }
-    const declarationPattern = /<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.0"|'1\.0')(?:[ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(?:"[Uu][Tt][Ff]-8"|'[Uu][Tt][Ff]-8'))?(?:[ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\r\n]*\?>/y;
+    const declarationPattern =
+      /<\?xml[ \t\r\n]+version[ \t\r\n]*=[ \t\r\n]*(?:"1\.0"|'1\.0')(?:[ \t\r\n]+encoding[ \t\r\n]*=[ \t\r\n]*(?:"[Uu][Tt][Ff]-8"|'[Uu][Tt][Ff]-8'))?(?:[ \t\r\n]+standalone[ \t\r\n]*=[ \t\r\n]*(?:"(?:yes|no)"|'(?:yes|no)'))?[ \t\r\n]*\?>/y;
     if (!this.matchAtPosition(declarationPattern)) {
       this.failInvalidXml();
     }
@@ -141,7 +142,11 @@ export class XmlCursor {
       return false;
     }
     const end = this.xml.indexOf('-->', this.offset + 4);
-    if (end < 0 || this.xml.slice(this.offset + 4, end).includes('--') || (end > this.offset + 4 && this.xml[end - 1] === '-')) {
+    if (
+      end < 0 ||
+      this.xml.slice(this.offset + 4, end).includes('--') ||
+      (end > this.offset + 4 && this.xml[end - 1] === '-')
+    ) {
       this.failInvalidXml();
     }
     this.offset = end + 3;

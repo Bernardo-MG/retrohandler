@@ -5,14 +5,14 @@ import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 
 type CollectionListRow = Omit<CollectionInfo, 'warningCount'> & {
-  warningsJson: string
+  warningsJson: string;
 };
 
 type CollectionRow = {
   root_path: string;
   scanned_at: string;
   ignored: number;
-  warnings_json: string
+  warnings_json: string;
 };
 
 type RomRow = {
@@ -21,7 +21,7 @@ type RomRow = {
   system: string;
   relative_path: string;
   extension: string;
-  bytes: number
+  bytes: number;
 };
 
 export class SqliteCollectionRepository implements CollectionRepository {
@@ -29,17 +29,33 @@ export class SqliteCollectionRepository implements CollectionRepository {
 
   saveScan(result: ScanResult): void {
     this.executor.transaction(() => {
-      this.executor.execute('collections.upsertCollection', result.source, result.scannedAt, result.ignored, JSON.stringify(result.warnings ?? []));
-      const old = new Map(this.executor.findAll<RomRow>('roms.existingRows', result.source).map(row => [row.relative_path, row]));
+      this.executor.execute(
+        'collections.upsertCollection',
+        result.source,
+        result.scannedAt,
+        result.ignored,
+        JSON.stringify(result.warnings ?? [])
+      );
+      const old = new Map(
+        this.executor
+          .findAll<RomRow>('roms.existingRows', result.source)
+          .map((row) => [row.relative_path, row])
+      );
       for (const game of result.games) {
         const previous = old.get(game.relativePath);
         old.delete(game.relativePath);
-        if (previous && previous.id === game.id && previous.name === game.name &&
-          previous.system === game.system && previous.extension === game.extension &&
-          previous.bytes === game.bytes) {
+        if (
+          previous &&
+          previous.id === game.id &&
+          previous.name === game.name &&
+          previous.system === game.system &&
+          previous.extension === game.extension &&
+          previous.bytes === game.bytes
+        ) {
           continue;
         }
-        this.executor.execute('roms.upsertRom',
+        this.executor.execute(
+          'roms.upsertRom',
           result.source,
           game.relativePath,
           game.id,
@@ -50,7 +66,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
         );
       }
       // An unreadable directory could conceal files. Never erase them on a partial scan.
-      if (!(result.warnings?.length)) {
+      if (!result.warnings?.length) {
         for (const relativePath of old.keys()) {
           this.executor.execute('roms.deleteRom', result.source, relativePath);
         }
@@ -63,14 +79,16 @@ export class SqliteCollectionRepository implements CollectionRepository {
     if (!row) {
       return null;
     }
-    const games = this.executor.findAll<RomRow>('roms.lastScanGames', row.root_path).map((rom): Rom => ({
-      id: rom.id,
-      name: rom.name,
-      system: rom.system,
-      relativePath: rom.relative_path,
-      extension: rom.extension,
-      bytes: rom.bytes
-    }));
+    const games = this.executor.findAll<RomRow>('roms.lastScanGames', row.root_path).map(
+      (rom): Rom => ({
+        id: rom.id,
+        name: rom.name,
+        system: rom.system,
+        relativePath: rom.relative_path,
+        extension: rom.extension,
+        bytes: rom.bytes
+      })
+    );
     const warnings = JSON.parse(row.warnings_json) as ScanWarning[];
     return {
       source: row.root_path,
@@ -83,7 +101,7 @@ export class SqliteCollectionRepository implements CollectionRepository {
 
   listCollections(): CollectionInfo[] {
     const rows = this.executor.findAll<CollectionListRow>('collections.listCollections');
-    return rows.map(row => ({
+    return rows.map((row) => ({
       rootPath: row.rootPath,
       label: row.label || path.basename(row.rootPath) || row.rootPath,
       scannedAt: row.scannedAt,

@@ -9,7 +9,7 @@ const CHUNK_BYTES = 256 * 1024;
 
 /** Verify byte counts and file identity while calculating streaming fingerprints. */
 export class FingerprintReader {
-  async readFile(filename: string, signal?: AbortSignal): Promise<FileFingerprint> {
+  public async readFile(filename: string, signal?: AbortSignal): Promise<FileFingerprint> {
     throwIfCancelled(signal);
     const before = await lstat(filename);
     if (!before.isFile()) {
@@ -35,7 +35,11 @@ export class FingerprintReader {
     }
   }
 
-  async readStream(stream: Readable, expectedSize: number, signal?: AbortSignal): Promise<StreamFingerprint> {
+  public async readStream(
+    stream: Readable,
+    expectedSize: number,
+    signal?: AbortSignal
+  ): Promise<StreamFingerprint> {
     const fingerprint = new ContentFingerprint();
     try {
       throwIfCancelled(signal);

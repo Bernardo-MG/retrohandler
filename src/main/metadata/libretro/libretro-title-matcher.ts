@@ -2,7 +2,8 @@ import path from 'node:path';
 
 const ROM_EXTENSION = /\.(nes|sfc|smc|gb|gbc|gba|n64|z64|v64|zip|7z|rar|cue|iso|chd)$/i;
 const TRAILING_TAGS = /(?:\s*[([][^)\]]+[)\]])+$/g;
-const REGION_TAGS = /(?:\s*[([](?:USA|Europe|Japan|World|Rev[^)\]]*|En[^)\]]*|Proto|Beta|USA, Europe|Europe, USA)[)\]])+$/gi;
+const REGION_TAGS =
+  /(?:\s*[([](?:USA|Europe|Japan|World|Rev[^)\]]*|En[^)\]]*|Proto|Beta|USA, Europe|Europe, USA)[)\]])+$/gi;
 const REGION_VARIANTS = ['USA', 'Europe', 'Japan', 'USA, Europe', 'World'];
 const MAX_CANDIDATES = 24;
 const MAX_MATCHES = 32;
@@ -12,7 +13,7 @@ export type TitleQuery = { title: string; regionHint?: string };
 
 /** Deterministic title matching; no network, artwork or catalogue state. */
 export class LibretroTitleMatcher {
-  candidates(names: readonly string[]): string[] {
+  public candidates(names: readonly string[]): string[] {
     const exact: string[] = [];
     const baseNames: string[] = [];
     for (const input of names) {
@@ -33,7 +34,7 @@ export class LibretroTitleMatcher {
     return candidates.slice(0, MAX_CANDIDATES);
   }
 
-  match(files: readonly string[], query: TitleQuery): string[] {
+  public match(files: readonly string[], query: TitleQuery): string[] {
     const needle = this.normalizedTitle(query.title);
     if (needle.length < 2) {
       return [];
@@ -46,7 +47,10 @@ export class LibretroTitleMatcher {
         matches.push({ filename, score });
       }
     }
-    return matches.sort(compareMatches).slice(0, MAX_MATCHES).map(match => match.filename);
+    return matches
+      .sort(compareMatches)
+      .slice(0, MAX_MATCHES)
+      .map((match) => match.filename);
   }
 
   private romTitle(input: string): string {
@@ -54,7 +58,10 @@ export class LibretroTitleMatcher {
   }
 
   private addCandidate(candidates: string[], title: string): void {
-    const safe = title.replace(/[&*\/<>:|?"\\]/g, '_').replace(/\s+/g, ' ').trim();
+    const safe = title
+      .replace(/[&*\/<>:|?"\\]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (safe && safe.length <= 160 && !candidates.includes(safe)) {
       candidates.push(safe);
     }
@@ -68,7 +75,12 @@ export class LibretroTitleMatcher {
   }
 
   private normalizedTitle(title: string): string {
-    return this.romTitle(title).replace(TRAILING_TAGS, '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    return this.romTitle(title)
+      .replace(TRAILING_TAGS, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
   }
 
   private detectRegion(name: string): string | null {

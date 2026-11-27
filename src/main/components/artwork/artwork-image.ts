@@ -1,7 +1,8 @@
 import { sha256 } from '../hashing/content-hash';
 
 export const MAX_ARTWORK_BYTES = 5 * 1024 * 1024;
-export const isArtworkId = (id: unknown): id is string => typeof id === 'string' && /^[a-f0-9]{64}\.(jpg|png|webp)$/.test(id);
+export const isArtworkId = (id: unknown): id is string =>
+  typeof id === 'string' && /^[a-f0-9]{64}\.(jpg|png|webp)$/.test(id);
 
 type ImageExtension = 'jpg' | 'png' | 'webp';
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -18,7 +19,11 @@ function imageExtension(bytes: Buffer): ImageExtension | null {
   if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
     return 'png';
   }
-  if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') {
+  if (
+    bytes.length >= 12 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  ) {
     return 'webp';
   }
   return null;

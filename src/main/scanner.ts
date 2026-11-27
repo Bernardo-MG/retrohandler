@@ -19,7 +19,7 @@ export class RomScanner {
     private readonly classifier = new RomClassifier()
   ) {}
 
-  async scan(folder: string, options: ScanOptions = {}): Promise<ScanResult> {
+  public async scan(folder: string, options: ScanOptions = {}): Promise<ScanResult> {
     throwIfCancelled(options.signal, 'Scan cancelled.');
     const job = new ScanJob(await this.walker.resolveRoot(folder), options);
     job.checkCancellation();

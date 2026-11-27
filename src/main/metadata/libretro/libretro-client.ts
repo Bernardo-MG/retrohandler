@@ -12,9 +12,9 @@ type GithubEntry = { path: string; type: string; sha?: unknown };
 
 /** Owns official URLs, timeouts, fallback and response status handling. */
 export class LibretroClient {
-  constructor(private readonly http = new HttpClient()) { }
+  constructor(private readonly http = new HttpClient()) {}
 
-  async requestBoxart(platform: string, filename: string): Promise<Response> {
+  public async requestBoxart(platform: string, filename: string): Promise<Response> {
     const suffix = `Named_Boxarts/${encodeURIComponent(filename)}`;
     const primary = `${THUMBNAIL_HOST}/${encodeURIComponent(platform)}/${suffix}`;
     try {
@@ -23,14 +23,19 @@ export class LibretroClient {
         return response;
       }
       await response.body?.cancel();
-    } catch { /* Try the official GitHub mirror. */ }
+    } catch {
+      /* Try the official GitHub mirror. */
+    }
     const mirror = `${GITHUB_RAW}/${this.githubRepo(platform)}/master/${suffix}`;
     return this.requestImage(mirror);
   }
 
-  async readIndex(platform: string, relative: '.index' | ''): Promise<string> {
+  public async readIndex(platform: string, relative: '.index' | ''): Promise<string> {
     const url = `${THUMBNAIL_HOST}/${encodeURIComponent(platform)}/Named_Boxarts/${relative}`;
-    const response = await this.http.get(url, { redirect: 'error', signal: AbortSignal.timeout(INDEX_TIMEOUT_MS) });
+    const response = await this.http.get(url, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(INDEX_TIMEOUT_MS)
+    });
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error(`HTTP ${response.status}`);
@@ -38,17 +43,17 @@ export class LibretroClient {
     return this.readIndexText(response, MAX_INDEX_BYTES);
   }
 
-  async readGithubFiles(platform: string): Promise<string[]> {
+  public async readGithubFiles(platform: string): Promise<string[]> {
     const root = await this.loadGithubTree(platform, 'master');
     const boxarts = root.find(isBoxartDirectory);
     if (!boxarts || typeof boxarts.sha !== 'string' || !/^[a-f0-9]{40}$/i.test(boxarts.sha)) {
       throw new Error('GitHub Named_Boxarts tree not found.');
     }
     const entries = await this.loadGithubTree(platform, boxarts.sha);
-    return entries.filter(isFileEntry).map(entry => entry.path);
+    return entries.filter(isFileEntry).map((entry) => entry.path);
   }
 
-  readImage(response: Response, maxBytes: number): Promise<Buffer> {
+  public readImage(response: Response, maxBytes: number): Promise<Buffer> {
     return this.http.readBytes(response, maxBytes);
   }
 

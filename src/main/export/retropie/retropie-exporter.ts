@@ -15,7 +15,7 @@ const MAX_XML_BYTES = 32 * 1024 * 1024;
 
 /** Prepares RetroPie configuration files; ROMs remain references only. */
 export class RetroPieExporter implements Exporter {
-  constructor(private readonly artwork: ArtworkCache) { }
+  constructor(private readonly artwork: ArtworkCache) {}
 
   prepareDraft(entries: readonly LibraryEntry[], options: ExportTargetOptions): Promise<ExportDraft> {
     return new RetroPieDraftBuilder(this.artwork, options).build(entries);
@@ -35,7 +35,10 @@ class RetroPieDraftBuilder {
   private readonly gamesBySystem = new Map<string, RetroPieGame[]>();
   private artworkBytes = 0;
 
-  constructor(private readonly artwork: ArtworkCache, options: ExportTargetOptions) {
+  constructor(
+    private readonly artwork: ArtworkCache,
+    options: ExportTargetOptions
+  ) {
     this.layout = new RetroPieLayout(options.overrides);
     this.planner = new FileOperationPlanner(options.destination);
     this.includeArtwork = options.includeArtwork;
@@ -55,7 +58,7 @@ class RetroPieDraftBuilder {
         warnings: this.warnings,
         conflicts: this.conflicts,
         bytes: this.artworkBytes,
-        skippedRoms: entries.length - this.files.filter(file => file.kind === 'rom').length
+        skippedRoms: entries.length - this.files.filter((file) => file.kind === 'rom').length
       },
       operations: this.operations
     };
@@ -163,11 +166,13 @@ class RetroPieDraftBuilder {
     this.files.push({ source: '', relativeDestination, size: 0, kind: 'gamelist' });
     try {
       const gameList = new RetroPieGameList(this.layout, system);
-      this.operations.push(await this.planner.planGeneratedFile({
-        relativeDestination,
-        maxBytes: MAX_XML_BYTES,
-        generate: previousContent => gameList.generateOrMerge(games, previousContent)
-      }));
+      this.operations.push(
+        await this.planner.planGeneratedFile({
+          relativeDestination,
+          maxBytes: MAX_XML_BYTES,
+          generate: (previousContent) => gameList.generateOrMerge(games, previousContent)
+        })
+      );
     } catch (error) {
       this.conflicts.push(`${relativeDestination}: ${String(error)}`);
     }

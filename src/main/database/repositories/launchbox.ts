@@ -1,6 +1,10 @@
 import type { MetadataCandidate } from '../../../shared';
 import type { LaunchBoxGame, LaunchBoxRepository } from '../../contracts/persistence';
-import { LaunchBoxTitleMatcher, normalizeLaunchBoxName, type LaunchBoxCandidate } from '../../metadata/launchbox/launchbox-title-matcher';
+import {
+  LaunchBoxTitleMatcher,
+  normalizeLaunchBoxName,
+  type LaunchBoxCandidate
+} from '../../metadata/launchbox/launchbox-title-matcher';
 import { DatabaseConnection } from '../database-connection';
 import { QueryExecutor } from '../sql/query-executor';
 
@@ -13,7 +17,8 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
   }
 
   addLaunchBoxGame(game: LaunchBoxGame): void {
-    this.executor.execute('launchbox.insertStagingGame',
+    this.executor.execute(
+      'launchbox.insertStagingGame',
       game.id,
       game.title,
       game.platform,
@@ -48,8 +53,12 @@ export class SqliteLaunchBoxRepository implements LaunchBoxRepository {
       throw new Error('Invalid LaunchBox search.');
     }
     // Prefix search uses the index; limit candidate work before ranking by platform.
-    const escaped = normalized.replace(/[!%_]/g, c => `!${c}`);
-    const candidates = this.executor.findAll<LaunchBoxCandidate>('launchbox.search', normalized, `${escaped}%`);
+    const escaped = normalized.replace(/[!%_]/g, (c) => `!${c}`);
+    const candidates = this.executor.findAll<LaunchBoxCandidate>(
+      'launchbox.search',
+      normalized,
+      `${escaped}%`
+    );
     return matcher.rank(candidates);
   }
 

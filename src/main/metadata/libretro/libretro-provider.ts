@@ -9,19 +9,23 @@ import { LibretroTitleMatcher } from './libretro-title-matcher';
 
 const MAX_PREVIEWS = 8;
 
-/** Discover and cache genuine boxart through independent client, catalogue and matcher components. */
 export class LibretroProvider implements ArtworkProvider {
   private readonly catalogue: LibretroCatalogue;
   private readonly matcher = new LibretroTitleMatcher();
 
-  constructor(private readonly artwork: ArtworkCache, private readonly client = new LibretroClient()) {
+  constructor(
+    private readonly artwork: ArtworkCache,
+    private readonly client = new LibretroClient()
+  ) {
     this.catalogue = new LibretroCatalogue(client);
   }
 
-  async findCover(query: CoverLookup): Promise<string | null> {
+  public async findCover(query: CoverLookup): Promise<string | null> {
     const platform = libretroPlatform(query.system);
     if (!platform) {
-      throw new Error(`No Libretro artwork catalogue for system: ${query.system || '(unassigned)'}. Assign a supported system to the ROM first.`);
+      throw new Error(
+        `No Libretro artwork catalogue for system: ${query.system || '(unassigned)'}. Assign a supported system to the ROM first.`
+      );
     }
     for (const title of this.matcher.candidates(query.names)) {
       const response = await this.requestImage(platform, `${title}.png`, 'artwork');
@@ -34,7 +38,7 @@ export class LibretroProvider implements ArtworkProvider {
     return null;
   }
 
-  async searchCovers(query: CoverSearch): Promise<CoverChoice[]> {
+  public async searchCovers(query: CoverSearch): Promise<CoverChoice[]> {
     const platform = libretroPlatform(query.system);
     if (!platform) {
       throw new Error(`No Libretro artwork catalogue for system: ${query.system || '(unassigned)'}.`);
@@ -57,7 +61,11 @@ export class LibretroProvider implements ArtworkProvider {
     return results;
   }
 
-  private async requestImage(platform: string, filename: string, label: 'artwork' | 'image'): Promise<Response | null> {
+  private async requestImage(
+    platform: string,
+    filename: string,
+    label: 'artwork' | 'image'
+  ): Promise<Response | null> {
     const response = await this.client.requestBoxart(platform, filename);
     if (response.status === 404) {
       await response.body?.cancel().catch(() => undefined);
@@ -101,7 +109,8 @@ export class LibretroProvider implements ArtworkProvider {
     try {
       const artworkId = await this.artwork.store(bytes);
       return { title: filename.slice(0, -4), artworkId };
-    } catch { /* A listed entry may be broken; continue with valid images. */
+    } catch {
+      /* A listed entry may be broken; continue with valid images. */
       return null;
     }
   }

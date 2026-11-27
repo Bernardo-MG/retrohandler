@@ -6,7 +6,11 @@ import { registerLibraryIpc } from './ipc/library-ipc';
 import { registerIdentificationIpc } from './ipc/identification-ipc';
 import { IdentificationService } from './identification';
 import { DatReader } from './identification/dat/dat-reader';
-import { ArchivedRomFingerprint, DirectRomFingerprint, RomFingerprintReader } from './identification/rom/rom-fingerprint-reader';
+import {
+  ArchivedRomFingerprint,
+  DirectRomFingerprint,
+  RomFingerprintReader
+} from './identification/rom/rom-fingerprint-reader';
 import { SevenZipReader } from './components/archives/seven-zip-reader';
 import { FingerprintReader } from './components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from './contracts/persistence';
@@ -40,7 +44,9 @@ app.setName('RetroHandler');
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.retrohandler.desktop');
 }
-protocol.registerSchemesAsPrivileged([{ scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'retro-art', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+]);
 
 function createIdentificationService(repository: IdentificationRepository): IdentificationService {
   const reader = new FingerprintReader();
@@ -146,9 +152,14 @@ function preparePackageSmoke(): void {
   process.once('exit', () => {
     try {
       rmSync(temp, { recursive: true, force: true });
-    } catch { /* Windows may still hold Chromium files. */ }
+    } catch {
+      /* Windows may still hold Chromium files. */
+    }
   });
-  app.whenReady().then(() => runPackageSmoke(temp)).catch(failStartup);
+  app
+    .whenReady()
+    .then(() => runPackageSmoke(temp))
+    .catch(failStartup);
 }
 
 // A single instance owns settings and artwork cleanup.

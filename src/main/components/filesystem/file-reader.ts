@@ -7,8 +7,7 @@ import { sameFile, sameVersion } from './file-version';
 export async function statIfExists(file: string) {
   try {
     return await lstat(file);
-  }
-  catch (error) {
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return null;
     }

@@ -1,4 +1,11 @@
-import type { BulkSystemSelection, CollectionInfo, LibraryPage, LibraryQuery, ScanResult, SystemCount } from '../../../shared';
+import type {
+  BulkSystemSelection,
+  CollectionInfo,
+  LibraryPage,
+  LibraryQuery,
+  ScanResult,
+  SystemCount
+} from '../../../shared';
 import { RomScanner, type ScanOptions } from '../../scanner';
 import { throwIfCancelled } from '../../components/async/cancellation';
 import type {
