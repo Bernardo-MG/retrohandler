@@ -80,10 +80,7 @@ test('backend features and reusable components do not depend on desktop transpor
     'scanner',
     'services'
   ];
-  const files = [
-    path.join(mainRoot, 'scanner.ts'),
-    ...packages.flatMap((name) => sourceFiles(path.join(mainRoot, name)))
-  ];
+  const files = packages.flatMap((name) => sourceFiles(path.join(mainRoot, name)));
   const forbidden = ['app', 'desktop', 'ipc', 'database', 'main', 'settings/settings-ipc'].map((name) =>
     path.join(mainRoot, name)
   );
@@ -180,5 +177,20 @@ test('utilities depend only on standard libraries and other utilities', () => {
       .filter((reference) => !reference.startsWith('node:') && !resolvesTo(file, reference, utilsRoot))
       .map((reference) => referenceName(file, reference))
   );
+  assert.deepEqual(violations, []);
+});
+
+test('scanner consumers use the public scanner API rather than implementation modules', () => {
+  const scannerRoot = path.join(mainRoot, 'scanner');
+  const violations = sourceFiles(path.dirname(mainRoot))
+    .filter((file) => !inside(scannerRoot, file))
+    .flatMap((file) =>
+      imports(file)
+        .filter((reference) => {
+          const target = path.resolve(path.dirname(file), reference);
+          return resolvesTo(file, reference, scannerRoot) && target !== scannerRoot;
+        })
+        .map((reference) => referenceName(file, reference))
+    );
   assert.deepEqual(violations, []);
 });

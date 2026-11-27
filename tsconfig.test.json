@@ -12,7 +12,6 @@
   },
   "include": [
     "tests/**/*.ts",
-    "src/main/scanner.ts",
     "src/main/scanner/**/*.ts",
     "src/shared.ts",
     "src/renderer/global.d.ts",

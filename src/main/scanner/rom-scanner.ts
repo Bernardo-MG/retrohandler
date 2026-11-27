@@ -1,13 +1,11 @@
-import type { ScanResult } from '../shared';
-import { throwIfCancelled } from './utils/cancellation';
-import { DirectoryWalker, type DirectoryListing } from './components/filesystem/directory-walker';
-import { assertUnredirectedPath } from './components/filesystem/paths';
-import { DiscDescriptorReader } from './scanner/disc-descriptor-reader';
-import { RomClassifier } from './scanner/rom-classifier';
-import { ScanJob } from './scanner/scan-job';
-import type { ScanOptions } from './scanner/scan-options';
-
-export type { ScanOptions } from './scanner/scan-options';
+import type { ScanResult } from '../../shared';
+import { throwIfCancelled } from '../utils/cancellation';
+import { DirectoryWalker, type DirectoryListing } from '../components/filesystem/directory-walker';
+import { assertUnredirectedPath } from '../components/filesystem/paths';
+import { DiscDescriptorReader } from './disc-descriptor-reader';
+import { RomClassifier } from './rom-classifier';
+import { ScanJob } from './scan-job';
+import type { ScanOptions } from './scan-options';
 
 const MAX_DEPTH = 15;
 
