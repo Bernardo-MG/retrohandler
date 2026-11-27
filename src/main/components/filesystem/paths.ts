@@ -1,14 +1,9 @@
 import { realpathSync } from 'node:fs';
 import { mkdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { sameFile } from '../../utils/file-version';
+import { childOf } from '../../utils/paths';
 import { statIfExists, statIfExistsSync } from './file-reader';
-import { sameFile } from './file-version';
-
-export const childOf = (parent: string, child: string) => {
-  const rel = path.relative(parent, child);
-  return !!rel && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
-};
-export const overlaps = (a: string, b: string) => a === b || childOf(a, b) || childOf(b, a);
 
 const canonicalKey = (p: string) =>
   process.platform === 'win32' ? path.normalize(p).toLowerCase() : path.normalize(p);

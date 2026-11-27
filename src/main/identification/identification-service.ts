@@ -1,5 +1,5 @@
 import type { DatImportReceipt, IdentificationReceipt, IdentificationResult } from '../../shared';
-import { throwIfCancelled } from '../components/async/cancellation';
+import { throwIfCancelled } from '../utils/cancellation';
 import type { FileFingerprint } from '../components/hashing/content-fingerprint';
 import type { IdentificationRepository } from '../contracts/persistence';
 import { DatReader } from './dat/dat-reader';

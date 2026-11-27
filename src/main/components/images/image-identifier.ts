@@ -1,4 +1,4 @@
-import { sha256 } from '../hashing/content-hash';
+import { sha256 } from '../../utils/hashing';
 import { requireImageFormat } from './image-validation';
 
 export const isImageId = (id: unknown): id is string =>

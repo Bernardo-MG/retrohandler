@@ -1,6 +1,6 @@
 import { lstat, opendir, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { throwIfCancelled } from '../async/cancellation';
+import { throwIfCancelled } from '../../utils/cancellation';
 import { assertUnredirectedPath } from './paths';
 
 export interface DirectoryListing {

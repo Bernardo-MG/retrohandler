@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { ExportFile, LibraryEntry } from '../../../shared';
 import type { FileOperation } from '../../components/file-operations/file-operation';
 import { FileOperationPlanner } from '../../components/file-operations/file-operation-planner';
-import { childOf } from '../../components/filesystem/paths';
+import { childOf } from '../../utils/paths';
 import { isImageId, type ImageCache } from '../../components/images';
 import type { Exporter, ExportTargetOptions } from '../exporter';
 import type { ExportDraft } from '../prepared-export';

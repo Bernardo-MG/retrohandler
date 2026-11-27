@@ -19,6 +19,7 @@
     "src/main/services/library/**/*.ts",
     "src/main/database/**/*.ts",
     "src/main/components/**/*.ts",
+    "src/main/utils/**/*.ts",
     "src/main/metadata/**/*.ts",
     "src/main/identification/**/*.ts",
     "src/main/export/**/*.ts",

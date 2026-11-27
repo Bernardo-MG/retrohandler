@@ -1,13 +1,10 @@
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { childOf } from '../../utils/paths';
 import { readRegular } from '../filesystem/file-reader';
-import {
-  assertSafeDirectory,
-  childOf,
-  ensureSafeDirectory,
-  overlaps,
-  resolveSafeDirectory
-} from '../filesystem/paths';
+import { assertSafeDirectory, ensureSafeDirectory, resolveSafeDirectory } from '../filesystem/paths';
+
+const overlaps = (a: string, b: string) => a === b || childOf(a, b) || childOf(b, a);
 
 /** A root-scoped filesystem destination. Resolve and recheck paths on every access. */
 export class FileDestination {

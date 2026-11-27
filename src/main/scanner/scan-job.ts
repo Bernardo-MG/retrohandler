@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { Rom, ScanResult, ScanWarning } from '../../shared';
-import { throwIfCancelled } from '../components/async/cancellation';
+import { throwIfCancelled } from '../utils/cancellation';
 import type { ScanOptions } from './scan-options';
 
 const MAX_FILES = 250_000;

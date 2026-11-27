@@ -1,7 +1,7 @@
 import { lstat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Rom } from '../../shared';
-import { sha256 } from '../components/hashing/content-hash';
+import { sha256 } from '../utils/hashing';
 import { inferPlatform } from './platforms';
 import { isScannableRom } from '../rom/rom-formats';
 import { assertUnredirectedPath } from '../components/filesystem/paths';

@@ -2,7 +2,7 @@ import type { Stats } from 'node:fs';
 import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { RegularFileIdentity } from '../../components/filesystem/regular-file-identity';
-import { childOf } from '../../components/filesystem/paths';
+import { childOf } from '../../utils/paths';
 
 export interface RomTarget {
   source: string;

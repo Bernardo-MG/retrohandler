@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { PassThrough, type Readable } from 'node:stream';
-import { throwIfCancelled } from '../../async/cancellation';
+import { throwIfCancelled } from '../../../utils/cancellation';
 import { ProcessDiagnostics } from '../../processes/process-diagnostics';
 import { stopProcess, waitForExit, type PipedProcess } from '../../processes/process-lifecycle';
 import { ProcessOutput } from '../../processes/process-output';

@@ -1,5 +1,5 @@
 import type { Readable } from 'node:stream';
-import { throwIfCancelled } from '../../async/cancellation';
+import { throwIfCancelled } from '../../../utils/cancellation';
 import type { ArchiveEntry } from '../archive-entry';
 import { ARCHIVE_EXTENSIONS, archiveExtension } from '../archive-formats';
 import type { ArchiveFormatReader } from '../archive-reader';

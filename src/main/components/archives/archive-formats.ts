@@ -8,7 +8,7 @@ export const ARCHIVE_EXTENSIONS = {
 
 const recognizedExtensions = new Set<string>(Object.values(ARCHIVE_EXTENSIONS));
 
-export function normalizeArchiveExtension(extension: string): string {
+function normalizeArchiveExtension(extension: string): string {
   return extension.toLowerCase();
 }
 

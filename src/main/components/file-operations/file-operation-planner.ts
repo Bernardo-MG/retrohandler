@@ -1,5 +1,6 @@
 import { readRegular } from '../filesystem/file-reader';
-import { sha256, sha256OrNull } from '../hashing/content-hash';
+import { sha256 } from '../../utils/hashing';
+import { sha256OrNull } from './file-operation-hash';
 import type { FileDestination } from './file-destination';
 import type { FileOperation } from './file-operation';
 

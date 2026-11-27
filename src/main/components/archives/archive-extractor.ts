@@ -1,7 +1,7 @@
 import { createWriteStream } from 'node:fs';
 import { Transform, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { throwIfCancelled } from '../async/cancellation';
+import { throwIfCancelled } from '../../utils/cancellation';
 import { StreamSizeVerifier } from '../streams/stream-size-verifier';
 import type { ArchiveEntry } from './archive-entry';
 import type { ArchiveSource } from './archive-source';

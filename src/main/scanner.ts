@@ -1,5 +1,5 @@
 import type { ScanResult } from '../shared';
-import { throwIfCancelled } from './components/async/cancellation';
+import { throwIfCancelled } from './utils/cancellation';
 import { DirectoryWalker, type DirectoryListing } from './components/filesystem/directory-walker';
 import { assertUnredirectedPath } from './components/filesystem/paths';
 import { DiscDescriptorReader } from './scanner/disc-descriptor-reader';

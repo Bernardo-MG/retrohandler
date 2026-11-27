@@ -1,7 +1,7 @@
 import type { Stats } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { sameRegularFileVersion } from './file-version';
+import { sameRegularFileVersion } from '../../utils/file-version';
 
 /** Observe a regular file and recheck its name, canonical path and version around an operation. */
 export class RegularFileIdentity {

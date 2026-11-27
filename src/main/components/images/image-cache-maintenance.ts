@@ -1,7 +1,7 @@
 import { readdirSync, unlinkSync, type Stats } from 'node:fs';
 import path from 'node:path';
 import { statIfExistsSync } from '../filesystem/file-reader';
-import { sameRegularFileVersion } from '../filesystem/file-version';
+import { sameRegularFileVersion } from '../../utils/file-version';
 import { resolveSafeDirectorySync } from '../filesystem/paths';
 import { isTemporaryImageName } from './image-cache-files';
 import { isImageId } from './image-identifier';

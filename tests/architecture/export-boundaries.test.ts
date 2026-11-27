@@ -59,6 +59,7 @@ test('export IPC depends only on the public export entry point, not concrete str
 
 test('reusable export components do not depend on application models or packages', () => {
   const componentsRoot = path.join(mainRoot, 'components');
+  const utilsRoot = path.join(mainRoot, 'utils');
   const files = sourceFiles(componentsRoot);
   assert.ok(files.includes(path.join(componentsRoot, 'file-operations', 'file-operation-planner.ts')));
   assert.ok(files.includes(path.join(componentsRoot, 'emulationstation', 'gamelist-document.ts')));
@@ -66,7 +67,8 @@ test('reusable export components do not depend on application models or packages
     imports(file)
       .filter((reference) => {
         if (reference.startsWith('.')) {
-          return !inside(componentsRoot, path.resolve(path.dirname(file), reference));
+          const target = path.resolve(path.dirname(file), reference);
+          return !inside(componentsRoot, target) && !inside(utilsRoot, target);
         }
         return /^electron(?:\/|$)/.test(reference);
       })

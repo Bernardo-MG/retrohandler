@@ -1,4 +1,4 @@
-import { throwIfCancelled } from '../components/async/cancellation';
+import { throwIfCancelled } from '../utils/cancellation';
 
 /** The small part of WebContents required to own a renderer job. */
 export interface JobSender {

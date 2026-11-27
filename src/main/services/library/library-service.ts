@@ -7,7 +7,7 @@ import type {
   SystemCount
 } from '../../../shared';
 import { RomScanner, type ScanOptions } from '../../scanner';
-import { throwIfCancelled } from '../../components/async/cancellation';
+import { throwIfCancelled } from '../../utils/cancellation';
 import type {
   CollectionRepository,
   RomRepository,

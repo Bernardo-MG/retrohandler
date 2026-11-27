@@ -173,3 +173,13 @@ test('image consumers use the public image API rather than implementation module
     );
   assert.deepEqual(violations, []);
 });
+
+test('utilities depend only on standard libraries and other utilities', () => {
+  const utilsRoot = path.join(mainRoot, 'utils');
+  const violations = sourceFiles(utilsRoot).flatMap((file) =>
+    imports(file)
+      .filter((reference) => !reference.startsWith('node:') && !resolvesTo(file, reference, utilsRoot))
+      .map((reference) => referenceName(file, reference))
+  );
+  assert.deepEqual(violations, []);
+});

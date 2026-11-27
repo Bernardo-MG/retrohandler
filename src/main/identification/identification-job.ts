@@ -4,7 +4,7 @@ import type {
   IdentificationResult,
   IdentificationStatus
 } from '../../shared';
-import { throwIfCancelled } from '../components/async/cancellation';
+import { throwIfCancelled } from '../utils/cancellation';
 
 export interface IdentificationOptions {
   signal?: AbortSignal;

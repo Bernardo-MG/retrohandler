@@ -1,7 +1,7 @@
 import { constants, lstatSync, type Stats } from 'node:fs';
 import { lstat, open, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { sameFile, sameVersion } from './file-version';
+import { sameFile, sameVersion } from '../../utils/file-version';
 
 // Only a missing file counts as absent. Permission errors, links and other
 // file types must never be mistaken for a free destination path.

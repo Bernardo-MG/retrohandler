@@ -7,9 +7,7 @@ import { readRegular, statIfExists, statIfExistsSync } from '../../src/main/comp
 import { FileWriter } from '../../src/main/components/filesystem/file-writer';
 import {
   assertSafeDirectory,
-  childOf,
   ensureSafeDirectory,
-  overlaps,
   resolveSafeDirectory,
   resolveSafeDirectorySync
 } from '../../src/main/components/filesystem/paths';
@@ -45,18 +43,6 @@ test('directory resolution rejects junctions and symbolic links in ancestors', a
     await assert.rejects(resolveSafeDirectory(path.join(link, 'missing')), /redirected/);
     assert.throws(() => resolveSafeDirectorySync(path.join(link, 'missing')), /redirected/);
   }));
-
-test('containment rejects equal paths, siblings and parent traversal', () => {
-  const root = path.resolve('root');
-  const child = path.join(root, 'child');
-  assert.equal(childOf(root, child), true);
-  assert.equal(childOf(root, root), false);
-  assert.equal(childOf(root, `${root}-other`), false);
-  assert.equal(childOf(root, path.resolve(root, '..')), false);
-  assert.equal(overlaps(root, root), true);
-  assert.equal(overlaps(child, root), true);
-  assert.equal(overlaps(root, `${root}-other`), false);
-});
 
 test('safe directories allow missing ancestors and reject file ancestors', async () =>
   fixture(async (root) => {

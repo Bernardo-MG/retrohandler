@@ -1,5 +1,5 @@
 import { addAbortSignal, type Readable } from 'node:stream';
-import { throwIfCancelled } from '../async/cancellation';
+import { throwIfCancelled } from '../../utils/cancellation';
 import { RegularFileIdentity } from '../filesystem/regular-file-identity';
 import type { ArchiveEntry } from './archive-entry';
 import { assertArchiveEntrySize } from './archive-entry-validation';

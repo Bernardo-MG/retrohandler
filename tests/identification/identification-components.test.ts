@@ -238,7 +238,8 @@ test('identification and its reusable components do not import Electron, IPC or 
   const domain = path.join(mainRoot, 'identification');
   const components = path.join(mainRoot, 'components');
   const domainFiles = sourceFiles(domain);
-  const componentFiles = ['archives', 'hashing', 'async'].flatMap((folder) =>
+  const utils = path.join(mainRoot, 'utils');
+  const componentFiles = ['archives', 'hashing'].flatMap((folder) =>
     sourceFiles(path.join(components, folder))
   );
   for (const file of [...domainFiles, ...componentFiles]) {
@@ -251,7 +252,10 @@ test('identification and its reusable components do not import Electron, IPC or 
       assert.ok(!target.startsWith(path.join(mainRoot, 'database') + path.sep), `${file}: ${reference}`);
       assert.ok(!target.startsWith(path.join(mainRoot, 'ipc') + path.sep), `${file}: ${reference}`);
       if (componentFiles.includes(file)) {
-        assert.ok(target.startsWith(components + path.sep), `${file}: ${reference}`);
+        assert.ok(
+          target.startsWith(components + path.sep) || target.startsWith(utils + path.sep),
+          `${file}: ${reference}`
+        );
       }
     }
   }

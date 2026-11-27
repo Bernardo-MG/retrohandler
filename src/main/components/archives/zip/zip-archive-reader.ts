@@ -1,6 +1,6 @@
 import { open, type FileHandle } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
-import { throwIfCancelled } from '../../async/cancellation';
+import { throwIfCancelled } from '../../../utils/cancellation';
 import { readExactly } from '../../filesystem/binary-reader';
 import type { ArchiveEntry } from '../archive-entry';
 import { ARCHIVE_EXTENSIONS, archiveExtension } from '../archive-formats';

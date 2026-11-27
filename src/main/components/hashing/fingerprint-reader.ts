@@ -1,8 +1,8 @@
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { addAbortSignal, type Readable } from 'node:stream';
-import { throwIfCancelled } from '../async/cancellation';
-import { sameRegularFileVersion } from '../filesystem/file-version';
+import { throwIfCancelled } from '../../utils/cancellation';
+import { sameRegularFileVersion } from '../../utils/file-version';
 import { RegularFileIdentity } from '../filesystem/regular-file-identity';
 import { StreamSizeVerifier } from '../streams/stream-size-verifier';
 import { ContentFingerprint, type FileFingerprint, type StreamFingerprint } from './content-fingerprint';
