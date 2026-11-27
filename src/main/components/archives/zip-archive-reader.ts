@@ -3,7 +3,9 @@ import { open, type FileHandle } from 'node:fs/promises';
 import { Transform, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createInflateRaw } from 'node:zlib';
+import { readExactly } from '../filesystem/binary-reader';
 import { Crc32 } from '../hashing/crc32';
+import { StreamSizeVerifier } from '../streams/stream-size-verifier';
 
 const END_SIGNATURE = 0x06054b50;
 const ENTRY_SIGNATURE = 0x02014b50;
@@ -217,26 +219,8 @@ export class ZipArchiveReader {
   }
 }
 
-async function readExactly(
-  handle: FileHandle,
-  length: number,
-  offset: number,
-  errorMessage: string
-): Promise<Buffer> {
-  const buffer = Buffer.alloc(length);
-  let received = 0;
-  while (received < length) {
-    const { bytesRead } = await handle.read(buffer, received, length - received, offset + received);
-    if (!bytesRead) {
-      throw new Error(errorMessage);
-    }
-    received += bytesRead;
-  }
-  return buffer;
-}
-
 class EntryVerifier extends Transform {
-  private processed = 0;
+  private readonly size: StreamSizeVerifier;
   private readonly checksum = new Crc32();
 
   constructor(
@@ -244,17 +228,18 @@ class EntryVerifier extends Transform {
     private readonly onProgress?: ExtractOptions['onProgress']
   ) {
     super();
+    this.size = new StreamSizeVerifier(entry.size, {
+      invalidSize: 'ZIP integrity check failed.',
+      invalidChunk: 'ZIP integrity check failed.',
+      oversized: 'ZIP entry exceeds declared size.',
+      truncated: 'ZIP integrity check failed.'
+    });
   }
 
   public override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
-    this.processed += chunk.length;
-    if (this.processed > this.entry.size) {
-      callback(new Error('ZIP entry exceeds declared size.'));
-      return;
-    }
-    this.checksum.update(chunk);
     try {
-      this.onProgress?.(this.processed, this.entry.size);
+      this.checksum.update(this.size.accept(chunk));
+      this.onProgress?.(this.size.size, this.entry.size);
       callback(null, chunk);
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)));
@@ -262,10 +247,14 @@ class EntryVerifier extends Transform {
   }
 
   public override _flush(callback: TransformCallback): void {
-    if (this.processed !== this.entry.size || this.checksum.digest() !== this.entry.crc) {
-      callback(new Error('ZIP integrity check failed.'));
-      return;
+    try {
+      this.size.assertComplete();
+      if (this.checksum.digest() !== this.entry.crc) {
+        throw new Error('ZIP integrity check failed.');
+      }
+      callback();
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
     }
-    callback();
   }
 }

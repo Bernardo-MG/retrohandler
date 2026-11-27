@@ -3,6 +3,7 @@ import { lstat, open } from 'node:fs/promises';
 import { addAbortSignal, type Readable } from 'node:stream';
 import { throwIfCancelled } from '../async/cancellation';
 import { sameRegularFileVersion } from '../filesystem/file-version';
+import { StreamSizeVerifier } from '../streams/stream-size-verifier';
 import { ContentFingerprint, type FileFingerprint, type StreamFingerprint } from './content-fingerprint';
 
 const CHUNK_BYTES = 256 * 1024;
@@ -43,36 +44,27 @@ export class FingerprintReader {
     const fingerprint = new ContentFingerprint();
     try {
       throwIfCancelled(signal);
-      if (!Number.isSafeInteger(expectedSize) || expectedSize < 0) {
-        throw new Error('Invalid advertised size.');
-      }
+      const size = new StreamSizeVerifier(expectedSize, {
+        invalidSize: 'Invalid advertised size.',
+        invalidChunk: 'Fingerprint stream must contain bytes.',
+        oversized: 'Archive member exceeds advertised size.',
+        truncated: 'Truncated ROM data.'
+      });
       // Abort a stalled stream as well as a stream that is producing chunks.
       if (signal) {
         addAbortSignal(signal, stream);
       }
       for await (const chunk of stream) {
         throwIfCancelled(signal);
-        this.addChunk(fingerprint, chunk, expectedSize);
+        fingerprint.update(size.accept(chunk));
       }
       throwIfCancelled(signal);
-      if (fingerprint.size !== expectedSize) {
-        throw new Error('Truncated ROM data.');
-      }
+      size.assertComplete();
       return fingerprint.digest();
     } catch (error) {
       stream.destroy();
       throwIfCancelled(signal);
       throw error;
     }
-  }
-
-  private addChunk(fingerprint: ContentFingerprint, chunk: unknown, expectedSize: number): void {
-    if (!(chunk instanceof Uint8Array)) {
-      throw new Error('Fingerprint stream must contain bytes.');
-    }
-    if (fingerprint.size + chunk.length > expectedSize) {
-      throw new Error('Archive member exceeds advertised size.');
-    }
-    fingerprint.update(chunk);
   }
 }
