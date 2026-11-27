@@ -8,7 +8,7 @@ import {
   DirectRomFingerprint,
   RomFingerprintReader
 } from '../identification/rom/rom-fingerprint-reader';
-import { CompositeArchiveReader, SevenZipArchiveReader, ZipArchiveReader } from '../components/archives';
+import { createArchiveReader, createRestrictedArchiveReader } from '../components/archives';
 import { MAX_ROM_BYTES } from '../identification/rom/archive-rom-selection';
 import { FingerprintReader } from '../components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../contracts/persistence';
@@ -43,11 +43,10 @@ import { registerSettingsIpc } from '../settings/settings-ipc';
 
 function createIdentificationService(repository: IdentificationRepository): IdentificationService {
   const reader = new FingerprintReader();
-  // Prefer native ZIP for classic archives; retain 7-Zip for other formats and ZIP variants.
-  const archives = new CompositeArchiveReader([
-    new ZipArchiveReader({ maxArchiveBytes: Number.MAX_SAFE_INTEGER, maxEntryBytes: MAX_ROM_BYTES }),
-    new SevenZipArchiveReader()
-  ]);
+  const archives = createArchiveReader({
+    maxArchiveBytes: Number.MAX_SAFE_INTEGER,
+    maxEntryBytes: MAX_ROM_BYTES
+  });
   const fingerprints = new RomFingerprintReader([
     new DirectRomFingerprint(repository, reader),
     new ArchivedRomFingerprint(archives, reader)
@@ -84,8 +83,8 @@ export function registerDesktopFeatures(core: ReturnType<typeof createCore>): vo
   const http = new HttpClient();
   const catalogue = createLaunchBoxRepository(database);
   const metadataService = new MetadataService(metadata, new LaunchBoxProvider(catalogue));
-  // Downloaded metadata always uses the restricted native ZIP implementation, without fallback.
-  const catalogueArchives = new ZipArchiveReader({
+  // Downloaded metadata must use the restricted reader without external fallback.
+  const catalogueArchives = createRestrictedArchiveReader({
     maxArchiveBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
     maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
   });

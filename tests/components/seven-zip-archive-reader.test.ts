@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { buffer } from 'node:stream/consumers';
 import { test } from 'node:test';
-import { SevenZipArchiveReader, type ArchiveReader } from '../../src/main/components/archives';
+import type { ArchiveReader } from '../../src/main/components/archives';
+import { SevenZipArchiveReader } from '../../src/main/components/archives/seven-zip';
 import { parse7ZipListing } from '../../src/main/components/archives/seven-zip/seven-zip-listing-parser';
 
 test('listing parser rejects malformed headers, invalid sizes and excessive entry counts', () => {
@@ -26,6 +27,7 @@ test('awaiting an archive stream preserves an early process failure', async () =
   const folder = await mkdtemp(path.join(os.tmpdir(), 'rh-seven-zip-'));
   try {
     const reader = new SevenZipArchiveReader(path.join(folder, 'missing-executable'));
+    await assert.rejects(reader.list('test.zip'), /ENOENT/);
     const stream = await reader.open('test.zip', 'game.nes');
     await new Promise<void>((resolve) => setImmediate(resolve));
     await assert.rejects(buffer(stream), /ENOENT/);

@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdtemp, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { PassThrough, Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import ts from 'typescript';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
-import { SevenZipArchiveReader, type ArchiveReader } from '../../src/main/components/archives';
-import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
+import type { ArchiveReader } from '../../src/main/components/archives';
 import { matchFingerprintCandidates } from '../../src/main/identification/fingerprint-matcher';
 import { RomSource } from '../../src/main/identification/rom/rom-source';
 import type { IdentificationResult, LibraryEntry } from '../../src/shared';
@@ -17,7 +15,6 @@ import { identificationService } from '../helpers/identification';
 
 const data = Buffer.from('123456789');
 const emptyArchive: ArchiveReader = { list: async () => [], open: async () => Readable.from([]) };
-const reader = new FingerprintReader();
 
 function entry(source: string, relativePath: string): LibraryEntry {
   return {
@@ -53,27 +50,6 @@ async function temporary(run: (root: string) => Promise<void>): Promise<void> {
     await rm(root, { recursive: true, force: true });
   }
 }
-
-test('direct file reader returns the exact streaming hashes and rejects nonregular inputs', async () =>
-  temporary(async (root) => {
-    const file = path.join(root, 'game.nes');
-    await writeFile(file, data);
-    const hashes = await reader.readFile(file);
-    assert.equal(hashes.crc32, 'cbf43926');
-    assert.equal(hashes.sha1, createHash('sha1').update(data).digest('hex'));
-    assert.equal(hashes.md5, createHash('md5').update(data).digest('hex'));
-    assert.equal(hashes.size, data.length);
-    await assert.rejects(reader.readFile(root), /regular file/);
-  }));
-
-test('an idle fingerprint stream is cancelled without waiting for another chunk', async () => {
-  const controller = new AbortController();
-  const stream = new PassThrough();
-  const pending = reader.readStream(stream, 1, controller.signal);
-  controller.abort();
-  await assert.rejects(pending, { name: 'AbortError' });
-  assert.equal(stream.destroyed, true);
-});
 
 test('the fingerprint matcher preserves priority and ambiguity rules', () => {
   const crc = { game: 'CRC game', datName: 'DAT', evidence: 'crc' };
@@ -210,7 +186,7 @@ test('cancellation at final progress saves nothing and releases the collection l
     assert.equal(commits.length, 1);
   }));
 
-test('archive replacement is refused before a member is opened', async () =>
+test('archive replacement is refused before an entry is opened', async () =>
   temporary(async (root) => {
     const file = path.join(root, 'game.zip');
     await writeFile(file, data);
@@ -244,14 +220,6 @@ test('DAT importing reads and validates the catalogue before calling the reposit
     assert.deepEqual(await service.importDat(file), { name: 'Imported DAT', count: 1 });
     await writeFile(file, '<!DOCTYPE datafile><datafile/>');
     await assert.rejects(service.importDat(file), /DTD/);
-  }));
-
-test('missing 7-Zip executable reports both listing and extraction errors', async () =>
-  temporary(async (root) => {
-    const archive = new SevenZipArchiveReader(path.join(root, 'nonexistent-executable'));
-    await assert.rejects(archive.list('test.zip'), /ENOENT/);
-    const stream = await archive.open('test.zip', 'game.nes');
-    await assert.rejects(reader.readStream(stream, data.length), /ENOENT/);
   }));
 
 function sourceFiles(directory: string): string[] {

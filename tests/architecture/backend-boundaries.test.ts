@@ -21,7 +21,7 @@ function inside(directory: string, file: string): boolean {
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
-    return entry.isDirectory() ? sourceFiles(file) : entry.name.endsWith('.ts') ? [file] : [];
+    return entry.isDirectory() ? sourceFiles(file) : /\.tsx?$/.test(entry.name) ? [file] : [];
   });
 }
 
@@ -119,5 +119,38 @@ test('IPC feature dependencies use public package entry points, not persistence 
       })
       .map((reference) => referenceName(file, reference))
   );
+  assert.deepEqual(violations, []);
+});
+
+
+test('archive consumers depend only on the public archive API', () => {
+  const archivesRoot = path.join(componentsRoot, 'archives');
+  const implementationNames = new Set([
+    'ArchiveFormatReader',
+    'CompositeArchiveReader',
+    'ZipArchiveReader',
+    'SevenZipArchiveReader',
+    'SevenZipProcess',
+    'resolveSevenZipExecutable',
+    'RETROHANDLER_7ZIP'
+  ]);
+  const violations: string[] = [];
+  const files = sourceFiles(path.dirname(mainRoot)).filter((file) => !inside(archivesRoot, file));
+  for (const file of files) {
+    for (const reference of imports(file)) {
+      const target = path.resolve(path.dirname(file), reference);
+      if (resolvesTo(file, reference, archivesRoot) && target !== archivesRoot) {
+        violations.push(referenceName(file, reference));
+      }
+    }
+    const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+    function visit(node: ts.Node): void {
+      if ((ts.isIdentifier(node) || ts.isStringLiteralLike(node)) && implementationNames.has(node.text)) {
+        violations.push(referenceName(file, node.text));
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+  }
   assert.deepEqual(violations, []);
 });

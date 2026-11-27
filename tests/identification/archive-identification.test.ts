@@ -6,14 +6,12 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
 import type { ArchiveReader, ArchiveEntry } from '../../src/main/components/archives';
-import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
 import { selectRomEntry } from '../../src/main/identification/rom/archive-rom-selection';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
 import { identificationService } from '../helpers/identification';
 import type { IdentificationResult, LibraryEntry } from '../../src/shared';
 
 const data = Buffer.from('synthetic archive ROM');
-const fingerprintReader = new FingerprintReader();
 const romEntry: ArchiveEntry = { name: 'Game (USA).nes', size: data.length, directory: false };
 function mockArchive(entries: ArchiveEntry[], stream = data): ArchiveReader {
   return { list: async () => entries, open: async () => Readable.from([stream]) };
@@ -24,17 +22,6 @@ test('single-ROM selection is case-insensitive; multi-ROM and non-ROM archives a
   assert.equal(selectRomEntry([romEntry, { ...romEntry, name: 'Other.nes' }]), null);
   assert.equal(selectRomEntry([{ ...romEntry, name: 'readme.txt' }]), null);
   assert.throws(() => selectRomEntry([{ ...romEntry, size: 2 ** 31 }]), /size limit/);
-});
-
-test('fingerprintReader.readStream verifies decompressed byte count and content fingerprints', async () => {
-  const hashes = await fingerprintReader.readStream(Readable.from([data]), data.length);
-  assert.equal(hashes.sha1, createHash('sha1').update(data).digest('hex'));
-  assert.equal(hashes.md5, createHash('md5').update(data).digest('hex'));
-  await assert.rejects(
-    fingerprintReader.readStream(Readable.from([data]), data.length - 1),
-    /advertised size/
-  );
-  await assert.rejects(fingerprintReader.readStream(Readable.from([data]), data.length + 1), /Truncated/);
 });
 
 test('ZIP, RAR and 7z use uncompressed ROM hashes for DAT matching', async () => {

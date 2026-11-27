@@ -2,11 +2,8 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
 import { test } from 'node:test';
-import {
-  CompositeArchiveReader,
-  type ArchiveFormatReader,
-  type ArchiveReader
-} from '../../src/main/components/archives';
+import type { ArchiveFormatReader, ArchiveReader } from '../../src/main/components/archives/archive-reader';
+import { CompositeArchiveReader } from '../../src/main/components/archives/composite-archive-reader';
 
 function backend(name: string, extensions: readonly string[], signal?: AbortSignal): ArchiveFormatReader {
   return {

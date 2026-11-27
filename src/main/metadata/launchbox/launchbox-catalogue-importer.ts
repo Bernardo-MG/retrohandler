@@ -20,7 +20,7 @@ export class LaunchBoxCatalogueImporter {
     try {
       const count = await this.stageRecords(records, options);
       if (!count) {
-        throw new Error('No LaunchBox games found. Select the extracted Metadata.xml, not the ZIP archive.');
+        throw new Error('No LaunchBox games found. Select the extracted Metadata.xml, not the archive.');
       }
       assertImportNotCancelled(options.signal);
       options.onProgress?.(count);

@@ -5,48 +5,30 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { buffer } from 'node:stream/consumers';
 import { test } from 'node:test';
-import { deflateRawSync } from 'node:zlib';
 import {
   ArchiveSource,
-  CompositeArchiveReader,
-  extractArchiveEntry,
-  SevenZipArchiveReader,
-  ZipArchiveReader
+  createArchiveReader,
+  createRestrictedArchiveReader,
+  extractArchiveEntry
 } from '../../src/main/components/archives';
+import { CompositeArchiveReader } from '../../src/main/components/archives/composite-archive-reader';
+import { SevenZipArchiveReader } from '../../src/main/components/archives/seven-zip';
+import { ZipArchiveReader } from '../../src/main/components/archives/zip';
+import { createArchiveFixture } from '../helpers/archive-fixtures';
 
 const data = Buffer.from('123456789');
 const crc = 0xcbf43926;
 const limits = { maxArchiveBytes: 4096, maxEntryBytes: 1024 };
 
 function archive(method: number, checksum = crc, entryName = 'folder/Metadata.xml'): Buffer {
-  const name = Buffer.from(entryName);
   const compressed =
     method === 12
-      ? Buffer.from('425a6839314159265359fc89191800000008003fe02000220d0c0832621e0def29c177245385090fc8919180', 'hex')
-      : method === 8
-        ? deflateRawSync(data)
-        : data;
-  const local = Buffer.alloc(30);
-  local.writeUInt32LE(0x04034b50, 0);
-  local.writeUInt16LE(method, 8);
-  local.writeUInt32LE(checksum, 14);
-  local.writeUInt32LE(compressed.length, 18);
-  local.writeUInt32LE(data.length, 22);
-  local.writeUInt16LE(name.length, 26);
-  const directory = Buffer.alloc(46);
-  directory.writeUInt32LE(0x02014b50, 0);
-  directory.writeUInt16LE(method, 10);
-  directory.writeUInt32LE(checksum, 16);
-  directory.writeUInt32LE(compressed.length, 20);
-  directory.writeUInt32LE(data.length, 24);
-  directory.writeUInt16LE(name.length, 28);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(directory.length + name.length, 12);
-  end.writeUInt32LE(local.length + name.length + compressed.length, 16);
-  return Buffer.concat([local, name, compressed, directory, name, end]);
+      ? Buffer.from(
+          '425a6839314159265359fc89191800000008003fe02000220d0c0832621e0def29c177245385090fc8919180',
+          'hex'
+        )
+      : undefined;
+  return createArchiveFixture(data, entryName, { method, checksum, compressed });
 }
 
 async function fixture(bytes: Buffer, run: (reader: ZipArchiveReader, filename: string) => Promise<void>) {
@@ -240,3 +222,18 @@ test('composite ZIP reading does not retry an integrity failure in another backe
     const [entry] = await reader.list(filename);
     await assert.rejects(buffer(await reader.open(filename, entry.name)), /ZIP integrity check failed/);
   }));
+
+
+test('configured readers handle native archives and preserve the restricted policy', async () => {
+  await fixture(archive(8), async (_native, filename) => {
+    for (const reader of [createArchiveReader(limits), createRestrictedArchiveReader(limits)]) {
+      const [entry] = await reader.list(filename);
+      assert.deepEqual(await buffer(await reader.open(filename, entry.name)), data);
+    }
+  });
+  await fixture(archive(12), async (_native, filename) => {
+    const reader = createRestrictedArchiveReader(limits);
+    const [entry] = await reader.list(filename);
+    await assert.rejects(reader.open(filename, entry.name), /Unsupported/);
+  });
+});

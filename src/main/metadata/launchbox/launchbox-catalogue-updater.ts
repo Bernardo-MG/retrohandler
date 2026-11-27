@@ -68,10 +68,10 @@ export class LaunchBoxCatalogueUpdater {
     assertNotCancelled(options.signal);
     const folder = await mkdtemp(path.join(tmpdir(), 'retrohandler-launchbox-'));
     try {
-      const zip = path.join(folder, 'Metadata.zip');
+      const archiveFile = path.join(folder, path.posix.basename(new URL(LAUNCHBOX_ARCHIVE_URL).pathname));
       const xml = path.join(folder, METADATA_FILENAME);
-      await this.downloadArchive(zip, options);
-      await this.extractArchive(zip, xml, options);
+      await this.downloadArchive(archiveFile, options);
+      await this.extractArchive(archiveFile, xml, options);
       assertNotCancelled(options.signal);
       return await this.importer.importFile(xml, {
         signal: options.signal,
@@ -97,13 +97,13 @@ export class LaunchBoxCatalogueUpdater {
       });
     } catch (error) {
       if (error instanceof ResponseBodyError && error.reason === 'too-large') {
-        throw new Error('LaunchBox ZIP exceeds download limit.');
+        throw new Error('LaunchBox archive exceeds download limit.');
       }
       throw error;
     }
     assertNotCancelled(options.signal);
     if ((await stat(destination)).size !== bytes) {
-      throw new Error('Incomplete LaunchBox ZIP download.');
+      throw new Error('Incomplete LaunchBox archive download.');
     }
   }
 

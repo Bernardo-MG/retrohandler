@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { test } from 'node:test';
-import { deflateRawSync } from 'node:zlib';
-import { ZipArchiveReader } from '../../src/main/components/archives';
+import { createRestrictedArchiveReader } from '../../src/main/components/archives';
+import { createArchiveFixture } from '../helpers/archive-fixtures';
 import { HttpClient } from '../../src/main/components/http/http-client';
 import { LaunchBoxCatalogueImporter } from '../../src/main/metadata/launchbox/launchbox-catalogue-importer';
 import {
@@ -15,45 +15,6 @@ import {
 import { MAX_LAUNCHBOX_XML_BYTES } from '../../src/main/metadata/launchbox/launchbox-xml-reader';
 import type { LaunchBoxGame, LaunchBoxImportRepository } from '../../src/main/contracts/persistence';
 
-function crc32(bytes: Buffer): number {
-  let c = 0xffffffff;
-  for (const b of bytes) {
-    c ^= b;
-    for (let i = 0; i < 8; i++) c = (c >>> 1) ^ (c & 1 ? 0xedb88320 : 0);
-  }
-  return (c ^ 0xffffffff) >>> 0;
-}
-function zip(content: string, name = 'Metadata.xml'): Buffer {
-  const nameBytes = Buffer.from(name);
-  const xml = Buffer.from(content);
-  const deflated = deflateRawSync(xml);
-  const crc = crc32(xml);
-  const local = Buffer.alloc(30);
-  local.writeUInt32LE(0x04034b50, 0);
-  local.writeUInt16LE(20, 4);
-  local.writeUInt16LE(8, 8);
-  local.writeUInt32LE(crc, 14);
-  local.writeUInt32LE(deflated.length, 18);
-  local.writeUInt32LE(xml.length, 22);
-  local.writeUInt16LE(nameBytes.length, 26);
-  const central = Buffer.alloc(46);
-  central.writeUInt32LE(0x02014b50, 0);
-  central.writeUInt16LE(20, 4);
-  central.writeUInt16LE(20, 6);
-  central.writeUInt16LE(8, 10);
-  central.writeUInt32LE(crc, 16);
-  central.writeUInt32LE(deflated.length, 20);
-  central.writeUInt32LE(xml.length, 24);
-  central.writeUInt16LE(nameBytes.length, 28);
-  const directoryOffset = local.length + nameBytes.length + deflated.length;
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(central.length + nameBytes.length, 12);
-  end.writeUInt32LE(directoryOffset, 16);
-  return Buffer.concat([local, nameBytes, deflated, central, nameBytes, end]);
-}
 const sample =
   '<LaunchBox><Game><DatabaseID>31</DatabaseID><Name>Retro Test</Name><Platform>Nintendo Entertainment System</Platform></Game></LaunchBox>';
 function fakeStore() {
@@ -80,7 +41,7 @@ function fakeStore() {
   return { store, games: () => current, aborted: () => abandoned };
 }
 function createUpdater(store: LaunchBoxImportRepository, request: typeof fetch): LaunchBoxCatalogueUpdater {
-  const archive = new ZipArchiveReader({
+  const archive = createRestrictedArchiveReader({
     maxArchiveBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
     maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
   });
@@ -89,12 +50,12 @@ function createUpdater(store: LaunchBoxImportRepository, request: typeof fetch):
 const response = (bytes: Buffer) =>
   new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Length': String(bytes.length) } });
 
-test('downloads fixed official URL, extracts ZIP and commits the parsed catalogue', async () => {
+test('downloads fixed official URL, extracts the archive and commits the parsed catalogue', async () => {
   const db = fakeStore();
   const events: string[] = [];
   const updater = createUpdater(db.store, async (url) => {
     assert.equal(String(url), LAUNCHBOX_ARCHIVE_URL);
-    return response(zip(sample));
+    return response(createArchiveFixture(sample, 'Metadata.xml'));
   });
   const count = await updater.download({
     onProgress: (update) => events.push(update.phase)
@@ -104,11 +65,9 @@ test('downloads fixed official URL, extracts ZIP and commits the parsed catalogu
   assert.ok(events.includes('download') && events.includes('extract') && events.includes('import'));
 });
 
-test('ZIP extraction rejects bad CRC and keeps existing catalogue untouched', async () => {
+test('Archive extraction rejects corrupted contents and keeps existing catalogue untouched', async () => {
   const db = fakeStore();
-  const bytes = zip(sample);
-  const central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
-  bytes.writeUInt32LE(12345, central + 16);
+  const bytes = createArchiveFixture(sample, 'Metadata.xml', { centralChecksum: 12345 });
   await assert.rejects(createUpdater(db.store, async () => response(bytes)).download(), /integrity/);
   assert.equal(db.games()[0]?.title, 'Original');
 });
@@ -116,7 +75,7 @@ test('ZIP extraction rejects bad CRC and keeps existing catalogue untouched', as
 test('missing Metadata.xml is rejected without replacing the catalogue', async () => {
   const db = fakeStore();
   await assert.rejects(
-    createUpdater(db.store, async () => response(zip(sample, 'Other.xml'))).download(),
+    createUpdater(db.store, async () => response(createArchiveFixture(sample, 'Other.xml'))).download(),
     /Metadata.xml/
   );
   assert.equal(db.games()[0]?.title, 'Original');
@@ -126,7 +85,7 @@ test('aborted download preserves old metadata', async () => {
   const db = fakeStore();
   const controller = new AbortController();
   await assert.rejects(
-    createUpdater(db.store, async () => response(zip(sample))).download({
+    createUpdater(db.store, async () => response(createArchiveFixture(sample, 'Metadata.xml'))).download({
       signal: controller.signal,
       onProgress: (update) => {
         if (update.phase === 'download') controller.abort();
@@ -140,7 +99,7 @@ test('aborted XML import rolls back staging without discarding the old catalogue
   const db = fakeStore();
   const controller = new AbortController();
   await assert.rejects(
-    createUpdater(db.store, async () => response(zip(sample))).download({
+    createUpdater(db.store, async () => response(createArchiveFixture(sample, 'Metadata.xml'))).download({
       signal: controller.signal,
       onProgress: (update) => {
         if (update.phase === 'import') controller.abort();
@@ -153,7 +112,7 @@ test('aborted XML import rolls back staging without discarding the old catalogue
 
 test('LaunchBox accepts a single Metadata.xml inside an archive directory', async () => {
   const db = fakeStore();
-  const updater = createUpdater(db.store, async () => response(zip(sample, 'folder/Metadata.xml')));
+  const updater = createUpdater(db.store, async () => response(createArchiveFixture(sample, 'folder/Metadata.xml')));
   assert.equal(await updater.download(), 1);
   assert.equal(db.games()[0]?.title, 'Retro Test');
 });
@@ -180,7 +139,7 @@ test('LaunchBox accepts a bounded official HTTPS redirect', async () => {
     if (requests.length === 1) {
       return new Response(null, { status: 302, headers: { location: '/archives/Metadata.zip' } });
     }
-    return response(zip(sample));
+    return response(createArchiveFixture(sample, 'Metadata.xml'));
   });
   assert.equal(await updater.download(), 1);
   assert.deepEqual(requests, [
@@ -224,10 +183,9 @@ test('LaunchBox rejects entity declarations split across stream chunks and rolls
   }
 });
 
-test('LaunchBox rejects inconsistent ZIP local filenames without replacing the catalogue', async () => {
+test('LaunchBox rejects inconsistent archive entry names without replacing the catalogue', async () => {
   const db = fakeStore();
-  const bytes = zip(sample);
-  bytes[30] = 'X'.charCodeAt(0);
+  const bytes = createArchiveFixture(sample, 'Metadata.xml', { localName: 'Xetadata.xml' });
   await assert.rejects(createUpdater(db.store, async () => response(bytes)).download(), /header mismatch/);
   assert.equal(db.games()[0]?.title, 'Original');
 });
