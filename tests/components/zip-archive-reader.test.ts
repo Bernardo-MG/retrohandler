@@ -48,7 +48,7 @@ async function fixture(bytes: Buffer, run: (reader: ZipArchiveReader, target: st
 }
 
 for (const method of [0, 8]) {
-  test(`ZIP reader preserves extraction and progress for method ${method}`, async () =>
+  test(`ZIP reader extracts and reports progress for method ${method}`, async () =>
     fixture(archive(method), async (reader, target) => {
       const entry = await reader.findEntry('Metadata.xml');
       assert.equal(entry.size, data.length);
