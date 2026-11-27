@@ -122,7 +122,6 @@ test('IPC feature dependencies use public package entry points, not persistence 
   assert.deepEqual(violations, []);
 });
 
-
 test('archive consumers depend only on the public archive API', () => {
   const archivesRoot = path.join(componentsRoot, 'archives');
   const implementationNames = new Set([

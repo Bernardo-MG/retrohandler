@@ -123,7 +123,11 @@ test('cache accounting and cleanup retain referenced images, new images and unre
 
 test('cache cleanup re-evaluates references and uses configured retention periods', async () =>
   fixture((root) => {
-    const cache = new ImageCache(root, { maxImageBytes: 100, retentionMs: DAY, temporaryRetentionMs: 3 * DAY });
+    const cache = new ImageCache(root, {
+      maxImageBytes: 100,
+      retentionMs: DAY,
+      temporaryRetentionMs: 3 * DAY
+    });
     const file = agedFile(root, asset('d'), 2, 'newly referenced');
     const temp = agedFile(root, '.download-12345678-1234-1234-1234-123456789abc', 2, 'partial');
     assert.equal(cache.inspect(new Set(), NOW).reclaimableFiles, 1);
@@ -179,4 +183,5 @@ test('cache cleanup skips linked image files', { skip: process.platform === 'win
     symlinkSync(file, cache.pathFor(asset('e')));
     assert.equal(cache.cleanup(new Set(), NOW).removedFiles, 0);
     assert.equal(readFileSync(file, 'utf8'), 'retain');
-  }));
+  })
+);

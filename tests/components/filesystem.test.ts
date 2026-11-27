@@ -3,7 +3,11 @@ import { mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'no
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { readRegular, statIfExists, statIfExistsSync } from '../../src/main/components/filesystem/file-reader';
+import {
+  readRegular,
+  statIfExists,
+  statIfExistsSync
+} from '../../src/main/components/filesystem/file-reader';
 import { FileWriter } from '../../src/main/components/filesystem/file-writer';
 import {
   assertSafeDirectory,

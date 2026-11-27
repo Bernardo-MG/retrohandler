@@ -14,10 +14,7 @@ export function registerImageScheme(scheme: string): void {
 }
 
 /** Serve content-addressed images through a read-only Electron protocol. */
-export function registerImageProtocol(
-  images: Pick<ImageCache, 'read'>,
-  options: ImageProtocolOptions
-): void {
+export function registerImageProtocol(images: Pick<ImageCache, 'read'>, options: ImageProtocolOptions): void {
   const { scheme, hostname, maxAgeSeconds } = options;
   protocol.handle(scheme, readImage);
 

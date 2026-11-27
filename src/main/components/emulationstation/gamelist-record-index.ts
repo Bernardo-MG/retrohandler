@@ -13,7 +13,9 @@ export class GameListRecordIndex {
       const normalizedPath = resolvePath(record.path);
       if (normalizedPath === null) {
         // Block a possible duplicate rather than guessing a nonstandard path.
-        this.unresolvedBasenames.add(path.posix.basename(record.path.trim().replace(/\\/g, '/')).toLowerCase());
+        this.unresolvedBasenames.add(
+          path.posix.basename(record.path.trim().replace(/\\/g, '/')).toLowerCase()
+        );
         continue;
       }
       const matches = this.recordsByPath.get(normalizedPath.toLowerCase()) ?? [];

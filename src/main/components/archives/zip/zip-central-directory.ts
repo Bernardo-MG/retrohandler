@@ -94,15 +94,11 @@ export function selectEntry(
   entryName: string,
   limits: ArchiveLimits
 ): DirectoryEntry {
-  const selected = selectEntryByName(
-    directoryEntries(directory, count),
-    entryName,
-    (entry) => {
-      if (!isSupportedEntry(entry, limits)) {
-        throw new Error(`Unsupported ${entryName} ZIP entry.`);
-      }
+  const selected = selectEntryByName(directoryEntries(directory, count), entryName, (entry) => {
+    if (!isSupportedEntry(entry, limits)) {
+      throw new Error(`Unsupported ${entryName} ZIP entry.`);
     }
-  );
+  });
   if (selected.kind === 'ambiguous') {
     throw new Error(`Ambiguous ZIP: multiple ${entryName} files.`);
   }

@@ -54,11 +54,13 @@ test('7-Zip listing uses a separator line, not hyphens in an archive name', () =
 
 test('7-Zip listing rejects blank, fractional and non-decimal entry sizes', () => {
   for (const size of ['', ' ', '1e2', '0x10', '2.0', '-1', '9007199254740992']) {
-    assert.throws(() => parse7ZipListing(`----------\nPath = game.nes\nSize = ${size}\n`), /invalid entry size/);
+    assert.throws(
+      () => parse7ZipListing(`----------\nPath = game.nes\nSize = ${size}\n`),
+      /invalid entry size/
+    );
   }
   assert.equal(parse7ZipListing('----------\nPath = game.nes\nSize = 0\n')[0].size, 0);
 });
-
 
 test('7-Zip reader advertises all supported ROM archive formats', async () => {
   const reader = new SevenZipArchiveReader('unused-executable');

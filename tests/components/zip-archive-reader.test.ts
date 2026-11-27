@@ -48,9 +48,7 @@ for (const method of [0, 8]) {
       assert.equal(await reader.supports(filename), true);
       const source = await ArchiveSource.resolve(reader, filename);
       const entries = await source.list();
-      assert.deepEqual(entries, [
-        { name: 'folder/Metadata.xml', size: data.length, directory: false }
-      ]);
+      assert.deepEqual(entries, [{ name: 'folder/Metadata.xml', size: data.length, directory: false }]);
       await assert.rejects(reader.open(filename, 'Metadata.xml'), /not found/);
       assert.deepEqual(await buffer(await reader.open(filename, 'folder/Metadata.xml')), data);
       const target = path.join(path.dirname(filename), 'output.xml');
@@ -98,7 +96,9 @@ test('ZIP reader rejects already cancelled listing and stream requests', async (
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(reader.list(filename, controller.signal), { name: 'AbortError' });
-    await assert.rejects(reader.open(filename, 'folder/Metadata.xml', controller.signal), { name: 'AbortError' });
+    await assert.rejects(reader.open(filename, 'folder/Metadata.xml', controller.signal), {
+      name: 'AbortError'
+    });
   }));
 
 test('ZIP reader applies configured limits before opening entry data', async () =>
@@ -108,7 +108,6 @@ test('ZIP reader applies configured limits before opening entry data', async () 
     const entryLimited = new ZipArchiveReader({ ...limits, maxEntryBytes: 1 });
     await assert.rejects(entryLimited.open(filename, 'folder/Metadata.xml'), /Unsupported/);
   }));
-
 
 test('native ZIP reader checks archive features only for ZIP filenames', async () =>
   fixture(archive(0), async (reader, filename) => {
@@ -196,7 +195,6 @@ test('ZIP capability probing does not turn malformed directories, limits or canc
   });
 });
 
-
 test('composite ZIP reading selects a compatible backend for unsupported compression', async () =>
   fixture(archive(12), async (native, filename) => {
     const entry = { name: 'folder/Metadata.xml', size: data.length, directory: false };
@@ -225,7 +223,6 @@ test('composite ZIP reading does not retry an integrity failure in another backe
     const [entry] = await reader.list(filename);
     await assert.rejects(buffer(await reader.open(filename, entry.name)), /ZIP integrity check failed/);
   }));
-
 
 test('configured readers handle native archives and preserve the restricted policy', async () => {
   await fixture(archive(8), async (_native, filename) => {

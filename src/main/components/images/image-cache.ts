@@ -19,7 +19,11 @@ export class ImageCache {
     this.root = path.resolve(root);
     this.maxImageBytes = options.maxImageBytes;
     this.images = new ImageStore(this.root, this.maxImageBytes);
-    this.maintenance = new ImageCacheMaintenance(this.root, options.retentionMs, options.temporaryRetentionMs);
+    this.maintenance = new ImageCacheMaintenance(
+      this.root,
+      options.retentionMs,
+      options.temporaryRetentionMs
+    );
   }
 
   public pathFor(id: string): string {

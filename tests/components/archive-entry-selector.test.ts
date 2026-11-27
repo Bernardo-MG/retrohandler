@@ -33,10 +33,13 @@ test('selection supports streamed entries and propagates validation failures', (
     yield root;
     yield nested;
   }
-  assert.deepEqual(selectUniqueEntry(entries(), (entry) => entry.name === nested.name), {
-    kind: 'found',
-    entry: nested
-  });
+  assert.deepEqual(
+    selectUniqueEntry(entries(), (entry) => entry.name === nested.name),
+    {
+      kind: 'found',
+      entry: nested
+    }
+  );
   assert.throws(
     () =>
       selectEntryByName(entries(), root.name, () => {

@@ -45,7 +45,11 @@ function createUpdater(store: LaunchBoxImportRepository, request: typeof fetch):
     maxArchiveBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
     maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
   });
-  return new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(store), archive, new HttpClient(request));
+  return new LaunchBoxCatalogueUpdater(
+    new LaunchBoxCatalogueImporter(store),
+    archive,
+    new HttpClient(request)
+  );
 }
 const response = (bytes: Buffer) =>
   new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Length': String(bytes.length) } });
@@ -112,7 +116,9 @@ test('aborted XML import rolls back staging without discarding the old catalogue
 
 test('LaunchBox accepts a single Metadata.xml inside an archive directory', async () => {
   const db = fakeStore();
-  const updater = createUpdater(db.store, async () => response(createArchiveFixture(sample, 'folder/Metadata.xml')));
+  const updater = createUpdater(db.store, async () =>
+    response(createArchiveFixture(sample, 'folder/Metadata.xml'))
+  );
   assert.equal(await updater.download(), 1);
   assert.equal(db.games()[0]?.title, 'Retro Test');
 });

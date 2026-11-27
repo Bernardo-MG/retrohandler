@@ -12,7 +12,8 @@ export function openEntry(filename: string, entry: ZipEntry, signal?: AbortSigna
     end: entry.start + entry.compressed - 1,
     signal
   });
-  const output = entry.method === 8 ? compose(source, createInflateRaw(), verifier) : compose(source, verifier);
+  const output =
+    entry.method === 8 ? compose(source, createInflateRaw(), verifier) : compose(source, verifier);
   // Awaiting callers may attach their consumer after an early stream error.
   output.on('error', () => undefined);
   return signal ? addAbortSignal(signal, output) : output;

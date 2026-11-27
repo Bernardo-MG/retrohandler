@@ -41,4 +41,5 @@ test('regular file identity rejects a file link', { skip: process.platform === '
     const link = path.join(folder, 'link');
     await symlink(filename, link);
     await assert.rejects(RegularFileIdentity.observe(link), /regular file/);
-  }));
+  })
+);

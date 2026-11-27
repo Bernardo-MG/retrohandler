@@ -44,9 +44,6 @@ test('reader.readStream verifies stream byte count and content fingerprints', as
   const hashes = await reader.readStream(Readable.from([data]), data.length);
   assert.equal(hashes.sha1, createHash('sha1').update(data).digest('hex'));
   assert.equal(hashes.md5, createHash('md5').update(data).digest('hex'));
-  await assert.rejects(
-    reader.readStream(Readable.from([data]), data.length - 1),
-    /advertised size/
-  );
+  await assert.rejects(reader.readStream(Readable.from([data]), data.length - 1), /advertised size/);
   await assert.rejects(reader.readStream(Readable.from([data]), data.length + 1), /Truncated/);
 });

@@ -97,7 +97,9 @@ test('archive source rejects directory, invalid size and pre-cancelled requests'
     await assert.rejects(source.readEntry({ ...entry, size: -1 }, buffer), /size limit/);
     const controller = new AbortController();
     controller.abort();
-    await assert.rejects(ArchiveSource.resolve(reader(), filename, controller.signal), { name: 'AbortError' });
+    await assert.rejects(ArchiveSource.resolve(reader(), filename, controller.signal), {
+      name: 'AbortError'
+    });
     await assert.rejects(source.list(controller.signal), { name: 'AbortError' });
     await assert.rejects(source.readEntry(entry, buffer, controller.signal), { name: 'AbortError' });
   }));
@@ -136,7 +138,10 @@ test('archive source rejects early stream errors and incomplete consumption', as
     await assert.rejects(source.readEntry(entry, buffer), /Read failed/);
     const stream = new PassThrough();
     const unread = await ArchiveSource.resolve(reader({ open: async () => stream }), filename);
-    await assert.rejects(unread.readEntry(entry, async () => undefined), /not fully consumed/);
+    await assert.rejects(
+      unread.readEntry(entry, async () => undefined),
+      /not fully consumed/
+    );
     assert.equal(stream.destroyed, true);
   }));
 
