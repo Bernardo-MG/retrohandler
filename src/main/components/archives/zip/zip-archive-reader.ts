@@ -4,15 +4,50 @@ import { throwIfCancelled } from '../../async/cancellation';
 import { readExactly } from '../../filesystem/binary-reader';
 import type { ArchiveEntry } from '../archive-entry';
 import type { ArchiveLimits } from '../archive-limits';
-import type { ArchiveReader } from '../archive-reader';
-import { directoryEntries, readDirectoryLocation, selectEntry } from './zip-central-directory';
+import type { ArchiveFormatReader } from '../archive-reader';
+import {
+  directoryEntries,
+  hasUnsupportedZipFeature,
+  readDirectoryLocation,
+  selectEntry,
+  UnsupportedZipFeatureError
+} from './zip-central-directory';
 import type { ZipEntry } from './zip-entry';
 import { openEntry } from './zip-entry-stream';
 import { readLocalHeader } from './zip-local-header';
 
 /** Restricted classic ZIP reader. Never uses an archive name as an output path. */
-export class ZipArchiveReader implements ArchiveReader {
+export class ZipArchiveReader implements ArchiveFormatReader {
   constructor(private readonly limits: ArchiveLimits) {}
+
+  public supports(extension: string): boolean {
+    return extension.toLowerCase() === '.zip';
+  }
+
+  public async supportsArchive(filename: string, signal?: AbortSignal): Promise<boolean> {
+    throwIfCancelled(signal);
+    const handle = await open(filename, 'r');
+    try {
+      const { directory, bytes } = await this.readDirectory(handle);
+      let supported = true;
+      for (const entry of directoryEntries(bytes, directory.entries)) {
+        throwIfCancelled(signal);
+        if (hasUnsupportedZipFeature(entry)) {
+          supported = false;
+        }
+      }
+      throwIfCancelled(signal);
+      return supported;
+    } catch (error) {
+      throwIfCancelled(signal);
+      if (error instanceof UnsupportedZipFeatureError) {
+        return false;
+      }
+      throw error;
+    } finally {
+      await handle.close();
+    }
+  }
 
   public async list(filename: string, signal?: AbortSignal): Promise<ArchiveEntry[]> {
     throwIfCancelled(signal);

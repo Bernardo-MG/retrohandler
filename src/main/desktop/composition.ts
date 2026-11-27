@@ -8,7 +8,8 @@ import {
   DirectRomFingerprint,
   RomFingerprintReader
 } from '../identification/rom/rom-fingerprint-reader';
-import { SevenZipArchiveReader } from '../components/archives';
+import { CompositeArchiveReader, SevenZipArchiveReader, ZipArchiveReader } from '../components/archives';
+import { MAX_ROM_BYTES } from '../identification/rom/archive-rom-selection';
 import { FingerprintReader } from '../components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../contracts/persistence';
 import { FileSystemLibraryService } from '../services/library';
@@ -26,7 +27,11 @@ import { ArtworkCache } from '../components/artwork/artwork-cache';
 import { HttpClient } from '../components/http/http-client';
 import { MetadataService } from '../metadata';
 import { LaunchBoxCatalogueImporter } from '../metadata/launchbox/launchbox-catalogue-importer';
-import { LaunchBoxCatalogueUpdater } from '../metadata/launchbox/launchbox-catalogue-updater';
+import {
+  LaunchBoxCatalogueUpdater,
+  MAX_LAUNCHBOX_ARCHIVE_BYTES
+} from '../metadata/launchbox/launchbox-catalogue-updater';
+import { MAX_LAUNCHBOX_XML_BYTES } from '../metadata/launchbox/launchbox-xml-reader';
 import { LaunchBoxProvider } from '../metadata/launchbox/launchbox-provider';
 import { LibretroClient } from '../metadata/libretro/libretro-client';
 import { LibretroProvider } from '../metadata/libretro/libretro-provider';
@@ -38,9 +43,14 @@ import { registerSettingsIpc } from '../settings/settings-ipc';
 
 function createIdentificationService(repository: IdentificationRepository): IdentificationService {
   const reader = new FingerprintReader();
+  // Prefer native ZIP for classic archives; retain 7-Zip for other formats and ZIP variants.
+  const archives = new CompositeArchiveReader([
+    new ZipArchiveReader({ maxArchiveBytes: Number.MAX_SAFE_INTEGER, maxEntryBytes: MAX_ROM_BYTES }),
+    new SevenZipArchiveReader()
+  ]);
   const fingerprints = new RomFingerprintReader([
     new DirectRomFingerprint(repository, reader),
-    new ArchivedRomFingerprint(new SevenZipArchiveReader(), reader)
+    new ArchivedRomFingerprint(archives, reader)
   ]);
   return new IdentificationService(repository, fingerprints, new DatReader());
 }
@@ -74,7 +84,16 @@ export function registerDesktopFeatures(core: ReturnType<typeof createCore>): vo
   const http = new HttpClient();
   const catalogue = createLaunchBoxRepository(database);
   const metadataService = new MetadataService(metadata, new LaunchBoxProvider(catalogue));
-  const launchBox = new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(catalogue), http);
+  // Downloaded metadata always uses the restricted native ZIP implementation, without fallback.
+  const catalogueArchives = new ZipArchiveReader({
+    maxArchiveBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
+    maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
+  });
+  const launchBox = new LaunchBoxCatalogueUpdater(
+    new LaunchBoxCatalogueImporter(catalogue),
+    catalogueArchives,
+    http
+  );
   const libretro = new LibretroProvider(artwork, new LibretroClient(http));
   registerMetadataIpc({ metadata: metadataService, artwork: libretro, launchBox });
   registerExportIpc(new ExportService(library, new RetroPieExporter(artwork)));

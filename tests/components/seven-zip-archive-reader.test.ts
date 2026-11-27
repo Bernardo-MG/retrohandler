@@ -56,3 +56,12 @@ test('7-Zip listing rejects blank, fractional and non-decimal entry sizes', () =
   }
   assert.equal(parse7ZipListing('----------\nPath = game.nes\nSize = 0\n')[0].size, 0);
 });
+
+
+test('7-Zip reader advertises all supported ROM archive formats', () => {
+  const reader = new SevenZipArchiveReader('unused-executable');
+  for (const extension of ['.zip', '.ZIP', '.rar', '.7z']) {
+    assert.equal(reader.supports(extension), true);
+  }
+  assert.equal(reader.supports('.nes'), false);
+});

@@ -4,12 +4,15 @@ import path from 'node:path';
 import os from 'node:os';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
+import { ZipArchiveReader } from '../../src/main/components/archives';
 import { HttpClient } from '../../src/main/components/http/http-client';
 import { LaunchBoxCatalogueImporter } from '../../src/main/metadata/launchbox/launchbox-catalogue-importer';
 import {
   LaunchBoxCatalogueUpdater,
-  LAUNCHBOX_ARCHIVE_URL
+  LAUNCHBOX_ARCHIVE_URL,
+  MAX_LAUNCHBOX_ARCHIVE_BYTES
 } from '../../src/main/metadata/launchbox/launchbox-catalogue-updater';
+import { MAX_LAUNCHBOX_XML_BYTES } from '../../src/main/metadata/launchbox/launchbox-xml-reader';
 import type { LaunchBoxGame, LaunchBoxImportRepository } from '../../src/main/contracts/persistence';
 
 function crc32(bytes: Buffer): number {
@@ -77,7 +80,11 @@ function fakeStore() {
   return { store, games: () => current, aborted: () => abandoned };
 }
 function createUpdater(store: LaunchBoxImportRepository, request: typeof fetch): LaunchBoxCatalogueUpdater {
-  return new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(store), new HttpClient(request));
+  const archive = new ZipArchiveReader({
+    maxArchiveBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
+    maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
+  });
+  return new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(store), archive, new HttpClient(request));
 }
 const response = (bytes: Buffer) =>
   new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Length': String(bytes.length) } });

@@ -7,3 +7,10 @@ export interface ArchiveReader {
   /** Open a uniquely selected non-directory entry by its full name. */
   open(filename: string, entryName: string, signal?: AbortSignal): Promise<Readable>;
 }
+
+/** Reader capability used by the dispatcher, not by archive consumers. */
+export interface ArchiveFormatReader extends ArchiveReader {
+  supports(extension: string): boolean;
+  /** Return false only for unsupported features; propagate read and validation failures. */
+  supportsArchive?(filename: string, signal?: AbortSignal): Promise<boolean>;
+}

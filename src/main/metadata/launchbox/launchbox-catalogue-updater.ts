@@ -2,13 +2,12 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { LaunchBoxDownloadProgress } from '../../../shared';
-import { extractArchiveEntry, selectUniqueEntry, ZipArchiveReader } from '../../components/archives';
+import { extractArchiveEntry, selectUniqueEntry, type ArchiveReader } from '../../components/archives';
 import { HttpClient, ResponseBodyError } from '../../components/http/http-client';
 import { LaunchBoxCatalogueImporter, type ImportOptions } from './launchbox-catalogue-importer';
-import { MAX_LAUNCHBOX_XML_BYTES } from './launchbox-xml-reader';
 
 export const LAUNCHBOX_ARCHIVE_URL = 'https://gamesdb.launchbox-app.com/Metadata.zip';
-const MAX_ZIP_BYTES = 512 * 1024 * 1024;
+export const MAX_LAUNCHBOX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const METADATA_FILENAME = 'Metadata.xml';
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
@@ -32,6 +31,7 @@ export class LaunchBoxCatalogueUpdater {
 
   constructor(
     private readonly importer: LaunchBoxCatalogueImporter,
+    private readonly archive: ArchiveReader,
     private readonly http = new HttpClient()
   ) {}
 
@@ -86,7 +86,7 @@ export class LaunchBoxCatalogueUpdater {
     let bytes: number;
     try {
       bytes = await this.http.download(response, destination, {
-        maxBytes: MAX_ZIP_BYTES,
+        maxBytes: MAX_LAUNCHBOX_ARCHIVE_BYTES,
         signal: options.signal,
         onProgress: (processed, total) => options.onProgress?.({ phase: 'download', processed, total })
       });
@@ -102,13 +102,9 @@ export class LaunchBoxCatalogueUpdater {
     }
   }
 
-  private async extractArchive(zip: string, xml: string, options: UpdateOptions): Promise<void> {
+  private async extractArchive(filename: string, xml: string, options: UpdateOptions): Promise<void> {
     assertNotCancelled(options.signal);
-    const archive = new ZipArchiveReader({
-      maxArchiveBytes: MAX_ZIP_BYTES,
-      maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
-    });
-    const entries = await archive.list(zip, options.signal);
+    const entries = await this.archive.list(filename, options.signal);
     const selected = selectUniqueEntry(
       entries,
       (entry) =>
@@ -116,12 +112,12 @@ export class LaunchBoxCatalogueUpdater {
         (entry.name === METADATA_FILENAME || entry.name.endsWith(`/${METADATA_FILENAME}`))
     );
     if (selected.kind === 'ambiguous') {
-      throw new Error(`Ambiguous ZIP: multiple ${METADATA_FILENAME} files.`);
+      throw new Error(`Ambiguous archive: multiple ${METADATA_FILENAME} files.`);
     }
     if (selected.kind === 'missing') {
-      throw new Error(`${METADATA_FILENAME} was not found in the ZIP.`);
+      throw new Error(`${METADATA_FILENAME} was not found in the archive.`);
     }
-    await extractArchiveEntry(archive, zip, selected.entry, xml, {
+    await extractArchiveEntry(this.archive, filename, selected.entry, xml, {
       signal: options.signal,
       onProgress: (processed, total) => options.onProgress?.({ phase: 'extract', processed, total })
     });

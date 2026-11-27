@@ -3,7 +3,7 @@ import { DEFAULT_MAX_ARCHIVE_ENTRIES, selectUniqueEntry, type ArchiveEntry } fro
 
 import { isDirectRom } from '../../rom/rom-formats';
 
-const MAX_ROM_BYTES = 1024 * 1024 * 1024;
+export const MAX_ROM_BYTES = 1024 * 1024 * 1024;
 
 /** A single library row must not be identified as one ROM if it contains several. */
 export function selectRomEntry(entries: readonly ArchiveEntry[]): ArchiveEntry | null {
