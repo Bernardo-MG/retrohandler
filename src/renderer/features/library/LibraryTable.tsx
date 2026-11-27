@@ -1,19 +1,9 @@
 import React from 'react';
 import { Gamepad2 } from 'lucide-react';
-import type { LibraryEntry, LibraryPage } from '../../shared';
+import type { LibraryEntry, LibraryPage } from '../../../shared';
 
-function formatBytes(n: number): string {
-  if (n < 1024) {
-    return `${n} B`;
-  }
-  if (n < 1048576) {
-    return `${(n / 1024).toFixed(1)} KB`;
-  }
-  if (n < 1073741824) {
-    return `${(n / 1048576).toFixed(1)} MB`;
-  }
-  return `${(n / 1073741824).toFixed(2)} GB`;
-}
+import { formatBytes } from '../../utils/format-size';
+import { Pagination } from './Pagination';
 
 interface Props {
   page: LibraryPage;
@@ -24,7 +14,6 @@ interface Props {
   onSelect: (entry: LibraryEntry) => void;
 }
 export function LibraryTable({ page, offset, limit, loading, changeOffset, onSelect }: Props) {
-  const end = Math.min(offset + limit, page.total);
   return <>
     <div className="table-wrap">
       <table>
@@ -74,15 +63,6 @@ export function LibraryTable({ page, offset, limit, loading, changeOffset, onSel
       </table>
       {page.total === 0 && <p className="empty-small">No matching games.</p>}
     </div>
-    <div className="pagination" aria-label="Library pagination">
-      <span>{page.total ? `${offset + 1}–${end}` : '0'} of {page.total.toLocaleString()} games{loading ? ' · Loading…' : ''}</span>
-      <div>
-        <button
-          disabled={loading || offset === 0}
-          onClick={() => changeOffset(Math.max(0, offset - limit))}
-        >Previous</button>
-        <button disabled={loading || end >= page.total} onClick={() => changeOffset(offset + limit)}>Next</button>
-      </div>
-    </div>
+    <Pagination total={page.total} offset={offset} limit={limit} loading={loading} changeOffset={changeOffset} />
   </>;
 }

@@ -17,6 +17,7 @@
     "src/main/scanner.ts",
     "src/main/scanner/**/*.ts",
     "src/shared.ts",
+    "src/renderer/global.d.ts",
     "src/main/services/library/**/*.ts",
     "src/main/database/**/*.ts",
     "src/main/components/**/*.ts",

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search } from 'lucide-react';
-import type { LibrarySort, SystemCount } from '../../shared';
+import type { LibrarySort, SystemCount } from '../../../shared';
 interface Props {
   search: string;
   setSearch: (v: string) => void;

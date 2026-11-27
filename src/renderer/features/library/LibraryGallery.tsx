@@ -1,6 +1,7 @@
 import React from 'react';
 import { Gamepad2 } from 'lucide-react';
-import type { LibraryEntry, LibraryPage } from '../../shared';
+import type { LibraryEntry, LibraryPage } from '../../../shared';
+import { Pagination } from './Pagination';
 interface Props {
   page: LibraryPage;
   offset: number;
@@ -21,15 +22,6 @@ export function LibraryGallery({ page, offset, limit, loading, changeOffset, onS
       </div>)}
     </div>
     {page.total === 0 && <p className="empty-small">No matching games.</p>}
-    <div className="pagination" aria-label="Gallery pagination">
-      <span>{page.total ? `${offset + 1}–${Math.min(offset + limit, page.total)}` : '0'} of {page.total.toLocaleString()}{loading ? ' · Loading…' : ''}</span>
-      <div>
-        <button disabled={loading || offset === 0} onClick={() => changeOffset(Math.max(0, offset - limit))}>Previous</button>
-        <button
-          disabled={loading || offset + limit >= page.total}
-          onClick={() => changeOffset(offset + limit)}
-        >Next</button>
-      </div>
-    </div>
+    <Pagination gallery total={page.total} offset={offset} limit={limit} loading={loading} changeOffset={changeOffset} />
   </>;
 }

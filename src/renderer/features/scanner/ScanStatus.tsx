@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ScanProgress } from '../../shared';
+import type { ScanProgress } from '../../../shared';
 interface Props {
   progress: ScanProgress | null;
   cancel: () => void;
