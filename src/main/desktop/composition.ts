@@ -8,7 +8,7 @@ import {
   DirectRomFingerprint,
   RomFingerprintReader
 } from '../identification/rom/rom-fingerprint-reader';
-import { SevenZipReader } from '../components/archives/seven-zip-reader';
+import { SevenZipArchiveReader } from '../components/archives';
 import { FingerprintReader } from '../components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../contracts/persistence';
 import { FileSystemLibraryService } from '../services/library';
@@ -40,7 +40,7 @@ function createIdentificationService(repository: IdentificationRepository): Iden
   const reader = new FingerprintReader();
   const fingerprints = new RomFingerprintReader([
     new DirectRomFingerprint(repository, reader),
-    new ArchivedRomFingerprint(new SevenZipReader(), reader)
+    new ArchivedRomFingerprint(new SevenZipArchiveReader(), reader)
   ]);
   return new IdentificationService(repository, fingerprints, new DatReader());
 }

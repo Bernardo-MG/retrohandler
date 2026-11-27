@@ -5,8 +5,7 @@ import path from 'node:path';
 import { buffer } from 'node:stream/consumers';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
-import type { ArchiveReader } from '../../src/main/components/archives/archive-reader';
-import { ZipArchiveReader } from '../../src/main/components/archives/zip-archive-reader';
+import { extractArchiveEntry, ZipArchiveReader, type ArchiveReader } from '../../src/main/components/archives';
 
 const data = Buffer.from('123456789');
 const crc = 0xcbf43926;
@@ -38,32 +37,29 @@ function archive(method: number, checksum = crc): Buffer {
   return Buffer.concat([local, name, compressed, directory, name, end]);
 }
 
-async function fixture(bytes: Buffer, run: (reader: ZipArchiveReader, target: string) => Promise<void>) {
+async function fixture(bytes: Buffer, run: (reader: ArchiveReader, filename: string) => Promise<void>) {
   const folder = await mkdtemp(path.join(os.tmpdir(), 'rh-zip-reader-'));
   try {
     const filename = path.join(folder, 'archive.zip');
     await writeFile(filename, bytes);
-    await run(new ZipArchiveReader(filename, limits), path.join(folder, 'output.xml'));
+    await run(new ZipArchiveReader(limits), filename);
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
 }
 
 for (const method of [0, 8]) {
-  test(`ZIP reader extracts and reports progress for method ${method}`, async () =>
-    fixture(archive(method), async (reader, target) => {
-      const entry = await reader.findEntry('Metadata.xml');
-      assert.equal(entry.size, data.length);
-      assert.equal(entry.method, method);
-      const archiveReader: ArchiveReader = reader;
-      const filename = path.join(path.dirname(target), 'archive.zip');
-      assert.deepEqual(await archiveReader.list(filename), [
+  test(`ZIP reader lists, opens and extracts an exact entry for method ${method}`, async () =>
+    fixture(archive(method), async (reader, filename) => {
+      const entries = await reader.list(filename);
+      assert.deepEqual(entries, [
         { name: 'folder/Metadata.xml', size: data.length, directory: false }
       ]);
-      await assert.rejects(async () => archiveReader.open(filename, 'Metadata.xml'), /not found/);
-      assert.deepEqual(await buffer(await archiveReader.open(filename, 'folder/Metadata.xml')), data);
+      await assert.rejects(reader.open(filename, 'Metadata.xml'), /not found/);
+      assert.deepEqual(await buffer(await reader.open(filename, 'folder/Metadata.xml')), data);
+      const target = path.join(path.dirname(filename), 'output.xml');
       const progress: number[] = [];
-      await reader.extract('Metadata.xml', target, {
+      await extractArchiveEntry(reader, filename, entries[0], target, {
         onProgress: (processed, total) => {
           assert.equal(total, data.length);
           progress.push(processed);
@@ -71,31 +67,47 @@ for (const method of [0, 8]) {
       });
       assert.deepEqual(await readFile(target), data);
       assert.equal(progress.at(-1), data.length);
-      await assert.rejects(reader.extract('Metadata.xml', target), /EEXIST/);
+      await assert.rejects(extractArchiveEntry(reader, filename, entries[0], target), /EEXIST/);
+      assert.deepEqual(await readFile(target), data);
     }));
 }
 
-test('ZIP reader rejects invalid local headers and incorrect CRCs', async () => {
-  const bytes = archive(0);
-  bytes.writeUInt32LE(0, 0);
-  await fixture(bytes, async (reader) => {
-    await assert.rejects(reader.findEntry('Metadata.xml'), /Invalid ZIP local header/);
+test('ZIP reader rejects invalid local headers, mismatched names and incorrect CRCs', async () => {
+  const invalidHeader = archive(0);
+  invalidHeader.writeUInt32LE(0, 0);
+  await fixture(invalidHeader, async (reader, filename) => {
+    await assert.rejects(reader.open(filename, 'folder/Metadata.xml'), /Invalid ZIP local header/);
   });
-  await fixture(archive(8, 0), async (reader, target) => {
-    const filename = path.join(path.dirname(target), 'archive.zip');
+  const mismatchedName = archive(0);
+  mismatchedName[30] = 'X'.charCodeAt(0);
+  await fixture(mismatchedName, async (reader, filename) => {
+    await assert.rejects(reader.open(filename, 'folder/Metadata.xml'), /header mismatch/);
+  });
+  await fixture(archive(8, 0), async (reader, filename) => {
     await assert.rejects(
       buffer(await reader.open(filename, 'folder/Metadata.xml')),
       /ZIP integrity check failed/
     );
-    await assert.rejects(reader.extract('Metadata.xml', target), /ZIP integrity check failed/);
+    const [entry] = await reader.list(filename);
+    await assert.rejects(
+      extractArchiveEntry(reader, filename, entry, path.join(path.dirname(filename), 'output.xml')),
+      /ZIP integrity check failed/
+    );
   });
 });
 
 test('ZIP reader rejects already cancelled listing and stream requests', async () =>
-  fixture(archive(0), async (reader, target) => {
-    const filename = path.join(path.dirname(target), 'archive.zip');
+  fixture(archive(0), async (reader, filename) => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(reader.list(filename, controller.signal), { name: 'AbortError' });
     await assert.rejects(reader.open(filename, 'folder/Metadata.xml', controller.signal), { name: 'AbortError' });
+  }));
+
+test('ZIP reader applies configured limits before opening entry data', async () =>
+  fixture(archive(0), async (_reader, filename) => {
+    const archiveLimited = new ZipArchiveReader({ ...limits, maxArchiveBytes: 22 });
+    await assert.rejects(archiveLimited.list(filename), /Invalid ZIP size/);
+    const entryLimited = new ZipArchiveReader({ ...limits, maxEntryBytes: 1 });
+    await assert.rejects(entryLimited.open(filename, 'folder/Metadata.xml'), /Unsupported/);
   }));

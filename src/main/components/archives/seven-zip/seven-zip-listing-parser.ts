@@ -1,4 +1,5 @@
-import { MAX_ARCHIVE_ENTRIES, type ArchiveEntry } from '../archive-reader';
+import type { ArchiveEntry } from '../archive-entry';
+import { DEFAULT_MAX_ARCHIVE_ENTRIES } from '../archive-limits';
 
 /** Parse 7-Zip's technical listing, excluding the archive header. */
 export function parse7ZipListing(output: string): ArchiveEntry[] {
@@ -14,7 +15,7 @@ export function parse7ZipListing(output: string): ArchiveEntry[] {
       continue;
     }
     entries.push(entry);
-    if (entries.length > MAX_ARCHIVE_ENTRIES) {
+    if (entries.length > DEFAULT_MAX_ARCHIVE_ENTRIES) {
       throw new Error('Too many archive entries.');
     }
   }

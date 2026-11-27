@@ -1,5 +1,4 @@
-import type { ArchiveReader } from '../../src/main/components/archives/archive-reader';
-import { SevenZipReader } from '../../src/main/components/archives/seven-zip-reader';
+import { SevenZipArchiveReader, type ArchiveReader } from '../../src/main/components/archives';
 import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
 import { IdentificationService } from '../../src/main/identification';
@@ -12,7 +11,7 @@ import {
 
 export function identificationService(
   repository: IdentificationRepository,
-  archive: ArchiveReader = new SevenZipReader()
+  archive: ArchiveReader = new SevenZipArchiveReader()
 ): IdentificationService {
   const reader = new FingerprintReader();
   const fingerprints = new RomFingerprintReader([

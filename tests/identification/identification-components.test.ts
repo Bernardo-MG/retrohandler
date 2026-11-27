@@ -8,8 +8,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import ts from 'typescript';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
-import type { ArchiveReader } from '../../src/main/components/archives/archive-reader';
-import { SevenZipReader } from '../../src/main/components/archives/seven-zip-reader';
+import { SevenZipArchiveReader, type ArchiveReader } from '../../src/main/components/archives';
 import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
 import { matchFingerprintCandidates } from '../../src/main/identification/fingerprint-matcher';
 import { RomSource } from '../../src/main/identification/rom/rom-source';
@@ -17,7 +16,7 @@ import type { IdentificationResult, LibraryEntry } from '../../src/shared';
 import { identificationService } from '../helpers/identification';
 
 const data = Buffer.from('123456789');
-const emptyArchive: ArchiveReader = { list: async () => [], open: () => Readable.from([]) };
+const emptyArchive: ArchiveReader = { list: async () => [], open: async () => Readable.from([]) };
 const reader = new FingerprintReader();
 
 function entry(source: string, relativePath: string): LibraryEntry {
@@ -178,7 +177,7 @@ test('a collection lock rejects overlapping jobs and is released on completion',
         await pending;
         return [];
       },
-      open: () => Readable.from([])
+      open: async () => Readable.from([])
     };
     const service = identificationService(store, archive);
     const first = service.identifyCollection(root);
@@ -222,7 +221,7 @@ test('archive replacement is refused before a member is opened', async () =>
         await writeFile(file, Buffer.from('changed archive'));
         return [{ name: 'game.nes', size: data.length, directory: false }];
       },
-      open() {
+      async open() {
         opened = true;
         return Readable.from([data]);
       }
@@ -249,9 +248,9 @@ test('DAT importing reads and validates the catalogue before calling the reposit
 
 test('missing 7-Zip executable reports both listing and extraction errors', async () =>
   temporary(async (root) => {
-    const archive = new SevenZipReader(path.join(root, 'nonexistent-executable'));
+    const archive = new SevenZipArchiveReader(path.join(root, 'nonexistent-executable'));
     await assert.rejects(archive.list('test.zip'), /ENOENT/);
-    const stream = archive.open('test.zip', 'game.nes');
+    const stream = await archive.open('test.zip', 'game.nes');
     await assert.rejects(reader.readStream(stream, data.length), /ENOENT/);
   }));
 

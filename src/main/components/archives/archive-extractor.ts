@@ -1,12 +1,67 @@
 import { createWriteStream } from 'node:fs';
-import type { Readable } from 'node:stream';
+import { Transform, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { throwIfCancelled } from '../async/cancellation';
+import { StreamSizeVerifier } from '../streams/stream-size-verifier';
+import type { ArchiveEntry } from './archive-entry';
+import type { ArchiveReader } from './archive-reader';
 
-/** Write a verified entry stream to an explicitly chosen, new destination. */
-export async function writeArchiveEntry(
-  source: Readable,
+export interface ExtractOptions {
+  signal?: AbortSignal;
+  onProgress?: (processed: number, total: number) => void;
+}
+
+/** Extract an entry to an explicit, new destination without trusting its archive path. */
+export async function extractArchiveEntry(
+  reader: ArchiveReader,
+  filename: string,
+  entry: ArchiveEntry,
   destination: string,
-  signal?: AbortSignal
+  options: ExtractOptions = {}
 ): Promise<void> {
-  await pipeline(source, createWriteStream(destination, { flags: 'wx' }), { signal });
+  throwIfCancelled(options.signal);
+  if (entry.directory) {
+    throw new Error('Cannot extract an archive directory.');
+  }
+  const verifier = new ExtractionVerifier(entry.size, options.onProgress);
+  const source = await reader.open(filename, entry.name, options.signal);
+  await pipeline(source, verifier, createWriteStream(destination, { flags: 'wx' }), {
+    signal: options.signal
+  });
+}
+
+class ExtractionVerifier extends Transform {
+  private readonly verifier: StreamSizeVerifier;
+
+  constructor(
+    private readonly expectedSize: number,
+    private readonly onProgress?: ExtractOptions['onProgress']
+  ) {
+    super();
+    this.verifier = new StreamSizeVerifier(expectedSize, {
+      invalidSize: 'Invalid archive entry size.',
+      invalidChunk: 'Archive entry stream must contain bytes.',
+      oversized: 'Archive entry exceeds declared size.',
+      truncated: 'Truncated archive entry.'
+    });
+  }
+
+  public override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
+    try {
+      this.verifier.accept(chunk);
+      this.onProgress?.(this.verifier.size, this.expectedSize);
+      callback(null, chunk);
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  public override _flush(callback: TransformCallback): void {
+    try {
+      this.verifier.assertComplete();
+      callback();
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
 }

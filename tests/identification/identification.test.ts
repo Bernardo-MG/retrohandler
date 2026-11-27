@@ -113,7 +113,7 @@ test('identification persists verified matching, empty ZIP, and a cache usable o
   fixture(async (source, store) => {
     store.identification.importDat(datReader.parse(xml(['Example Game'])));
     const progress: number[] = [];
-    const emptyArchive = { list: async () => [], open: () => Readable.from([]) };
+    const emptyArchive = { list: async () => [], open: async () => Readable.from([]) };
     const service = identificationService(store.identification, emptyArchive);
     const results = await service.identifyCollection(source, {
       onProgress: (p) => progress.push(p.processed)

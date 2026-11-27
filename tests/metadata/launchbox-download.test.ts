@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
-import { ZipArchiveReader } from '../../src/main/components/archives/zip-archive-reader';
 import { HttpClient } from '../../src/main/components/http/http-client';
 import { LaunchBoxCatalogueImporter } from '../../src/main/metadata/launchbox/launchbox-catalogue-importer';
 import {
@@ -80,12 +79,6 @@ function fakeStore() {
 function createUpdater(store: LaunchBoxImportRepository, request: typeof fetch): LaunchBoxCatalogueUpdater {
   return new LaunchBoxCatalogueUpdater(new LaunchBoxCatalogueImporter(store), new HttpClient(request));
 }
-function openArchive(filename: string): ZipArchiveReader {
-  return new ZipArchiveReader(filename, {
-    maxArchiveBytes: 512 * 1024 * 1024,
-    maxEntryBytes: 750 * 1024 * 1024
-  });
-}
 const response = (bytes: Buffer) =>
   new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Length': String(bytes.length) } });
 
@@ -105,18 +98,12 @@ test('downloads fixed official URL, extracts ZIP and commits the parsed catalogu
 });
 
 test('ZIP extraction rejects bad CRC and keeps existing catalogue untouched', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-zip-test-'));
-  try {
-    const bytes = zip(sample);
-    const central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
-    bytes.writeUInt32LE(12345, central + 16);
-    const archive = path.join(root, 'db.zip');
-    const dest = path.join(root, 'db.xml');
-    await writeFile(archive, bytes);
-    await assert.rejects(openArchive(archive).extract('Metadata.xml', dest), /integrity/);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+  const db = fakeStore();
+  const bytes = zip(sample);
+  const central = bytes.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]));
+  bytes.writeUInt32LE(12345, central + 16);
+  await assert.rejects(createUpdater(db.store, async () => response(bytes)).download(), /integrity/);
+  assert.equal(db.games()[0]?.title, 'Original');
 });
 
 test('missing Metadata.xml is rejected without replacing the catalogue', async () => {
@@ -157,19 +144,11 @@ test('aborted XML import rolls back staging without discarding the old catalogue
   assert.equal(db.aborted(), 1);
 });
 
-test('ZIP local header and directory identify the one allowed XML entry', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-zip-test-'));
-  try {
-    const archive = path.join(root, 'db.zip');
-    const dest = path.join(root, 'db.xml');
-    await writeFile(archive, zip(sample));
-    const entry = await openArchive(archive).findEntry('Metadata.xml');
-    assert.equal(entry.size, Buffer.byteLength(sample));
-    await openArchive(archive).extract('Metadata.xml', dest);
-    assert.equal(await readFile(dest, 'utf8'), sample);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+test('LaunchBox accepts a single Metadata.xml inside an archive directory', async () => {
+  const db = fakeStore();
+  const updater = createUpdater(db.store, async () => response(zip(sample, 'folder/Metadata.xml')));
+  assert.equal(await updater.download(), 1);
+  assert.equal(db.games()[0]?.title, 'Retro Test');
 });
 
 test('LaunchBox rejects unsafe redirects before requesting the redirected URL', async () => {
@@ -238,20 +217,10 @@ test('LaunchBox rejects entity declarations split across stream chunks and rolls
   }
 });
 
-test('ZIP extraction rejects inconsistent local filenames and preserves an existing output', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'retrohandler-zip-header-'));
-  try {
-    const archive = path.join(root, 'db.zip');
-    const destination = path.join(root, 'Metadata.xml');
-    const bytes = zip(sample);
-    bytes[30] = 'X'.charCodeAt(0);
-    await writeFile(archive, bytes);
-    await assert.rejects(openArchive(archive).findEntry('Metadata.xml'), /header mismatch/);
-    await writeFile(archive, zip(sample));
-    await writeFile(destination, 'existing');
-    await assert.rejects(openArchive(archive).extract('Metadata.xml', destination), /EEXIST/);
-    assert.equal(await readFile(destination, 'utf8'), 'existing');
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
+test('LaunchBox rejects inconsistent ZIP local filenames without replacing the catalogue', async () => {
+  const db = fakeStore();
+  const bytes = zip(sample);
+  bytes[30] = 'X'.charCodeAt(0);
+  await assert.rejects(createUpdater(db.store, async () => response(bytes)).download(), /header mismatch/);
+  assert.equal(db.games()[0]?.title, 'Original');
 });

@@ -6,16 +6,6 @@ export interface ZipEntry {
   method: number;
 }
 
-export type ArchiveLimits = {
-  maxArchiveBytes: number;
-  maxEntryBytes: number;
-};
-
-export type ExtractOptions = {
-  signal?: AbortSignal;
-  onProgress?: (processed: number, total: number) => void;
-};
-
 export type CentralDirectory = {
   offset: number;
   size: number;

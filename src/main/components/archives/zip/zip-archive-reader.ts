@@ -1,30 +1,25 @@
 import { open, type FileHandle } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
+import { throwIfCancelled } from '../../async/cancellation';
 import { readExactly } from '../../filesystem/binary-reader';
-import type { ArchiveEntry, ArchiveReader } from '../archive-reader';
+import type { ArchiveEntry } from '../archive-entry';
+import type { ArchiveLimits } from '../archive-limits';
+import type { ArchiveReader } from '../archive-reader';
 import { directoryEntries, readDirectoryLocation, selectEntry } from './zip-central-directory';
-import type { ArchiveLimits, ExtractOptions, ZipEntry } from './zip-entry';
-import { extractEntry, openEntry } from './zip-extraction';
+import type { ZipEntry } from './zip-entry';
+import { openEntry } from './zip-entry-stream';
 import { readLocalHeader } from './zip-local-header';
 
 /** Restricted classic ZIP reader. Never uses an archive name as an output path. */
 export class ZipArchiveReader implements ArchiveReader {
-  constructor(
-    private readonly filename: string,
-    private readonly limits: ArchiveLimits
-  ) {}
-
-  /** Select exactly one file by basename, optionally inside an archive directory. */
-  public async findEntry(basename: string): Promise<ZipEntry> {
-    return this.findNamedEntry(this.filename, basename, false);
-  }
+  constructor(private readonly limits: ArchiveLimits) {}
 
   public async list(filename: string, signal?: AbortSignal): Promise<ArchiveEntry[]> {
-    signal?.throwIfAborted();
+    throwIfCancelled(signal);
     const handle = await open(filename, 'r');
     try {
       const { directory, bytes } = await this.readDirectory(handle);
-      signal?.throwIfAborted();
+      throwIfCancelled(signal);
       return Array.from(directoryEntries(bytes, directory.entries), (entry) => ({
         name: entry.name,
         size: entry.size,
@@ -36,26 +31,20 @@ export class ZipArchiveReader implements ArchiveReader {
   }
 
   public async open(filename: string, entryName: string, signal?: AbortSignal): Promise<Readable> {
-    signal?.throwIfAborted();
+    throwIfCancelled(signal);
     if (entryName.endsWith('/')) {
       throw new Error('Cannot open a ZIP directory.');
     }
-    const entry = await this.findNamedEntry(filename, entryName, true);
-    signal?.throwIfAborted();
-    return openEntry(filename, entry, { signal });
+    const entry = await this.findNamedEntry(filename, entryName);
+    throwIfCancelled(signal);
+    return openEntry(filename, entry, signal);
   }
 
-  public async extract(basename: string, destination: string, options: ExtractOptions = {}): Promise<void> {
-    options.signal?.throwIfAborted();
-    const entry = await this.findEntry(basename);
-    await extractEntry(this.filename, entry, destination, options);
-  }
-
-  private async findNamedEntry(filename: string, name: string, exact: boolean): Promise<ZipEntry> {
+  private async findNamedEntry(filename: string, name: string): Promise<ZipEntry> {
     const handle = await open(filename, 'r');
     try {
       const { directory, bytes } = await this.readDirectory(handle);
-      const selected = selectEntry(bytes, directory.entries, name, this.limits, exact);
+      const selected = selectEntry(bytes, directory.entries, name, this.limits);
       return await readLocalHeader(handle, selected, directory.offset);
     } finally {
       await handle.close();

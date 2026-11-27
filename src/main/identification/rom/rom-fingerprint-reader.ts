@@ -1,4 +1,4 @@
-import type { ArchiveReader } from '../../components/archives/archive-reader';
+import type { ArchiveReader } from '../../components/archives';
 import { throwIfCancelled } from '../../components/async/cancellation';
 import type { FileFingerprint } from '../../components/hashing/content-fingerprint';
 import { FingerprintReader } from '../../components/hashing/fingerprint-reader';

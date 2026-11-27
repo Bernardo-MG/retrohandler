@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatReader } from '../../src/main/identification/dat/dat-reader';
 import { inferPlatform } from '../../src/main/scanner/platforms';
-import { parse7ZipListing } from '../../src/main/components/archives/seven-zip-reader';
 import { ArtworkCache } from '../../src/main/components/artwork/artwork-cache';
 
 const datReader = new DatReader();
@@ -77,22 +76,6 @@ test('DAT refuses incomplete root and unfinished comment or CDATA', () => {
   assert.throws(() => datReader.parse(dat(rom()).replace('</datafile>', '')), /Incomplete/);
   assert.throws(() => datReader.parse(dat(`<!-- ${rom()}`)), /Incomplete/);
   assert.throws(() => datReader.parse(dat(`<![CDATA[${rom()}`)), /Incomplete/);
-});
-
-test('7-Zip listing uses a separator line, not hyphens in an archive name', () => {
-  const output = 'Path = sample----------.zip\nType = zip\n----------\nPath = game.nes\nSize = 12\n';
-  assert.deepEqual(parse7ZipListing(output), [{ name: 'game.nes', size: 12, directory: false }]);
-  assert.throws(() => parse7ZipListing('Path = sample----------.zip\nSize = 12'), /Invalid 7-Zip/);
-});
-
-test('7-Zip listing rejects blank, fractional and non-decimal member sizes', () => {
-  for (const size of ['', ' ', '1e2', '0x10', '2.0', '-1', '9007199254740992']) {
-    assert.throws(
-      () => parse7ZipListing(`----------\nPath = game.nes\nSize = ${size}\n`),
-      /invalid member size/
-    );
-  }
-  assert.equal(parse7ZipListing('----------\nPath = game.nes\nSize = 0\n')[0].size, 0);
 });
 
 test('cached artwork is validated against its content address', async () => {

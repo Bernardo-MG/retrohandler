@@ -5,8 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { test } from 'node:test';
-import { parse7ZipListing } from '../../src/main/components/archives/seven-zip-reader';
-import type { ArchiveReader, ArchiveEntry } from '../../src/main/components/archives/archive-reader';
+import type { ArchiveReader, ArchiveEntry } from '../../src/main/components/archives';
 import { FingerprintReader } from '../../src/main/components/hashing/fingerprint-reader';
 import { selectRomEntry } from '../../src/main/identification/rom/archive-rom-selection';
 import type { IdentificationRepository } from '../../src/main/contracts/persistence';
@@ -17,18 +16,8 @@ const data = Buffer.from('synthetic archive ROM');
 const fingerprintReader = new FingerprintReader();
 const romEntry: ArchiveEntry = { name: 'Game (USA).nes', size: data.length, directory: false };
 function mockArchive(entries: ArchiveEntry[], stream = data): ArchiveReader {
-  return { list: async () => entries, open: () => Readable.from([stream]) };
+  return { list: async () => entries, open: async () => Readable.from([stream]) };
 }
-
-test('7-Zip technical listing parses entries and excludes archive header', () => {
-  const result = parse7ZipListing(
-    'Path = sample.zip\nType = zip\n----------\nPath = docs\nFolder = +\nSize = 0\n\nPath = Game.nes\nFolder = -\nSize = 14\n'
-  );
-  assert.deepEqual(result, [
-    { name: 'docs', directory: true, size: 0 },
-    { name: 'Game.nes', directory: false, size: 14 }
-  ]);
-});
 
 test('single-ROM selection is case-insensitive; multi-ROM and non-ROM archives are not misidentified', () => {
   assert.equal(selectRomEntry([{ ...romEntry, name: 'Game.GBA' }])?.name, 'Game.GBA');
@@ -152,7 +141,7 @@ test('cancelling during archived ROM hashing does not commit partial results', a
     };
     const reader: ArchiveReader = {
       list: async () => [romEntry],
-      open: () => {
+      open: async () => {
         controller.abort();
         return Readable.from([data]);
       }

@@ -3,37 +3,26 @@ import { addAbortSignal, compose, Transform, type Readable, type TransformCallba
 import { createInflateRaw } from 'node:zlib';
 import { Crc32 } from '../../hashing/crc32';
 import { StreamSizeVerifier } from '../../streams/stream-size-verifier';
-import { writeArchiveEntry } from '../archive-extractor';
-import type { ExtractOptions, ZipEntry } from './zip-entry';
+import type { ZipEntry } from './zip-entry';
 
-export async function extractEntry(
-  filename: string,
-  entry: ZipEntry,
-  destination: string,
-  options: ExtractOptions
-): Promise<void> {
-  await writeArchiveEntry(openEntry(filename, entry, options), destination, options.signal);
-}
-
-export function openEntry(filename: string, entry: ZipEntry, options: ExtractOptions): Readable {
-  const verifier = new EntryVerifier(entry, options.onProgress);
+export function openEntry(filename: string, entry: ZipEntry, signal?: AbortSignal): Readable {
+  const verifier = new EntryVerifier(entry);
   const source = createReadStream(filename, {
     start: entry.start,
     end: entry.start + entry.compressed - 1,
-    signal: options.signal
+    signal
   });
   const output = entry.method === 8 ? compose(source, createInflateRaw(), verifier) : compose(source, verifier);
-  return options.signal ? addAbortSignal(options.signal, output) : output;
+  // Awaiting callers may attach their consumer after an early stream error.
+  output.on('error', () => undefined);
+  return signal ? addAbortSignal(signal, output) : output;
 }
 
 class EntryVerifier extends Transform {
   private readonly size: StreamSizeVerifier;
   private readonly checksum = new Crc32();
 
-  constructor(
-    private readonly entry: ZipEntry,
-    private readonly onProgress?: ExtractOptions['onProgress']
-  ) {
+  constructor(private readonly entry: ZipEntry) {
     super();
     this.size = new StreamSizeVerifier(entry.size, {
       invalidSize: 'ZIP integrity check failed.',
@@ -46,7 +35,6 @@ class EntryVerifier extends Transform {
   public override _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
     try {
       this.checksum.update(this.size.accept(chunk));
-      this.onProgress?.(this.size.size, this.entry.size);
       callback(null, chunk);
     } catch (error) {
       callback(error instanceof Error ? error : new Error(String(error)));

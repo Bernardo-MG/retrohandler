@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { LaunchBoxDownloadProgress } from '../../../shared';
-import { ZipArchiveReader } from '../../components/archives/zip-archive-reader';
+import { extractArchiveEntry, selectUniqueEntry, ZipArchiveReader } from '../../components/archives';
 import { HttpClient, ResponseBodyError } from '../../components/http/http-client';
 import { LaunchBoxCatalogueImporter, type ImportOptions } from './launchbox-catalogue-importer';
 import { MAX_LAUNCHBOX_XML_BYTES } from './launchbox-xml-reader';
@@ -104,11 +104,24 @@ export class LaunchBoxCatalogueUpdater {
 
   private async extractArchive(zip: string, xml: string, options: UpdateOptions): Promise<void> {
     assertNotCancelled(options.signal);
-    const archive = new ZipArchiveReader(zip, {
+    const archive = new ZipArchiveReader({
       maxArchiveBytes: MAX_ZIP_BYTES,
       maxEntryBytes: MAX_LAUNCHBOX_XML_BYTES
     });
-    await archive.extract(METADATA_FILENAME, xml, {
+    const entries = await archive.list(zip, options.signal);
+    const selected = selectUniqueEntry(
+      entries,
+      (entry) =>
+        !entry.directory &&
+        (entry.name === METADATA_FILENAME || entry.name.endsWith(`/${METADATA_FILENAME}`))
+    );
+    if (selected.kind === 'ambiguous') {
+      throw new Error(`Ambiguous ZIP: multiple ${METADATA_FILENAME} files.`);
+    }
+    if (selected.kind === 'missing') {
+      throw new Error(`${METADATA_FILENAME} was not found in the ZIP.`);
+    }
+    await extractArchiveEntry(archive, zip, selected.entry, xml, {
       signal: options.signal,
       onProgress: (processed, total) => options.onProgress?.({ phase: 'extract', processed, total })
     });
