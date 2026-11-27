@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { selectUniqueEntry } from '../../components/archives/archive-entry-selector';
 import { MAX_ARCHIVE_ENTRIES, type ArchiveEntry } from '../../components/archives/archive-reader';
 
 import { isDirectRom } from '../../rom/rom-formats';
@@ -10,11 +11,11 @@ export function selectRomEntry(entries: readonly ArchiveEntry[]): ArchiveEntry |
   if (entries.length > MAX_ARCHIVE_ENTRIES) {
     throw new Error('Too many archive entries.');
   }
-  const candidates = entries.filter(isRomEntry);
-  if (candidates.length !== 1) {
+  const selected = selectUniqueEntry(entries, isRomEntry);
+  if (selected.kind !== 'found') {
     return null;
   }
-  const entry = candidates[0];
+  const entry = selected.entry;
   if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > MAX_ROM_BYTES) {
     throw new Error('ROM entry exceeds size limit.');
   }

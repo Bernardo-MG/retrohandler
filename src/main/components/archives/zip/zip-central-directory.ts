@@ -1,5 +1,6 @@
 import type { FileHandle } from 'node:fs/promises';
 import { readExactly } from '../../filesystem/binary-reader';
+import { selectUniqueEntry } from '../archive-entry-selector';
 import type { ArchiveLimits, CentralDirectory, DirectoryEntry } from './zip-entry';
 
 const END_SIGNATURE = 0x06054b50;
@@ -52,28 +53,34 @@ export function selectEntry(
   directory: Buffer,
   count: number,
   basename: string,
-  limits: ArchiveLimits
+  limits: ArchiveLimits,
+  exact = false
 ): DirectoryEntry {
-  let selected: DirectoryEntry | undefined;
+  const selected = selectUniqueEntry(
+    directoryEntries(directory, count),
+    (entry) => entry.name === basename || (!exact && entry.name.endsWith(`/${basename}`)),
+    (entry) => {
+      if (!isSupportedEntry(entry, limits)) {
+        throw new Error(`Unsupported ${basename} ZIP entry.`);
+      }
+    }
+  );
+  if (selected.kind === 'ambiguous') {
+    throw new Error(`Ambiguous ZIP: multiple ${basename} files.`);
+  }
+  if (selected.kind === 'missing') {
+    throw new Error(`${basename} was not found in the ZIP.`);
+  }
+  return selected.entry;
+}
+
+export function* directoryEntries(directory: Buffer, count: number): IterableIterator<DirectoryEntry> {
   let position = 0;
   for (let index = 0; index < count; index++) {
     const entry = readDirectoryEntry(directory, position);
     position = entry.end;
-    if (entry.name !== basename && !entry.name.endsWith(`/${basename}`)) {
-      continue;
-    }
-    if (selected) {
-      throw new Error(`Ambiguous ZIP: multiple ${basename} files.`);
-    }
-    if (!isSupportedEntry(entry, limits)) {
-      throw new Error(`Unsupported ${basename} ZIP entry.`);
-    }
-    selected = entry;
+    yield entry;
   }
-  if (!selected) {
-    throw new Error(`${basename} was not found in the ZIP.`);
-  }
-  return selected;
 }
 
 function readDirectoryEntry(directory: Buffer, position: number): DirectoryEntry {

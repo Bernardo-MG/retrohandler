@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { buffer } from 'node:stream/consumers';
 import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
+import type { ArchiveReader } from '../../src/main/components/archives/archive-reader';
 import { ZipArchiveReader } from '../../src/main/components/archives/zip-archive-reader';
 
 const data = Buffer.from('123456789');
@@ -53,6 +55,13 @@ for (const method of [0, 8]) {
       const entry = await reader.findEntry('Metadata.xml');
       assert.equal(entry.size, data.length);
       assert.equal(entry.method, method);
+      const archiveReader: ArchiveReader = reader;
+      const filename = path.join(path.dirname(target), 'archive.zip');
+      assert.deepEqual(await archiveReader.list(filename), [
+        { name: 'folder/Metadata.xml', size: data.length, directory: false }
+      ]);
+      await assert.rejects(async () => archiveReader.open(filename, 'Metadata.xml'), /not found/);
+      assert.deepEqual(await buffer(await archiveReader.open(filename, 'folder/Metadata.xml')), data);
       const progress: number[] = [];
       await reader.extract('Metadata.xml', target, {
         onProgress: (processed, total) => {
@@ -73,6 +82,20 @@ test('ZIP reader rejects invalid local headers and incorrect CRCs', async () => 
     await assert.rejects(reader.findEntry('Metadata.xml'), /Invalid ZIP local header/);
   });
   await fixture(archive(8, 0), async (reader, target) => {
+    const filename = path.join(path.dirname(target), 'archive.zip');
+    await assert.rejects(
+      buffer(await reader.open(filename, 'folder/Metadata.xml')),
+      /ZIP integrity check failed/
+    );
     await assert.rejects(reader.extract('Metadata.xml', target), /ZIP integrity check failed/);
   });
 });
+
+test('ZIP reader rejects already cancelled listing and stream requests', async () =>
+  fixture(archive(0), async (reader, target) => {
+    const filename = path.join(path.dirname(target), 'archive.zip');
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(reader.list(filename, controller.signal), { name: 'AbortError' });
+    await assert.rejects(reader.open(filename, 'folder/Metadata.xml', controller.signal), { name: 'AbortError' });
+  }));

@@ -77,7 +77,7 @@ export class ArchivedRomFingerprint implements RomFingerprintStrategy {
     }
     await file.assertUnchanged();
     throwIfCancelled(signal);
-    const stream = this.archive.open(file.filename, entry.name, signal);
+    const stream = await this.archive.open(file.filename, entry.name, signal);
     const hashes = await this.reader.readStream(stream, entry.size, signal);
     return { ...hashes, modifiedMs: file.stats.mtimeMs };
   }

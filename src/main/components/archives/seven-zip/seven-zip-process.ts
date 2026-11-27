@@ -57,6 +57,9 @@ function diagnosticsFor(child: PipedProcess): ProcessDiagnostics {
 function streamExtraction(child: PipedProcess): Readable {
   const diagnostics = diagnosticsFor(child);
   const output = new PassThrough();
+  // An awaiting caller may not have attached its stream consumer yet.
+  // Destroyed streams retain their error for subsequent readers.
+  output.on('error', () => undefined);
   const fail = (error: Error) => output.destroy(error);
   child.on('error', fail);
   child.stdout.on('error', fail);
