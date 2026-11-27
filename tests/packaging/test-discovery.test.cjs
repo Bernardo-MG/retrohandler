@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { describe, it } = require('node:test');
-const { discoverTests } = require('../../scripts/run-tests.cjs');
+const { discoverTests } = require('../../scripts/testing/test-discovery.cjs');
 
 describe('Test discovery', () => {
   it('finds nested compiled suites and source CommonJS suites, but never helpers', (t) => {

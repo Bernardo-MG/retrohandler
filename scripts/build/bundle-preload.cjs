@@ -3,7 +3,7 @@ const path = require('node:path');
 
 async function bundlePreload() {
   const { build } = await import('vite');
-  const root = path.resolve(__dirname, '..');
+  const root = path.resolve(__dirname, '../..');
   const result = await build({
     configFile: false,
     root,

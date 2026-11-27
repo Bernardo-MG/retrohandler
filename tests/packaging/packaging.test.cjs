@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { cleanRelease, assertX64Pe, verifyPackage } = require('../../scripts/package-windows.cjs');
+const { cleanRelease } = require('../../scripts/release/clean-release.cjs');
+const { assertX64Pe } = require('../../scripts/release/pe-validator.cjs');
+const { verifyPackage } = require('../../scripts/release/verify-package.cjs');
 const pkg = require('../../package.json');
 function fixture(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'retrohandler-packaging-'));

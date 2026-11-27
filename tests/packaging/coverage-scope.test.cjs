@@ -4,7 +4,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { describe, it } = require('node:test');
-const { coverageScope, discoverTests } = require('../../scripts/run-tests.cjs');
+const { coverageScope } = require('../../scripts/testing/coverage-scope.cjs');
+const { discoverTests } = require('../../scripts/testing/test-discovery.cjs');
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'retrohandler-quality-'));
