@@ -60,10 +60,14 @@ test('7-Zip listing rejects blank, fractional and non-decimal entry sizes', () =
 });
 
 
-test('7-Zip reader advertises all supported ROM archive formats', () => {
+test('7-Zip reader advertises all supported ROM archive formats', async () => {
   const reader = new SevenZipArchiveReader('unused-executable');
   for (const extension of ['.zip', '.ZIP', '.rar', '.7z']) {
-    assert.equal(reader.supports(extension), true);
+    assert.equal(await reader.supports(`game${extension}`), true);
   }
-  assert.equal(reader.supports('.nes'), false);
+  assert.equal(await reader.supports('game.nes'), false);
+  assert.equal(await reader.supports('game'), false);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(reader.supports('game.zip', controller.signal), { name: 'AbortError' });
 });

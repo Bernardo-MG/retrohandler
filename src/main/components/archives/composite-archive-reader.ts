@@ -28,10 +28,7 @@ export class CompositeArchiveReader implements ArchiveReader {
     throwIfCancelled(signal);
     const extension = archiveExtension(filename);
     for (const reader of this.readers) {
-      if (!reader.supports(extension)) {
-        continue;
-      }
-      const supported = !reader.supportsArchive || (await reader.supportsArchive(filename, signal));
+      const supported = await reader.supports(filename, signal);
       throwIfCancelled(signal);
       if (supported) {
         return reader;

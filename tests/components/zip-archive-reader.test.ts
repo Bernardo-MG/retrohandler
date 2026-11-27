@@ -45,7 +45,7 @@ async function fixture(bytes: Buffer, run: (reader: ZipArchiveReader, filename: 
 for (const method of [0, 8]) {
   test(`ZIP reader lists, opens and extracts an exact entry for method ${method}`, async () =>
     fixture(archive(method), async (reader, filename) => {
-      assert.equal(await reader.supportsArchive(filename), true);
+      assert.equal(await reader.supports(filename), true);
       const source = await ArchiveSource.resolve(reader, filename);
       const entries = await source.list();
       assert.deepEqual(entries, [
@@ -110,13 +110,16 @@ test('ZIP reader applies configured limits before opening entry data', async () 
   }));
 
 
-test('native ZIP reader advertises ZIP support without claiming other archive formats', () => {
-  const reader = new ZipArchiveReader(limits);
-  assert.equal(reader.supports('.zip'), true);
-  assert.equal(reader.supports('.ZIP'), true);
-  assert.equal(reader.supports('.rar'), false);
-  assert.equal(reader.supports('.7z'), false);
-});
+test('native ZIP reader checks archive features only for ZIP filenames', async () =>
+  fixture(archive(0), async (reader, filename) => {
+    const uppercase = path.join(path.dirname(filename), 'uppercase.ZIP');
+    await writeFile(uppercase, archive(0));
+    assert.equal(await reader.supports(filename), true);
+    assert.equal(await reader.supports(uppercase), true);
+    assert.equal(await reader.supports('missing.rar'), false);
+    assert.equal(await reader.supports('missing.7z'), false);
+    assert.equal(await reader.supports('missing'), false);
+  }));
 
 test('classic ZIP archives can be listed and opened without the 7-Zip executable', async () =>
   fixture(archive(8), async (native, filename) => {
@@ -127,10 +130,10 @@ test('classic ZIP archives can be listed and opened without the 7-Zip executable
 
 test('ZIP capability probing declines unsupported compression and filename encodings', async () => {
   await fixture(archive(12), async (reader, filename) => {
-    assert.equal(await reader.supportsArchive(filename), false);
+    assert.equal(await reader.supports(filename), false);
   });
   await fixture(archive(0, crc, 'folder/日本語.xml'), async (reader, filename) => {
-    assert.equal(await reader.supportsArchive(filename), false);
+    assert.equal(await reader.supports(filename), false);
   });
 });
 
@@ -160,36 +163,36 @@ function zip64Archive(): Buffer {
 
 test('ZIP capability probing recognizes a ZIP64 end record but rejects invalid markers', async () => {
   await fixture(zip64Archive(), async (reader, filename) => {
-    assert.equal(await reader.supportsArchive(filename), false);
+    assert.equal(await reader.supports(filename), false);
     await assert.rejects(reader.list(filename), /Unsupported or oversized ZIP directory/);
   });
   const invalid = archive(0);
   invalid.writeUInt32LE(0xffffffff, invalid.length - 22 + 16);
   await fixture(invalid, async (reader, filename) => {
-    await assert.rejects(reader.supportsArchive(filename), /Unsupported or oversized ZIP directory/);
+    await assert.rejects(reader.supports(filename), /Unsupported or oversized ZIP directory/);
   });
   const invalidLocator = zip64Archive();
   invalidLocator.writeBigUInt64LE(0xffffffffffffffffn, invalidLocator.length - 22 - 20 + 8);
   await fixture(invalidLocator, async (reader, filename) => {
-    await assert.rejects(reader.supportsArchive(filename), /Unsupported or oversized ZIP directory/);
+    await assert.rejects(reader.supports(filename), /Unsupported or oversized ZIP directory/);
   });
 });
 
 test('ZIP capability probing does not turn malformed directories, limits or cancellation into fallback', async () => {
   await fixture(Buffer.alloc(64), async (reader, filename) => {
-    await assert.rejects(reader.supportsArchive(filename), /Invalid ZIP central directory/);
+    await assert.rejects(reader.supports(filename), /Invalid ZIP central directory/);
   });
   const invalid = archive(0);
   invalid.writeUInt16LE(0, invalid.length - 22 + 8);
   await fixture(invalid, async (reader, filename) => {
-    await assert.rejects(reader.supportsArchive(filename), /Invalid ZIP directory entry count/);
+    await assert.rejects(reader.supports(filename), /Invalid ZIP directory entry count/);
   });
   await fixture(archive(0), async (reader, filename) => {
     const limited = new ZipArchiveReader({ ...limits, maxArchiveBytes: 22 });
-    await assert.rejects(limited.supportsArchive(filename), /Invalid ZIP size/);
+    await assert.rejects(limited.supports(filename), /Invalid ZIP size/);
     const controller = new AbortController();
     controller.abort();
-    await assert.rejects(reader.supportsArchive(filename, controller.signal), { name: 'AbortError' });
+    await assert.rejects(reader.supports(filename, controller.signal), { name: 'AbortError' });
   });
 });
 
@@ -200,7 +203,7 @@ test('composite ZIP reading selects a compatible backend for unsupported compres
     const reader = new CompositeArchiveReader([
       native,
       {
-        supports: (extension) => extension === '.zip',
+        supports: async (source) => source === filename,
         list: async (source) => {
           assert.equal(source, filename);
           return [entry];

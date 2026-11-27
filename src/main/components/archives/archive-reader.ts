@@ -10,7 +10,6 @@ export interface ArchiveReader {
 
 /** Reader capability used by the dispatcher, not by archive consumers. */
 export interface ArchiveFormatReader extends ArchiveReader {
-  supports(extension: string): boolean;
-  /** Return false only for unsupported features; propagate read and validation failures. */
-  supportsArchive?(filename: string, signal?: AbortSignal): Promise<boolean>;
+  /** Return false for unsupported formats or features; propagate read and validation failures. */
+  supports(filename: string, signal?: AbortSignal): Promise<boolean>;
 }

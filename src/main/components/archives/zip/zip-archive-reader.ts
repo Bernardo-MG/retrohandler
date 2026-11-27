@@ -3,7 +3,7 @@ import type { Readable } from 'node:stream';
 import { throwIfCancelled } from '../../async/cancellation';
 import { readExactly } from '../../filesystem/binary-reader';
 import type { ArchiveEntry } from '../archive-entry';
-import { ARCHIVE_EXTENSIONS, normalizeArchiveExtension } from '../archive-formats';
+import { ARCHIVE_EXTENSIONS, archiveExtension } from '../archive-formats';
 import type { ArchiveLimits } from '../archive-limits';
 import type { ArchiveFormatReader } from '../archive-reader';
 import {
@@ -21,12 +21,11 @@ import { readLocalHeader } from './zip-local-header';
 export class ZipArchiveReader implements ArchiveFormatReader {
   constructor(private readonly limits: ArchiveLimits) {}
 
-  public supports(extension: string): boolean {
-    return normalizeArchiveExtension(extension) === ARCHIVE_EXTENSIONS.zip;
-  }
-
-  public async supportsArchive(filename: string, signal?: AbortSignal): Promise<boolean> {
+  public async supports(filename: string, signal?: AbortSignal): Promise<boolean> {
     throwIfCancelled(signal);
+    if (archiveExtension(filename) !== ARCHIVE_EXTENSIONS.zip) {
+      return false;
+    }
     const handle = await open(filename, 'r');
     try {
       const { directory, bytes } = await this.readDirectory(handle);

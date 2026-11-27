@@ -3,11 +3,15 @@ import { Readable } from 'node:stream';
 import { text } from 'node:stream/consumers';
 import { test } from 'node:test';
 import type { ArchiveFormatReader, ArchiveReader } from '../../src/main/components/archives/archive-reader';
+import { archiveExtension } from '../../src/main/components/archives/archive-formats';
 import { CompositeArchiveReader } from '../../src/main/components/archives/composite-archive-reader';
 
 function backend(name: string, extensions: readonly string[], signal?: AbortSignal): ArchiveFormatReader {
   return {
-    supports: (extension) => extensions.includes(extension),
+    supports: async (filename, actualSignal) => {
+      assert.equal(actualSignal, signal);
+      return extensions.includes(archiveExtension(filename));
+    },
     list: async (filename, actualSignal) => {
       assert.equal(actualSignal, signal);
       return [{ name: `${name}:${filename}`, size: 1, directory: false }];
@@ -41,7 +45,7 @@ test('composite readers select the next backend only when a capability probe dec
   const reader = new CompositeArchiveReader([
     {
       ...backend('native', ['.zip']),
-      supportsArchive: async (filename) => filename === 'classic.zip'
+      supports: async (filename) => filename === 'classic.zip'
     },
     backend('external', ['.zip'])
   ]);
@@ -58,14 +62,14 @@ test('composite readers select the next backend only when a capability probe dec
 test('composite readers propagate probe and selected backend failures without retrying', async () => {
   const failure = new Error('Invalid archive.');
   const fallback: ArchiveFormatReader = {
-    supports: () => true,
+    supports: async () => true,
     list: async () => assert.fail('Unexpected fallback listing'),
     open: async () => assert.fail('Unexpected fallback opening')
   };
   const rejectingProbe = new CompositeArchiveReader([
     {
       ...backend('native', ['.zip']),
-      supportsArchive: async () => {
+      supports: async () => {
         throw failure;
       }
     },
@@ -75,7 +79,7 @@ test('composite readers propagate probe and selected backend failures without re
   await assert.rejects(rejectingProbe.open('archive.zip', 'game.nes'), (error) => error === failure);
   const rejectingReader = new CompositeArchiveReader([
     {
-      supports: () => true,
+      supports: async () => true,
       list: async () => {
         throw failure;
       },
@@ -103,8 +107,7 @@ test('composite readers do not start a backend when cancelled during a capabilit
   const controller = new AbortController();
   const reader = new CompositeArchiveReader([
     {
-      supports: () => true,
-      supportsArchive: async (_filename, signal) => {
+      supports: async (_filename, signal) => {
         assert.equal(signal, controller.signal);
         controller.abort();
         return true;

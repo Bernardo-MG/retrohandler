@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream';
+import { throwIfCancelled } from '../../async/cancellation';
 import type { ArchiveEntry } from '../archive-entry';
-import { ARCHIVE_EXTENSIONS, normalizeArchiveExtension } from '../archive-formats';
+import { ARCHIVE_EXTENSIONS, archiveExtension } from '../archive-formats';
 import type { ArchiveFormatReader } from '../archive-reader';
 import { resolveSevenZipExecutable } from './seven-zip-executable';
 import { parse7ZipListing } from './seven-zip-listing-parser';
@@ -14,8 +15,9 @@ export class SevenZipArchiveReader implements ArchiveFormatReader {
     this.process = new SevenZipProcess(executable);
   }
 
-  public supports(extension: string): boolean {
-    const normalized = normalizeArchiveExtension(extension);
+  public async supports(filename: string, signal?: AbortSignal): Promise<boolean> {
+    throwIfCancelled(signal);
+    const normalized = archiveExtension(filename);
     return (
       normalized === ARCHIVE_EXTENSIONS.zip ||
       normalized === ARCHIVE_EXTENSIONS.rar ||
