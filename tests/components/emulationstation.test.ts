@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GameListDocument } from '../../src/main/components/emulationstation/gamelist-document';
-import { GameListMerger } from '../../src/main/components/emulationstation/gamelist-merger';
+import { GameListDocument, GameListMerger } from '../../src/main/components/emulationstation';
 
 const doc = (records: string) => `<gameList>${records}</gameList>`;
 const resolvePath = (value: string): string | null => {
@@ -56,10 +55,16 @@ test('gamelist merger uses a target-specific path resolver and preserves origina
   assert.equal(merger.merge(GameListDocument.parse(merged), generated), merged);
 });
 
-test('gamelist merger preserves fallback titles and rejects unresolved collisions', () => {
+test('gamelist merger honors field preservation policy and rejects unresolved collisions', () => {
   const existing = doc('<game><path>./A.zip</path><name>Scraped</name></game>');
   const generated = GameListDocument.fromEntries([{ path: './A.zip', name: 'A' }]);
-  assert.equal(merger.merge(GameListDocument.parse(existing), generated, new Set(['A.zip'])), existing);
+  assert.equal(
+    merger.merge(GameListDocument.parse(existing), generated, {
+      shouldPreserveField: ({ normalizedPath, incoming, existing: fields }) =>
+        normalizedPath === 'A.zip' && incoming.name === 'name' && fields.some((field) => field.value.trim())
+    }),
+    existing
+  );
   assert.throws(
     () => merger.merge(GameListDocument.parse(existing.replace('./A.zip', '/elsewhere/A.zip')), generated),
     /Unmapped existing ROM path/

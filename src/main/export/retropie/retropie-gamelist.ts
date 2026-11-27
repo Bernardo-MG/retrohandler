@@ -1,7 +1,5 @@
 import type { LibraryEntry } from '../../../shared';
-import { GameListDocument } from '../../components/emulationstation/gamelist-document';
-import type { GameListEntry } from '../../components/emulationstation/gamelist-entry';
-import { GameListMerger } from '../../components/emulationstation/gamelist-merger';
+import { GameListDocument, GameListMerger, type GameListEntry } from '../../components/emulationstation';
 import type { RetroPieLayout } from './retropie-layout';
 
 export type RetroPieGame = {
@@ -25,7 +23,16 @@ export class RetroPieGameList {
     const xml = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(previousContent);
     const existing = GameListDocument.parse(xml);
     const merger = new GameListMerger((value) => this.layout.normalizeGameReference(value, this.system));
-    return Buffer.from(merger.merge(existing, generated, this.pathsWithFallbackTitles(games)), 'utf8');
+    const fallbackTitles = this.pathsWithFallbackTitles(games);
+    return Buffer.from(
+      merger.merge(existing, generated, {
+        shouldPreserveField: ({ normalizedPath, incoming, existing: fields }) =>
+          incoming.name === 'name' &&
+          fallbackTitles.has(normalizedPath) &&
+          fields.some((field) => field.value.trim())
+      }),
+      'utf8'
+    );
   }
 
   private toGameListEntry({ entry, filename, image }: RetroPieGame): GameListEntry {
