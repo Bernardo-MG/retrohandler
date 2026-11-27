@@ -6,7 +6,7 @@ import ts from 'typescript';
 
 const root = path.resolve(__dirname, '../../../src');
 const databaseRoot = path.join(root, 'main', 'database');
-const compositionRoot = path.join(root, 'main', 'main.ts');
+const compositionRoot = path.join(root, 'main', 'desktop', 'composition.ts');
 
 function inside(directory: string, filename: string): boolean {
   const relative = path.relative(directory, filename);
@@ -70,7 +70,7 @@ test('database access and internal imports are confined to the database package'
   assert.deepEqual(
     issues,
     [],
-    'Only main.ts may import the public database package; other modules must use persistence contracts.'
+    'Only the composition root may import the public database package; use persistence contracts elsewhere.'
   );
 });
 
@@ -89,9 +89,9 @@ test('boundary checker catches type imports, dynamic imports and native driver r
     ),
     ['../database/sql/types', 'better-sqlite3', '../database/sql/query-registry', '../database/sql/types']
   );
-  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from './database';"), []);
+  assert.deepEqual(violations(compositionRoot, "import { openDatabase } from '../database';"), []);
   assert.deepEqual(
-    violations(compositionRoot, "import { openDatabase } from './database/database-connection';"),
-    ['./database/database-connection']
+    violations(compositionRoot, "import { openDatabase } from '../database/database-connection';"),
+    ['../database/database-connection']
   );
 });

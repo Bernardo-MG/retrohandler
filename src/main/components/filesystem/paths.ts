@@ -51,7 +51,7 @@ export function resolveSafeDirectorySync(folder: string): string {
   if (!st.isDirectory() || st.isSymbolicLink()) {
     throw new Error(`Directory redirected or not a directory: ${current}`);
   }
-  const canonical = realpathSync(current);
+  const canonical = realpathSync.native(current);
   if (canonicalKey(canonical) === canonicalKey(expected)) {
     return canonical;
   }
