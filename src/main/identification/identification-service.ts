@@ -63,7 +63,7 @@ export class IdentificationService {
       }
       throwIfCancelled(signal, 'Identification cancelled.');
       return { ...identity, fingerprint, ...this.repository.matchFingerprint(fingerprint) };
-    } catch (error) {
+    } catch {
       throwIfCancelled(signal, 'Identification cancelled.');
       return { ...identity, fingerprint, status: 'error', title: null, datName: null };
     }

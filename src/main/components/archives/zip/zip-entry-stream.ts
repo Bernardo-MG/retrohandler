@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { addAbortSignal, compose, Transform, type Readable, type TransformCallback } from 'node:stream';
+import { addAbortSignal, pipeline, Transform, type Readable, type TransformCallback } from 'node:stream';
 import { createInflateRaw } from 'node:zlib';
 import { Crc32 } from '../../hashing/crc32';
 import { StreamSizeVerifier } from '../../streams/stream-size-verifier';
@@ -12,11 +12,20 @@ export function openEntry(filename: string, entry: ZipEntry, signal?: AbortSigna
     end: entry.start + entry.compressed - 1,
     signal
   });
-  const output =
-    entry.method === 8 ? compose(source, createInflateRaw(), verifier) : compose(source, verifier);
   // Awaiting callers may attach their consumer after an early stream error.
-  output.on('error', () => undefined);
-  return signal ? addAbortSignal(signal, output) : output;
+  verifier.on('error', () => undefined);
+  const output = signal ? addAbortSignal(signal, verifier) : verifier;
+  const finish = (error: NodeJS.ErrnoException | null): void => {
+    if (error) {
+      output.destroy(error);
+    }
+  };
+  if (entry.method === 8) {
+    pipeline(source, createInflateRaw(), output, finish);
+  } else {
+    pipeline(source, output, finish);
+  }
+  return output;
 }
 
 class EntryVerifier extends Transform {

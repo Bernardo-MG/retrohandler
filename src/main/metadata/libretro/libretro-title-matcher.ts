@@ -59,7 +59,7 @@ export class LibretroTitleMatcher {
 
   private addCandidate(candidates: string[], title: string): void {
     const safe = title
-      .replace(/[&*\/<>:|?"\\]/g, '_')
+      .replace(/[&*/<>:|?"\\]/g, '_')
       .replace(/\s+/g, ' ')
       .trim();
     if (safe && safe.length <= 160 && !candidates.includes(safe)) {
