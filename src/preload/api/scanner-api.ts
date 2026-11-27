@@ -1,10 +1,7 @@
 import type { DesktopApi } from '../../shared';
 import type { IpcClient } from '../ipc/ipc-client';
 
-type ScannerApi = Pick<
-  DesktopApi,
-  'chooseRomFolder' | 'scanIndexedFolder' | 'cancelScan' | 'onScanProgress'
->;
+type ScannerApi = Pick<DesktopApi, 'chooseRomFolder' | 'scanIndexedFolder' | 'cancelScan' | 'onScanProgress'>;
 
 export function createScannerApi(client: IpcClient): ScannerApi {
   return {
