@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electron';
+import { channels } from '../../ipc-channels';
 import type { CacheCleanupReceipt, StorageInfo } from '../../shared';
 import type { ArtworkReferences } from '../contracts/persistence';
 import type { ArtworkCache } from '../components/artwork/artwork-cache';
@@ -17,13 +18,13 @@ export function registerSettingsIpc(
     artworkPath: artwork.root,
     ...artwork.inspect(artworkReferences.getReferencedArtworkIds())
   });
-  ipcMain.handle('settings:get', () => store.snapshot());
-  ipcMain.handle('settings:save', (_event, raw: unknown) => {
+  ipcMain.handle(channels.getSettings, () => store.snapshot());
+  ipcMain.handle(channels.saveSettings, (_event, raw: unknown) => {
     const settings = store.update(raw);
     nativeTheme.themeSource = settings.appearance.theme;
     return settings;
   });
-  ipcMain.handle('settings:reset', (event) => {
+  ipcMain.handle(channels.resetSettings, (event) => {
     const settings = store.reset();
     nativeTheme.themeSource = settings.appearance.theme;
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -41,9 +42,9 @@ export function registerSettingsIpc(
     }
     return settings;
   });
-  ipcMain.handle('settings:storage', () => storageInfo());
+  ipcMain.handle(channels.getStorageInfo, () => storageInfo());
   let cleaning = false;
-  ipcMain.handle('settings:cleanup-artwork', async (): Promise<CacheCleanupReceipt> => {
+  ipcMain.handle(channels.cleanupArtworkCache, async (): Promise<CacheCleanupReceipt> => {
     if (cleaning) {
       throw new Error('Artwork cleanup is already running.');
     }

@@ -1,4 +1,5 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { channels } from '../../ipc-channels';
 import type { IdentificationService } from '../identification';
 import type { LibraryService } from '../services/library';
 import { RendererJobs, sendProgress } from './renderer-jobs';
@@ -36,7 +37,7 @@ export function registerIdentificationIpc(
     return jobs.run(sender, jobId, (signal) =>
       identification.identifyCollection(source, {
         signal,
-        onProgress: (progress) => sendProgress(sender, 'identity:progress', { jobId, progress })
+        onProgress: (progress) => sendProgress(sender, channels.onIdentificationProgress, { jobId, progress })
       })
     );
   }
@@ -45,7 +46,7 @@ export function registerIdentificationIpc(
     return jobs.cancel(event.sender.id, jobId);
   }
 
-  ipcMain.handle('dat:import', importDat);
-  ipcMain.handle('identity:run', run);
-  ipcMain.handle('identity:cancel', cancel);
+  ipcMain.handle(channels.importDat, importDat);
+  ipcMain.handle(channels.identifyCollection, run);
+  ipcMain.handle(channels.cancelIdentification, cancel);
 }

@@ -1,4 +1,5 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { channels } from '../../ipc-channels';
 import type { ScanReceipt, ScanResult } from '../../shared';
 import type { LibraryService } from '../services/library';
 import { RendererJobs, sendProgress } from './renderer-jobs';
@@ -27,7 +28,7 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
     return jobs.run(sender, id, (signal) =>
       library.scanFolder(folder, {
         signal,
-        onProgress: (progress) => sendProgress(sender, 'roms:progress', { jobId: id, progress })
+        onProgress: (progress) => sendProgress(sender, channels.onScanProgress, { jobId: id, progress })
       })
     );
   }
@@ -49,8 +50,8 @@ export function registerScanIpc(library: Pick<LibraryService, 'scanFolder'>): vo
     return jobs.cancel(event.sender.id, jobId);
   }
 
-  ipcMain.handle('roms:choose-folder', chooseFolder);
-  ipcMain.handle('roms:scan', scan);
-  ipcMain.handle('roms:scan-indexed', scanIndexed);
-  ipcMain.handle('roms:cancel', cancel);
+  ipcMain.handle(channels.chooseRomFolder, chooseFolder);
+  ipcMain.handle(channels.scanFolder, scan);
+  ipcMain.handle(channels.scanIndexedFolder, scanIndexed);
+  ipcMain.handle(channels.cancelScan, cancel);
 }

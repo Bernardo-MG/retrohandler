@@ -1,4 +1,5 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { channels } from '../../ipc-channels';
 import type { GameMetadataInput, MetadataTarget } from '../../shared';
 import type {
   ArtworkProvider,
@@ -122,9 +123,9 @@ class LaunchBoxIpc {
   constructor(private readonly updater: MetadataIpcDependencies['launchBox']) {}
 
   public register(): void {
-    ipcMain.handle('launchbox:download', (event) => this.download(event));
-    ipcMain.handle('launchbox:cancel', (event) => this.cancel(event.sender.id));
-    ipcMain.handle('launchbox:import', () => this.importFile());
+    ipcMain.handle(channels.downloadLaunchBox, (event) => this.download(event));
+    ipcMain.handle(channels.cancelLaunchBoxDownload, (event) => this.cancel(event.sender.id));
+    ipcMain.handle(channels.importLaunchBox, () => this.importFile());
   }
 
   private async download(event: IpcMainInvokeEvent): Promise<{ count: number }> {
@@ -133,7 +134,7 @@ class LaunchBoxIpc {
     const count = await this.updates.run(sender, 'download', (signal) =>
       this.updater.download({
         signal,
-        onProgress: (update) => sendProgress(sender, 'launchbox:progress', update)
+        onProgress: (update) => sendProgress(sender, channels.onLaunchBoxProgress, update)
       })
     );
     return { count };
@@ -165,21 +166,21 @@ class LaunchBoxIpc {
 
 export function registerMetadataIpc({ metadata, artwork, launchBox }: MetadataIpcDependencies): void {
   new LaunchBoxIpc(launchBox).register();
-  ipcMain.handle('launchbox:search', (_event, query: unknown, system: unknown) =>
+  ipcMain.handle(channels.launchBoxSearch, (_event, query: unknown, system: unknown) =>
     metadata.search(parseMetadataSearch(query, system))
   );
-  ipcMain.handle('launchbox:apply', (_event, input: unknown, id: unknown) =>
+  ipcMain.handle(channels.launchBoxApply, (_event, input: unknown, id: unknown) =>
     metadata.applyCandidate(parseTarget(input), parseCandidateId(id))
   );
-  ipcMain.handle('libretro:artwork', (_event, system: unknown, names: unknown) =>
+  ipcMain.handle(channels.findLibretroArtwork, (_event, system: unknown, names: unknown) =>
     artwork.findCover(parseCoverLookup(system, names))
   );
   ipcMain.handle(
-    'libretro:search-covers',
+    channels.searchLibretroCovers,
     (_event, system: unknown, query: unknown, regionHint: unknown, refresh: unknown) =>
       artwork.searchCovers(parseCoverSearch(system, query, regionHint, refresh))
   );
-  ipcMain.handle('metadata:save', (_event, input: unknown, data: unknown) =>
+  ipcMain.handle(channels.metadataSave, (_event, input: unknown, data: unknown) =>
     metadata.save(parseTarget(input), parseFields(data))
   );
 }

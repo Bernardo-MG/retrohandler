@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { channels } from '../../ipc-channels';
 import { registerScanIpc } from './scan-ipc';
 import type { LibraryService } from '../services/library';
 import {
@@ -11,22 +12,24 @@ import { isText } from './validation';
 
 export function registerLibraryIpc(library: LibraryService): void {
   registerScanIpc(library);
-  ipcMain.handle('roms:load-saved', () => library.loadLastScan());
-  ipcMain.handle('library:bulk-system', (_event, selection: unknown, systemOverride: unknown) =>
+  ipcMain.handle(channels.loadSavedLibrary, () => library.loadLastScan());
+  ipcMain.handle(channels.bulkAssignSystem, (_event, selection: unknown, systemOverride: unknown) =>
     library.bulkAssignSystem(parseBulkSelection(selection), parseSystemOverride(systemOverride))
   );
-  ipcMain.handle('library:collections', () => library.listCollections());
-  ipcMain.handle('library:systems', (_event, source: unknown) =>
+  ipcMain.handle(channels.listCollections, () => library.listCollections());
+  ipcMain.handle(channels.listSystems, (_event, source: unknown) =>
     library.listSystems(source === null ? null : parseCollection(source))
   );
-  ipcMain.handle('library:query', (_event, query: unknown) => library.queryLibrary(parseLibraryQuery(query)));
-  ipcMain.handle('library:rename', (_event, source: unknown, label: unknown) => {
+  ipcMain.handle(channels.queryLibrary, (_event, query: unknown) =>
+    library.queryLibrary(parseLibraryQuery(query))
+  );
+  ipcMain.handle(channels.renameCollection, (_event, source: unknown, label: unknown) => {
     if (!isText(source, 4096) || !isText(label, 120)) {
       throw new Error('Invalid collection rename.');
     }
     return library.renameCollection(source, label);
   });
-  ipcMain.handle('library:remove', (_event, source: unknown) =>
+  ipcMain.handle(channels.removeCollection, (_event, source: unknown) =>
     library.removeCollection(parseCollection(source))
   );
 }

@@ -10,7 +10,7 @@
     "build:web": "npm run build:electron && vite build",
     "start": "npm run build:web && electron .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.test.json",
-    "build:electron": "tsc -p tsconfig.node.json && node scripts/copy-database-sql.cjs electron",
+    "build:electron": "tsc -p tsconfig.node.json && node scripts/bundle-preload.cjs && node scripts/copy-database-sql.cjs electron",
     "test": "npm run build:tests && node scripts/run-tests.cjs",
     "test:coverage": "npm run build:tests && node scripts/run-tests.cjs --coverage",
     "build:tests": "node scripts/run-tests.cjs --clean && tsc -p tsconfig.test.json && node scripts/copy-database-sql.cjs tests",
