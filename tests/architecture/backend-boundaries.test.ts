@@ -78,7 +78,8 @@ test('backend features and reusable components do not depend on desktop transpor
     'metadata',
     'rom',
     'scanner',
-    'services'
+    'services',
+    'systems'
   ];
   const files = packages.flatMap((name) => sourceFiles(path.join(mainRoot, name)));
   const forbidden = ['app', 'desktop', 'ipc', 'database', 'main', 'settings/settings-ipc'].map((name) =>

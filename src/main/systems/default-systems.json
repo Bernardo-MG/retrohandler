@@ -1,0 +1,539 @@
+{
+  "systems": [
+    {
+      "id": "nes",
+      "name": "Nintendo Entertainment System",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["nes", "famicom"],
+      "scanning": {
+        "directories": ["nes", "famicom"],
+        "extensions": [".nes", ".fds"]
+      },
+      "identification": {
+        "extensions": [".nes", ".fds"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "nes"
+        },
+        "libretro": {
+          "platform": "Nintendo - Nintendo Entertainment System"
+        },
+        "launchbox": {
+          "platforms": ["Nintendo Entertainment System"]
+        }
+      }
+    },
+    {
+      "id": "snes",
+      "name": "Super Nintendo",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["snes", "sfc", "Super Nintendo Entertainment System", "Super Famicom"],
+      "scanning": {
+        "directories": ["snes", "sfc"],
+        "extensions": [".sfc", ".smc"]
+      },
+      "identification": {
+        "extensions": [".sfc", ".smc"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "snes"
+        },
+        "libretro": {
+          "platform": "Nintendo - Super Nintendo Entertainment System"
+        },
+        "launchbox": {
+          "platforms": ["Super Nintendo Entertainment System"]
+        }
+      }
+    },
+    {
+      "id": "gb",
+      "name": "Game Boy",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["gb"],
+      "scanning": {
+        "directories": ["gb"],
+        "extensions": [".gb"]
+      },
+      "identification": {
+        "extensions": [".gb"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "gb"
+        },
+        "libretro": {
+          "platform": "Nintendo - Game Boy"
+        },
+        "launchbox": {
+          "platforms": ["Nintendo Game Boy"]
+        }
+      }
+    },
+    {
+      "id": "gbc",
+      "name": "Game Boy Color",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["gbc"],
+      "scanning": {
+        "directories": ["gbc"],
+        "extensions": [".gbc"]
+      },
+      "identification": {
+        "extensions": [".gbc"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "gbc"
+        },
+        "libretro": {
+          "platform": "Nintendo - Game Boy Color"
+        },
+        "launchbox": {
+          "platforms": ["Nintendo Game Boy Color"]
+        }
+      }
+    },
+    {
+      "id": "gba",
+      "name": "Game Boy Advance",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["gba"],
+      "scanning": {
+        "directories": ["gba"],
+        "extensions": [".gba"]
+      },
+      "identification": {
+        "extensions": [".gba"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "gba"
+        },
+        "libretro": {
+          "platform": "Nintendo - Game Boy Advance"
+        },
+        "launchbox": {
+          "platforms": ["Nintendo Game Boy Advance"]
+        }
+      }
+    },
+    {
+      "id": "n64",
+      "name": "Nintendo 64",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["n64", "nintendo64"],
+      "scanning": {
+        "directories": ["n64", "nintendo64"],
+        "extensions": [".n64", ".z64", ".v64"]
+      },
+      "identification": {
+        "extensions": [".n64", ".z64", ".v64"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "n64"
+        },
+        "libretro": {
+          "platform": "Nintendo - Nintendo 64"
+        },
+        "launchbox": {
+          "platforms": ["Nintendo 64"]
+        }
+      }
+    },
+    {
+      "id": "nds",
+      "name": "Nintendo DS",
+      "manufacturer": "Nintendo",
+      "enabled": true,
+      "aliases": ["nds"],
+      "scanning": {
+        "directories": ["nds"],
+        "extensions": [".nds"]
+      },
+      "identification": {
+        "extensions": [".nds"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "nds"
+        },
+        "libretro": {
+          "platform": "Nintendo - Nintendo DS"
+        }
+      }
+    },
+    {
+      "id": "megadrive",
+      "name": "Mega Drive / Genesis",
+      "manufacturer": "Sega",
+      "enabled": true,
+      "aliases": ["megadrive", "genesis", "Sega Genesis", "Sega Mega Drive"],
+      "scanning": {
+        "directories": ["megadrive", "genesis"],
+        "extensions": [".md", ".gen", ".smd"]
+      },
+      "identification": {
+        "extensions": [".md", ".gen", ".smd"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "megadrive"
+        },
+        "libretro": {
+          "platform": "Sega - Mega Drive - Genesis"
+        },
+        "launchbox": {
+          "platforms": ["Sega Genesis"]
+        }
+      }
+    },
+    {
+      "id": "mastersystem",
+      "name": "Master System",
+      "manufacturer": "Sega",
+      "enabled": true,
+      "aliases": ["mastersystem", "sms"],
+      "scanning": {
+        "directories": ["mastersystem", "sms"],
+        "extensions": [".sms"]
+      },
+      "identification": {
+        "extensions": [".sms"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "mastersystem"
+        },
+        "libretro": {
+          "platform": "Sega - Master System - Mark III"
+        }
+      }
+    },
+    {
+      "id": "gamegear",
+      "name": "Game Gear",
+      "manufacturer": "Sega",
+      "enabled": true,
+      "aliases": ["gg", "gamegear"],
+      "scanning": {
+        "directories": ["gg"],
+        "extensions": [".gg"]
+      },
+      "identification": {
+        "extensions": [".gg"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "gamegear"
+        },
+        "libretro": {
+          "platform": "Sega - Game Gear"
+        }
+      }
+    },
+    {
+      "id": "psx",
+      "name": "PlayStation",
+      "manufacturer": "Sony",
+      "enabled": true,
+      "aliases": ["psx", "ps1"],
+      "scanning": {
+        "directories": ["psx", "ps1"],
+        "extensions": [".pbp"]
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "psx"
+        },
+        "libretro": {
+          "platform": "Sony - PlayStation"
+        },
+        "launchbox": {
+          "platforms": ["Sony PlayStation"]
+        }
+      }
+    },
+    {
+      "id": "ps2",
+      "name": "PlayStation 2",
+      "manufacturer": "Sony",
+      "enabled": true,
+      "aliases": ["ps2"],
+      "scanning": {
+        "directories": ["ps2"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "ps2"
+        },
+        "libretro": {
+          "platform": "Sony - PlayStation 2"
+        }
+      }
+    },
+    {
+      "id": "psp",
+      "name": "PlayStation Portable",
+      "manufacturer": "Sony",
+      "enabled": true,
+      "aliases": ["psp"],
+      "scanning": {
+        "directories": ["psp"],
+        "extensions": [".cso"]
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "psp"
+        },
+        "libretro": {
+          "platform": "Sony - PlayStation Portable"
+        }
+      }
+    },
+    {
+      "id": "dreamcast",
+      "name": "Dreamcast",
+      "manufacturer": "Sega",
+      "enabled": true,
+      "aliases": ["dreamcast", "dc"],
+      "scanning": {
+        "directories": ["dreamcast", "dc"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "dreamcast"
+        },
+        "libretro": {
+          "platform": "Sega - Dreamcast"
+        }
+      }
+    },
+    {
+      "id": "saturn",
+      "name": "Sega Saturn",
+      "manufacturer": "Sega",
+      "enabled": true,
+      "aliases": ["saturn"],
+      "scanning": {
+        "directories": ["saturn"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "saturn"
+        },
+        "libretro": {
+          "platform": "Sega - Saturn"
+        }
+      }
+    },
+    {
+      "id": "arcade",
+      "name": "Arcade",
+      "manufacturer": null,
+      "enabled": true,
+      "aliases": ["arcade", "mame", "fba"],
+      "scanning": {
+        "directories": ["arcade", "mame", "fba"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "arcade"
+        }
+      }
+    },
+    {
+      "id": "neogeo",
+      "name": "Neo Geo",
+      "manufacturer": "SNK",
+      "enabled": true,
+      "aliases": ["neogeo"],
+      "scanning": {
+        "directories": ["neogeo"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "neogeo"
+        },
+        "libretro": {
+          "platform": "SNK - Neo Geo"
+        }
+      }
+    },
+    {
+      "id": "pcengine",
+      "name": "PC Engine / TurboGrafx-16",
+      "manufacturer": "NEC",
+      "enabled": true,
+      "aliases": ["pcengine", "pce", "tg16"],
+      "scanning": {
+        "directories": ["pcengine"],
+        "extensions": [".pce"]
+      },
+      "identification": {
+        "extensions": [".pce"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "pcengine"
+        },
+        "libretro": {
+          "platform": "NEC - PC Engine - TurboGrafx 16"
+        }
+      }
+    },
+    {
+      "id": "atari2600",
+      "name": "Atari 2600",
+      "manufacturer": "Atari",
+      "enabled": true,
+      "aliases": ["atari2600"],
+      "scanning": {
+        "directories": ["atari2600"],
+        "extensions": [".a26"]
+      },
+      "identification": {
+        "extensions": [".a26"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "atari2600"
+        },
+        "libretro": {
+          "platform": "Atari - 2600"
+        }
+      }
+    },
+    {
+      "id": "atari7800",
+      "name": "Atari 7800",
+      "manufacturer": "Atari",
+      "enabled": true,
+      "aliases": ["atari7800"],
+      "scanning": {
+        "directories": ["atari7800"],
+        "extensions": [".a78"]
+      },
+      "identification": {
+        "extensions": [".a78"]
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "atari7800"
+        },
+        "libretro": {
+          "platform": "Atari - 7800"
+        }
+      }
+    },
+    {
+      "id": "ports",
+      "name": "Ports",
+      "manufacturer": null,
+      "enabled": true,
+      "aliases": ["ports"],
+      "scanning": {
+        "directories": ["ports"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "ports"
+        }
+      }
+    },
+    {
+      "id": "dos",
+      "name": "DOS",
+      "manufacturer": null,
+      "enabled": true,
+      "aliases": ["dos"],
+      "scanning": {
+        "directories": ["dos"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "pc"
+        }
+      }
+    },
+    {
+      "id": "scummvm",
+      "name": "ScummVM",
+      "manufacturer": null,
+      "enabled": true,
+      "aliases": ["scummvm"],
+      "scanning": {
+        "directories": ["scummvm"],
+        "extensions": []
+      },
+      "identification": {
+        "extensions": []
+      },
+      "plugins": {
+        "retropie": {
+          "folder": "scummvm"
+        }
+      }
+    }
+  ],
+  "additionalFormats": {
+    "scanning": [
+      ".ngp",
+      ".ngc",
+      ".ws",
+      ".wsc",
+      ".rom",
+      ".cue",
+      ".gdi",
+      ".chd",
+      ".iso",
+      ".cdi",
+      ".bin",
+      ".wad"
+    ],
+    "identification": [".ngp", ".ngc", ".ws", ".wsc", ".rom"]
+  }
+}
