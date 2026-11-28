@@ -1,0 +1,11 @@
+# Generated output, third-party code and local data are not source formatting targets.
+node_modules/
+dist/
+dist-electron/
+dist-tests/
+release/
+coverage/
+package-lock.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -1,0 +1,420 @@
+/* Patch 009. Loaded after the existing UI stylesheet so both themes share its layout. */
+
+:root {
+  color-scheme: dark;
+}
+
+.settings-nav {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.settings-nav:not(:disabled):hover {
+  background: #28264f;
+  color: #c9c3ff;
+}
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(4, 8, 18, 0.82);
+}
+
+.settings-panel {
+  width: min(790px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #151c2b;
+  border: 1px solid #52607f;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 25px 80px #000a;
+  outline: none;
+}
+
+.settings-fields {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.settings-section {
+  display: grid;
+  gap: 10px;
+  padding: 17px 0;
+  border-top: 1px solid #34415a;
+}
+
+.settings-section h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-section h4 {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.settings-section p {
+  margin: 0;
+  color: #aebbd3;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.settings-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: #c0cce2;
+}
+
+.settings-section input:not([type='checkbox']),
+.settings-section select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  border-radius: 6px;
+  border: 1px solid #40506b;
+  background: #101827;
+  color: #f2f4fc;
+}
+
+.settings-section .settings-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-line,
+.settings-actions,
+.settings-footer,
+.settings-artwork-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.settings-line,
+.settings-artwork-heading {
+  justify-content: space-between;
+}
+
+.settings-line span {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.settings-line p {
+  flex: 1;
+}
+
+.settings-actions button,
+.settings-section > button {
+  justify-self: start;
+}
+
+.settings-section .secondary,
+.settings-section .primary {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.settings-mappings {
+  display: grid;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.settings-mappings > div {
+  padding: 6px 0;
+  border-bottom: 1px solid #34415a;
+}
+
+.settings-paths {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.settings-paths dt {
+  font-weight: 700;
+}
+
+.settings-paths dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #aebbd3;
+  user-select: text;
+}
+
+.settings-footer {
+  justify-content: flex-end;
+  position: sticky;
+  bottom: -24px;
+  margin: 10px -24px -24px;
+  padding: 15px 24px;
+  background: #151c2b;
+  border-top: 1px solid #34415a;
+}
+
+.settings-panel .error,
+.settings-panel .identity-message {
+  color: inherit;
+  padding: 10px;
+}
+
+.settings-panel .error {
+  color: #ffd9de;
+}
+
+.settings-panel .identity-message {
+  color: #c5f6df;
+}
+
+.settings-artwork-heading .secondary {
+  padding: 7px 11px;
+}
+
+@media (max-width: 700px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-paths {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Explicit colors for the existing library, metadata editor and export dialog.
+   Native inputs and scrollbars follow color-scheme, but artwork stays unchanged. */
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  color: #19243a;
+  background: #f4f6fa;
+}
+
+:root[data-theme='light'] .sidebar,
+:root[data-theme='light'] .collection-actions {
+  background: #e9edf5;
+  border-color: #cbd4e3;
+}
+
+:root[data-theme='light'] .stat,
+:root[data-theme='light'] .library,
+:root[data-theme='light'] .source,
+:root[data-theme='light'] .scan-status,
+:root[data-theme='light'] .game-card,
+:root[data-theme='light'] .collection-system-editor,
+:root[data-theme='light'] .metadata-overlay .metadata-panel,
+:root[data-theme='light'] .retropie-panel,
+:root[data-theme='light'] .settings-panel,
+:root[data-theme='light'] .settings-footer {
+  background: #fff;
+  color: #19243a;
+  border-color: #cbd4e3;
+}
+
+:root[data-theme='light'] .sidebar-bottom,
+:root[data-theme='light'] .pagination,
+:root[data-theme='light'] .metadata-search,
+:root[data-theme='light'] .metadata-result,
+:root[data-theme='light'] .settings-section,
+:root[data-theme='light'] .settings-mappings > div,
+:root[data-theme='light'] .retropie-preview,
+:root[data-theme='light'] td {
+  border-color: #dce3ed;
+}
+
+:root[data-theme='light'] .nav-title,
+:root[data-theme='light'] .eyebrow,
+:root[data-theme='light'] .ready {
+  color: #5a438f;
+}
+
+:root[data-theme='light'] .subtitle,
+:root[data-theme='light'] .stat span,
+:root[data-theme='light'] .sidebar-bottom,
+:root[data-theme='light'] .brand span,
+:root[data-theme='light'] .footnote,
+:root[data-theme='light'] .limit,
+:root[data-theme='light'] .empty-small,
+:root[data-theme='light'] .empty p,
+:root[data-theme='light'] .safe,
+:root[data-theme='light'] .source,
+:root[data-theme='light'] .source em,
+:root[data-theme='light'] .library h2 span,
+:root[data-theme='light'] .nav-item,
+:root[data-theme='light'] .collection-item,
+:root[data-theme='light'] .collection-item > span:last-child,
+:root[data-theme='light'] .collection-system-editor small,
+:root[data-theme='light'] .game-name small,
+:root[data-theme='light'] .game-card small,
+:root[data-theme='light'] .identified-title,
+:root[data-theme='light'] .identity-filter,
+:root[data-theme='light'] .sort-desc,
+:root[data-theme='light'] .pagination,
+:root[data-theme='light'] .scan-status p,
+:root[data-theme='light'] .scan-status small,
+:root[data-theme='light'] .metadata-heading small,
+:root[data-theme='light'] .metadata-search p,
+:root[data-theme='light'] .metadata-attribution,
+:root[data-theme='light'] .metadata-system-hint,
+:root[data-theme='light'] .metadata-fields label,
+:root[data-theme='light'] .metadata-search label,
+:root[data-theme='light'] .retropie-panel p,
+:root[data-theme='light'] .retropie-panel h3,
+:root[data-theme='light'] .settings-section p,
+:root[data-theme='light'] .settings-section label,
+:root[data-theme='light'] .settings-paths dd,
+:root[data-theme='light'] .game-select-check {
+  color: #485773;
+}
+
+:root[data-theme='light'] .nav-item.active,
+:root[data-theme='light'] .collection-item.selected,
+:root[data-theme='light'] .settings-nav:not(:disabled):hover {
+  background: #dcd5fb;
+  color: #4c3692;
+}
+
+:root[data-theme='light'] .soon {
+  color: #56647a;
+  border-color: #b6c1d4;
+}
+
+:root[data-theme='light'] .stat-icon,
+:root[data-theme='light'] .game-icon,
+:root[data-theme='light'] .game-card-placeholder {
+  background: #e9e4fa;
+  color: #5741a5;
+}
+
+:root[data-theme='light'] .empty-graphic {
+  background: radial-gradient(circle, #ece5ff 5%, #e4dcfb 50%, #f4f0fc 75%);
+  border-color: #d4c8fa;
+  color: #5741a5;
+}
+
+:root[data-theme='light'] .search,
+:root[data-theme='light'] input:not([type='checkbox']):not([type='radio']),
+:root[data-theme='light'] select,
+:root[data-theme='light'] textarea {
+  background: #f9fafc;
+  color: #19243a;
+  border-color: #b6c1d4;
+}
+
+:root[data-theme='light'] .search input {
+  background: transparent;
+}
+
+:root[data-theme='light'] th {
+  background: #edf1f7;
+  color: #43516a;
+}
+
+:root[data-theme='light'] td,
+:root[data-theme='light'] .game-name strong {
+  color: #26344d;
+}
+
+:root[data-theme='light'] .pill {
+  background: #e7ecf4;
+  color: #364660;
+}
+
+:root[data-theme='light'] .primary,
+:root[data-theme='light'] .secondary {
+  background: #6245c6;
+  color: #fff;
+}
+
+:root[data-theme='light'] .primary:hover,
+:root[data-theme='light'] .secondary:hover {
+  background: #5035aa;
+}
+
+:root[data-theme='light'] .pagination button,
+:root[data-theme='light'] .collection-actions button,
+:root[data-theme='light'] .rename-form button,
+:root[data-theme='light'] .view-switch button,
+:root[data-theme='light'] .metadata-edit,
+:root[data-theme='light'] .metadata-result button,
+:root[data-theme='light'] .metadata-attribution button,
+:root[data-theme='light'] .collection-system-actions button,
+:root[data-theme='light'] .dismiss-error {
+  background: #e7ecf4;
+  border-color: #b6c1d4;
+  color: #26344d;
+}
+
+:root[data-theme='light'] .view-switch button[aria-pressed='true'],
+:root[data-theme='light'] .metadata-provider-switch button[aria-pressed='true'] {
+  background: #dcd5fb;
+  border-color: #8f7adb;
+  color: #4c3692;
+}
+
+:root[data-theme='light'] .error,
+:root[data-theme='light'] .settings-panel .error {
+  background: #fff0f2;
+  border-color: #e3a1ab;
+  color: #922d40;
+}
+
+:root[data-theme='light'] .identity-message,
+:root[data-theme='light'] .settings-panel .identity-message {
+  background: #e7f8ef;
+  border-color: #9ed7b9;
+  color: #17613d;
+}
+
+:root[data-theme='light'] .scan-warnings {
+  background: #fff5dd;
+  border-color: #dfc78d;
+  color: #805d15;
+}
+
+:root[data-theme='light'] .identity-verified {
+  color: #146b3a;
+}
+
+:root[data-theme='light'] .identity-probable {
+  color: #855900;
+}
+
+:root[data-theme='light'] .identity-ambiguous,
+:root[data-theme='light'] .identity-error {
+  color: #a12b3a;
+}
+
+:root[data-theme='light'] .metadata-overlay,
+:root[data-theme='light'] .retropie-overlay,
+:root[data-theme='light'] .settings-overlay {
+  background: rgba(31, 41, 55, 0.52);
+}

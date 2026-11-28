@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist-tests",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": [
+    "tests/**/*.ts",
+    "src/main/scanner/**/*.ts",
+    "src/shared.ts",
+    "src/renderer/global.d.ts",
+    "src/main/services/library/**/*.ts",
+    "src/main/database/**/*.ts",
+    "src/main/components/**/*.ts",
+    "src/main/utils/**/*.ts",
+    "src/main/metadata/**/*.ts",
+    "src/main/identification/**/*.ts",
+    "src/main/export/**/*.ts",
+    "src/main/contracts/**/*.ts",
+    "src/main/rom/**/*.ts",
+    "src/main/ipc/*-validation.ts",
+    "src/main/ipc/renderer-jobs.ts",
+    "src/main/ipc/validation.ts",
+    "src/main/settings/settings-store.ts",
+    "src/main/settings/window-bounds.ts",
+    "src/renderer/api/**/*.ts",
+    "src/renderer/app/bootstrap.ts",
+    "src/renderer/app/theme.ts",
+    "src/renderer/controllers/**/*.ts",
+    "src/renderer/features/**/*Controller.ts",
+    "src/renderer/features/**/*-model.ts",
+    "src/renderer/utils/**/*.ts"
+  ]
+}

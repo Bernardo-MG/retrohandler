@@ -1,0 +1,22 @@
+export const SUGGESTED_SYSTEMS = [
+  'Nintendo Entertainment System',
+  'Super Nintendo',
+  'Game Boy',
+  'Game Boy Color',
+  'Game Boy Advance',
+  'Nintendo 64',
+  'Nintendo DS',
+  'Mega Drive / Genesis',
+  'Master System',
+  'Game Gear',
+  'PlayStation',
+  'PlayStation 2',
+  'PlayStation Portable',
+  'Dreamcast',
+  'Sega Saturn',
+  'Arcade',
+  'Neo Geo',
+  'PC Engine / TurboGrafx-16',
+  'Atari 2600',
+  'Atari 7800'
+];
